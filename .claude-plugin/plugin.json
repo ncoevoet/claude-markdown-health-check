@@ -1,0 +1,19 @@
+{
+  "name": "claude-markdown-health-check",
+  "version": "0.1.0",
+  "description": "Audits the .claude/ ecosystem — skills, commands, hooks, agents, settings — for dead references, weak triggers, token bloat, skill-listing-budget overflow, and frontmatter violations.",
+  "author": {
+    "name": "Nicolas Coevoet"
+  },
+  "homepage": "https://github.com/ncoevoet/claude-markdown-health-check",
+  "repository": "https://github.com/ncoevoet/claude-markdown-health-check",
+  "license": "MIT",
+  "keywords": [
+    "claude-code",
+    "skills",
+    "audit",
+    "health-check",
+    "linter",
+    "command"
+  ]
+}
