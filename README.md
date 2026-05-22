@@ -87,6 +87,7 @@ The report prints in chat. Reply naming the findings to fix and the command appl
 | 6 — Hooks / agents / settings | Registration, duplication, timeouts, broad patterns, stale reminders |
 | 7 — Cross-refs + orphans | Dead paths, orphaned guides/patterns, missing triggers, memory-index overflow |
 | 8 — Report | One flat prioritized report: Critical · Structural · Hygiene · Discovery |
+| 9 — Menu | Post-report action menu — pick a fix scope, apply, re-validate, loop until done |
 
 ## Requirements
 

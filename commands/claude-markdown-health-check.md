@@ -21,8 +21,8 @@ if [[ -d "$PWD/.claude" ]]; then PROJECT_DIR="$PWD/.claude"; fi
 
 ## Stop Conditions (autonomy gate)
 
-- After the report prints, STOP and wait for the user to name which findings to fix.
-- NEVER edit, delete, move, or rename any file before the user names the items.
+- After the report prints, run Phase 9 — present the post-report action menu. Do not apply any fix until the user picks a scope through it.
+- NEVER edit, delete, move, or rename any file before the user picks a menu scope.
 - NEVER write the report (or any copy / summary / "full version" of it) to disk. The chat channel is the only output. No plan files, no log files, no `.md` dumps under `~/.claude/plans/` or anywhere else. The user can copy from chat if they want a saved artifact. (The Bash-side guidance cache at `${CLAUDE_PLUGIN_DATA:-~/.claude/.cache}/claude-markdown-health-check-guidance.json` is internal state, NOT report content — that write is explicitly allowed.)
 - For `REPURPOSE` items: the destination `references/*.md` MUST be written and the SKILL.md References section MUST be updated BEFORE the source orphan is deleted.
 - Done when: report printed in chat AND user has either named fixes OR explicitly declined further action.
@@ -312,6 +312,7 @@ Tool calls: X (Y% ok) | Reworks: Z | Corrections: W | Builds: V/N
 - Empty sections MUST be omitted (no "No findings" placeholders)
 - Output MUST NOT contain XML tags
 - Related findings MUST be grouped under the same tag
+- Number findings continuously across Critical → Structural → Hygiene (Finding 1…N) so the Phase 9 menu can reference them
 
 ## Pre-print pass (MANDATORY before printing the report)
 
@@ -324,3 +325,9 @@ Before printing the report, run this self-check silently:
 3. **Single output channel** — confirm no Write/Edit tool calls have been made to disk during this run. If one slipped through, list it under `[OBSERVATION] self-violation: wrote <path> against autonomy-gate rule` at the top of the report so the user knows.
 
 Only after this self-check passes, print the report to chat.
+
+## Phase 9 — Post-Report Menu
+
+After the report prints, present an action menu instead of waiting passively. Read `post-report-menu.md` for the menu options, the apply rules, the guardrails, and the loop — resolve it as the first that exists: `${CLAUDE_PLUGIN_ROOT}/commands/claude-markdown-health-check/references/post-report-menu.md`, `~/.claude/claude-markdown-health-check/references/post-report-menu.md`, or the repo copy.
+
+Skip the menu only when the report has zero actionable findings (Critical / Structural / Hygiene all empty) — then print a one-line all-clear and stop.
