@@ -8,11 +8,11 @@ It reports first and waits. Nothing is edited, moved, or deleted until you reply
 
 | Area | Examples of findings |
 |---|---|
-| **Skills** | descriptions missing a "when to use" half, triggers that don't match real usage, oversized `SKILL.md` with no `references/`, missing Examples / Troubleshooting sections, dead internal paths |
+| **Skills** | missing or oversized `description`, frontmatter `name` ≠ directory, triggers that don't match real usage, oversized `SKILL.md` with no `references/`, missing Examples / Troubleshooting sections, dead internal paths |
 | **Skill-listing budget** | cumulative `description` + `when_to_use` block exceeding Claude Code's 1%-of-context budget; low-relevance and duplicate-domain skills |
 | **Hooks** | files on disk not registered in `settings.json`, duplicate logic, suspicious timeouts, matchers that match no real tool |
 | **Agents** | triggers unreachable from `CLAUDE.md`, overlapping agents |
-| **Settings** | duplicate JSON keys, duplicate array entries, MCP servers missing from `preApprovedTools`, over-broad Bash patterns, stale reminders |
+| **Settings** | malformed JSON, duplicate JSON keys, duplicate array entries, MCP servers missing from `preApprovedTools`, over-broad Bash patterns, stale reminders |
 | **Cross-references** | dead paths in `settings.json` / `CLAUDE.md` / skill `references/`, orphaned guides and patterns, missing triggers |
 | **Memory** | `MEMORY.md` over the loaded-slice line/byte budget |
 

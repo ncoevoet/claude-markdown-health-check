@@ -103,7 +103,15 @@ HOOKS=$(ls "$USER_DIR"/hooks/*.sh ${PROJECT_DIR:+"$PROJECT_DIR"/hooks/*.sh} 2>/d
 
 **Deep depth only — session metrics**:
 ```bash
-SESSION_DIR="$HOME/.claude/projects/$(pwd | tr '/' '-' | sed 's/^-//')"
+# Claude Code names the session dir after the LAUNCH path with '/'->'-' and the
+# leading dash KEPT; the current cwd may be a subdir of it. Pick the longest
+# projects/ dir whose name is a prefix of the encoded cwd.
+ENC=$(pwd | tr '/' '-')
+SESSION_DIR=""; best=0
+for d in "$HOME"/.claude/projects/*/; do
+    n=$(basename "$d")
+    case "$ENC" in "$n"|"$n"-*) [ ${#n} -gt "$best" ] && { best=${#n}; SESSION_DIR="${d%/}"; } ;; esac
+done
 LATEST=$(ls -t "$SESSION_DIR"/*.jsonl 2>/dev/null | head -1)
 ```
 If `$LATEST` exists, extract: tool success rate, files reworked >1×, count of correction phrases, build pass/fail. Report as one line.
@@ -115,7 +123,7 @@ bash ~/.claude/commands/scripts/validate-skills.sh "$USER_DIR"
 [[ -n "$PROJECT_DIR" ]] && bash ~/.claude/commands/scripts/validate-skills.sh "$PROJECT_DIR"
 ```
 
-This is the deterministic layer. Trust its output for: name regex, reserved words, voice violations, line counts, chained references, dead `references/*.md` links, duplicate JSON keys and array entries in settings, TOC presence, description sizes. Phase 5 MUST NOT re-check anything this script already covers — it MUST only handle what the script can't.
+This is the deterministic layer. Trust its output for: name regex, reserved words, name/dir mismatch, missing descriptions, voice violations, line counts, chained references, dead links (skill `references/*.md`, settings `guides`, CLAUDE.md `.claude/…` paths), JSON validity, duplicate keys and array entries, MCP pre-approval, unregistered hooks, hook timeouts, memory-index size, TOC presence, description sizes. Phases 5–7 MUST NOT re-check anything this script already covers — they MUST only handle what the script can't.
 
 ## Phase 5a — Skill Listing Budget Audit
 
@@ -146,11 +154,9 @@ For each skill under `$USER_DIR/skills/*/SKILL.md` AND `$PROJECT_DIR/skills/*/SK
 ## Phase 6 — Hooks, Agents, Settings
 
 **Hooks**
-- List `.claude/hooks/*.sh` vs hooks registered in `settings.json`
-- File on disk but not registered → `UNREGISTERED-HOOK` (exclude `pre-commit.sh`, `check-signals.sh`)
+- `validate-skills.sh` flags hook scripts on disk that no settings file references → `UNREGISTERED-HOOK`, and hook timeouts above 2× the documented per-type default → `SUSPICIOUS-TIMEOUT` — relay, do NOT re-check.
 - Two hooks doing the same check → `DUPLICATE-LOGIC`
 - Critical rule with no hook enforcement and a deterministic check exists → `MISSING-ENFORCEMENT`
-- Hook timeout > 2× the documented default for its type (see Thresholds) → `SUSPICIOUS-TIMEOUT`
 - Matcher pattern doesn't match any real tool name → `DEAD-MATCHER`
 
 **Agents** (`.claude/commands/agents/*.md`)
@@ -158,8 +164,7 @@ For each skill under `$USER_DIR/skills/*/SKILL.md` AND `$PROJECT_DIR/skills/*/SK
 - Two agents covering the same problem space with no differentiation → `OVERLAPPING-AGENT`
 
 **Settings (`settings.json`)**
-- `validate-skills.sh` flags duplicate JSON keys → `DUPLICATE-KEY` and duplicate array entries (e.g. a permission listed twice) → `DUPLICATE-ENTRY` — relay, do NOT re-check.
-- MCP server defined but not in `preApprovedTools` → `MISSING-PRE-APPROVED`
+- `validate-skills.sh` flags malformed JSON → `INVALID-JSON`, duplicate keys → `DUPLICATE-KEY`, duplicate array entries → `DUPLICATE-ENTRY`, and MCP servers absent from `preApprovedTools` → `MISSING-PRE-APPROVED` — relay, do NOT re-check.
 - Bash pattern broader than necessary (e.g., `Bash(cat:*)` — reads any file) → `BROAD-PATTERN`
 - `reminders` entry contradicts current skill instructions, or references removed/renamed file → `STALE-REMINDER`
 
@@ -168,9 +173,8 @@ For each skill under `$USER_DIR/skills/*/SKILL.md` AND `$PROJECT_DIR/skills/*/SK
 Treat `.claude/commands/*.md` and `.claude/skills/<name>/SKILL.md` as a single namespace (per docs both register slash commands; skill wins on name conflict).
 
 **Dead references** (`DEAD-REF`)
-- Every path in `settings.json` `guides` MUST resolve
-- Every path in CLAUDE.md MUST resolve (project CLAUDE.md is at the repo root — the parent of `.claude/`)
-- SKILL.md `references/*.md` links are resolved by `validate-skills.sh` — relay its findings, don't re-scan
+- `validate-skills.sh` resolves the dead-reference set — SKILL.md `references/*.md` links, `settings.json` `guides` paths, and `.claude/…` paths in CLAUDE.md. Relay its `DEAD-REF` findings; do NOT re-scan.
+- Phase 5 still covers non-`.claude/` paths a SKILL.md mentions (a sibling skill, a bare guide name).
 
 **Orphans**
 - File under `documentation/guides/` not referenced from CLAUDE.md, settings.json, or any skill → `ORPHAN-GUIDE`
@@ -180,7 +184,7 @@ Treat `.claude/commands/*.md` and `.claude/skills/<name>/SKILL.md` as a single n
 - CLAUDE.md "Automatic Triggers" entries vs `automatic-guide-triggers` in settings.json — entry in one but not the other → `MISSING-TRIGGER`
 
 **Auto memory**
-- `$USER_DIR/projects/<derived>/memory/MEMORY.md` MUST be ≤ `memoryIndex.maxLines` lines and ≤ `memoryIndex.maxBytes` bytes (the loaded slice; topic files in the same dir aren't loaded so size them freely) → `MEMORY-OVERFLOW`
+- `validate-skills.sh` checks every `projects/*/memory/MEMORY.md` against the line/byte budget → `MEMORY-OVERFLOW` — relay, do NOT re-check.
 
 ### Phase 7a — Orphan Repurposing
 
@@ -267,10 +271,10 @@ Tool calls: X (Y% ok) | Reworks: Z | Corrections: W | Builds: V/N
 ## Tag Set (canonical — MUST be drawn from this list)
 
 **Critical** (broken; blocks correct behaviour)
-`DEAD-REF`, `DUPLICATE-KEY`, `DEAD-MATCHER`, `UNREGISTERED-HOOK`, `MISSING-PRE-APPROVED`, `MEMORY-OVERFLOW`, `SKILL-BUDGET-OVERFLOW`, `STALE-THRESHOLD`, `GUIDANCE-FETCH-FAILED`
+`DEAD-REF`, `DUPLICATE-KEY`, `INVALID-JSON`, `MISSING-DESC`, `DEAD-MATCHER`, `UNREGISTERED-HOOK`, `MISSING-PRE-APPROVED`, `MEMORY-OVERFLOW`, `SKILL-BUDGET-OVERFLOW`, `STALE-THRESHOLD`, `GUIDANCE-FETCH-FAILED`
 
 **Structural** (works but should be reorganised)
-`UNDER-TRIGGER`, `OVER-TRIGGER`, `MISSING-TRIGGER`, `MISSING-AGENT-TRIGGER`, `OVERLAPPING-AGENT`, `DUPLICATE-LOGIC`, `MISSING-ENFORCEMENT`, `NEEDS-REFERENCES`, `NO-EXAMPLES`, `NO-TROUBLESHOOTING`, `BURIED-CRITICAL`, `WEAK-DESC`, `ORPHAN-GUIDE`, `ORPHAN-PATTERN`, `REPURPOSE`, `SKILL-LOW-RELEVANCE`, `SKILL-DUPLICATE-DOMAIN`
+`UNDER-TRIGGER`, `OVER-TRIGGER`, `MISSING-TRIGGER`, `MISSING-AGENT-TRIGGER`, `OVERLAPPING-AGENT`, `DUPLICATE-LOGIC`, `MISSING-ENFORCEMENT`, `NEEDS-REFERENCES`, `NO-EXAMPLES`, `NO-TROUBLESHOOTING`, `BURIED-CRITICAL`, `WEAK-DESC`, `NAME-MISMATCH`, `ORPHAN-GUIDE`, `ORPHAN-PATTERN`, `REPURPOSE`, `SKILL-LOW-RELEVANCE`, `SKILL-DUPLICATE-DOMAIN`
 
 **Hygiene** (cosmetic / token efficiency)
 `BROAD-PATTERN`, `SUSPICIOUS-TIMEOUT`, `STALE-REMINDER`, `DUPLICATE-ENTRY`

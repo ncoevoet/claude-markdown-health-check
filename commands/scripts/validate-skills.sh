@@ -54,6 +54,11 @@ CLAUDE_MD_MAX_LINES=200
 RESERVED_NAMES=("anthropic" "claude")
 # Support/utility directories under skills/ that are not themselves skills.
 SKILLS_DIR_EXCLUDES=("bootstrap" "commands")
+# Auto-memory index budget (loaded slice) and hook-timeout defaults (seconds).
+MEMORY_MAX_LINES=200
+MEMORY_MAX_BYTES=25600
+HOOK_TIMEOUT_COMMAND=600
+HOOK_TIMEOUT_PROMPT=30
 
 # Skill listing budget — see https://code.claude.com/docs/en/skills
 # "The budget scales dynamically at 1% of the context window, with a fallback of 8,000 characters."
@@ -72,18 +77,38 @@ warning() { yellow "[WARN]  $1"; WARNINGS=$((WARNINGS + 1)); }
 ok()      { printf '  [OK]  %s\n' "$1"; }
 
 extract_field() {
-    # extract_field <file> <field-name> -> prints raw value (one line)
+    # extract_field <file> <field-name> -> prints the value. Joins a multi-line
+    # YAML block scalar / wrapped value with spaces; prints "" when absent.
     local file="$1" field="$2"
-    awk -v f="^${field}: *" '
-        /^---[[:space:]]*$/ { fm = !fm; next }
-        fm && $0 ~ f { sub(f, ""); gsub(/^"|"$/, ""); print; exit }
+    awk -v key="$field" '
+        /^---[[:space:]]*$/ { if (infm) { if (cap) print val; exit } infm = 1; next }
+        !infm { next }
+        cap {
+            if ($0 ~ /^[[:space:]]/) {
+                line = $0; sub(/^[[:space:]]+/, "", line)
+                val = (val == "" ? line : val " " line); next
+            }
+            print val; exit
+        }
+        index($0, key ":") == 1 {
+            v = substr($0, length(key) + 2)
+            sub(/^[[:space:]]*/, "", v); sub(/[[:space:]]+$/, "", v)
+            gsub(/^"|"$/, "", v)
+            if (v == "" || v == "|" || v == ">" || v == "|-" || v == ">-" || v == "|+" || v == ">+") {
+                cap = 1; val = ""; next
+            }
+            print v; exit
+        }
     ' "$file"
 }
 
 validate_skill_md() {
     # Validates a SKILL.md or unified command .md file. Args: <file> <display-name>
     local skill_file="$1" skill_name="$2"
-    local lines desc when_to_use combined name name_field
+    local lines desc when_to_use combined name name_field skill_dir dir_name is_skill_md
+    skill_dir=$(dirname "$skill_file")
+    dir_name=$(basename "$skill_dir")
+    [ "$(basename "$skill_file")" = "SKILL.md" ] && is_skill_md=1 || is_skill_md=0
     lines=$(wc -l < "$skill_file")
 
     # Check: line count (max 500)
@@ -93,7 +118,7 @@ validate_skill_md() {
         warning "$skill_name: $lines lines (approaching $SKILL_MAX_LINES limit)"
     fi
 
-    # Check: description length (1024 hard, 1536 combined-with-when_to_use)
+    # Check: description present, then length (1024 hard, 1536 combined)
     desc=$(extract_field "$skill_file" "description")
     when_to_use=$(extract_field "$skill_file" "when_to_use")
     if [ -n "$desc" ]; then
@@ -112,11 +137,17 @@ validate_skill_md() {
         if echo "$desc" | grep -Eq '(\bI\b|\bI'\''ll\b|\bI can\b|\b[Yy]ou can\b|\b[Yy]our\b)'; then
             warning "[THIRD-PERSON] $skill_name: description appears to use first/second person; docs require third person"
         fi
+    elif [ "$is_skill_md" = 1 ]; then
+        error "[MISSING-DESC] $skill_name: no 'description' in frontmatter (required — without it the skill cannot be auto-routed)"
     fi
 
-    # Check: name field validation
+    # Check: name field — charset, length, reserved words
     name_field=$(extract_field "$skill_file" "name")
-    name="${name_field:-$(basename "$(dirname "$skill_file")")}"
+    if [ "$is_skill_md" = 1 ]; then
+        name="${name_field:-$dir_name}"
+    else
+        name="${name_field:-$(basename "$skill_file" .md)}"
+    fi
     if [ -n "$name" ]; then
         if ! echo "$name" | grep -Eq '^[a-z0-9-]+$'; then
             error "[BAD-NAME] $skill_name: name '$name' must be lowercase letters, numbers, and hyphens only"
@@ -125,16 +156,20 @@ validate_skill_md() {
             error "[BAD-NAME] $skill_name: name is ${#name} chars (max: $NAME_MAX)"
         fi
         for reserved in "${RESERVED_NAMES[@]}"; do
-            if echo "$name" | grep -qi "$reserved"; then
-                error "[RESERVED-NAME] $skill_name: name '$name' contains reserved word '$reserved'"
+            if [ "$name" = "$reserved" ]; then
+                error "[RESERVED-NAME] $skill_name: name '$name' is a reserved word"
             fi
         done
     fi
+    # Check: a SKILL.md frontmatter name must match its directory name
+    if [ "$is_skill_md" = 1 ] && [ -n "$name_field" ] && [ "$name_field" != "$dir_name" ]; then
+        warning "[NAME-MISMATCH] $skill_name: frontmatter name '$name_field' != directory '$dir_name'"
+    fi
 
-    # Check: progressive disclosure for large skills
-    local skill_dir
-    skill_dir=$(dirname "$skill_file")
-    if [ "$lines" -gt "$SKILL_REF_DIR_THRESHOLD" ] && [ ! -d "$skill_dir/references" ]; then
+    # Check: progressive disclosure for large SKILL.md files. Command files keep
+    # their references at a non-standard install path, so skip them here — the
+    # OVER-500-LINES / approaching-limit checks still cover oversized commands.
+    if [ "$is_skill_md" = 1 ] && [ "$lines" -gt "$SKILL_REF_DIR_THRESHOLD" ] && [ ! -d "$skill_dir/references" ]; then
         warning "[NO-PROGRESSIVE-DISCLOSURE] $skill_name: $lines lines with no references/ dir"
     fi
 
@@ -145,7 +180,7 @@ validate_skill_md() {
     # skill-creator) mentions references/*.md paths only as illustrative
     # examples, not as real progressive-disclosure links.
     local ref_base ref
-    if [ "$(basename "$skill_file")" = "SKILL.md" ]; then
+    if [ "$is_skill_md" = 1 ]; then
         ref_base="$skill_dir"
     else
         ref_base="${skill_file%.md}"
@@ -230,6 +265,115 @@ check_json_duplicate_entries() {
     fi
 }
 
+# Verify a JSON file parses. A malformed settings.json is silently ignored by
+# Claude Code, so this gates the other settings checks (they assume valid JSON).
+check_json_valid() {
+    local json_file="$1" display="$2" err
+    [ -f "$json_file" ] || return 0
+    command -v jq >/dev/null 2>&1 || return 0
+    if ! err=$(jq empty "$json_file" 2>&1); then
+        error "[INVALID-JSON] $display: not valid JSON (Claude Code ignores the whole file) — $(printf '%s' "$err" | head -1)"
+        return 1
+    fi
+    return 0
+}
+
+# Resolve a ".claude/<rest>" or "~/.claude/<rest>" reference to its on-disk path.
+# A bare .claude/ is scope-relative ($CLAUDE_DIR); a ~/.claude/ is the user tree.
+_resolve_dotclaude() {
+    case "$1" in
+        "~/.claude/"*) printf '%s/%s\n' "$HOME/.claude" "${1#\~/.claude/}" ;;
+        ".claude/"*)   printf '%s/%s\n' "$CLAUDE_DIR"   "${1#.claude/}" ;;
+        *)             printf '%s/%s\n' "$CLAUDE_DIR"   "$1" ;;
+    esac
+}
+
+# Flag .claude/*.{md,sh,json} (and ~/.claude/...) paths in a text file that do
+# not resolve. The ~/ form points at the user tree, a bare .claude/ at the scope.
+check_dead_refs_in_file() {
+    local src="$1" display="$2" p
+    [ -f "$src" ] || return 0
+    while IFS= read -r p; do
+        [ -z "$p" ] && continue
+        [ -f "$(_resolve_dotclaude "$p")" ] || error "[DEAD-REF] $display: references $p — missing on disk"
+    done < <(grep -oE '(~/)?\.claude/[A-Za-z0-9._/-]+\.(md|sh|json)' "$src" 2>/dev/null | sort -u || true)
+}
+
+# Flag settings.json `guides` paths that do not resolve on disk.
+check_settings_guide_refs() {
+    local json_file="$1" display="$2" p
+    [ -f "$json_file" ] || return 0
+    command -v jq >/dev/null 2>&1 || return 0
+    while IFS= read -r p; do
+        [ -z "$p" ] && continue
+        [ -f "$(_resolve_dotclaude "$p")" ] || error "[DEAD-REF] $display: guides path $p — missing on disk"
+    done < <(jq -r '.guides? // {} | [.. | strings] | .[]' "$json_file" 2>/dev/null | sort -u || true)
+}
+
+# Flag MCP servers defined in mcpServers but absent from preApprovedTools.
+check_mcp_preapproved() {
+    local json_file="$1" display="$2" srv
+    [ -f "$json_file" ] || return 0
+    command -v jq >/dev/null 2>&1 || return 0
+    while IFS= read -r srv; do
+        [ -z "$srv" ] && continue
+        if ! jq -e --arg s "$srv" '
+            (.preApprovedTools // {}) as $p
+            | ($p | has($s))
+              or ([$p[]? | arrays | .[]] | any(type == "string" and test("mcp__\($s)__")))
+        ' "$json_file" >/dev/null 2>&1; then
+            error "[MISSING-PRE-APPROVED] $display: MCP server \"$srv\" not in preApprovedTools"
+        fi
+    done < <(jq -r '.mcpServers? // {} | keys[]' "$json_file" 2>/dev/null || true)
+}
+
+# Flag hook scripts on disk that no settings file registers. pre-commit.sh and
+# check-signals.sh are conventional standalone hooks — never flagged.
+check_unregistered_hooks() {
+    local hooks_dir="$CLAUDE_DIR/hooks" h base s found
+    [ -d "$hooks_dir" ] || return 0
+    for h in "$hooks_dir"/*.sh; do
+        [ -f "$h" ] || continue
+        base=$(basename "$h")
+        case "$base" in pre-commit.sh|check-signals.sh) continue ;; esac
+        found=0
+        for s in "$CLAUDE_DIR/settings.json" "$CLAUDE_DIR/settings.local.json"; do
+            [ -f "$s" ] || continue
+            if grep -qF "$base" "$s" 2>/dev/null; then found=1; break; fi
+        done
+        if [ "$found" = 0 ]; then
+            warning "[UNREGISTERED-HOOK] $base: in hooks/ but referenced by no settings.json (hooks or statusLine)"
+        fi
+    done
+}
+
+# Flag auto-memory MEMORY.md index files over the loaded-slice budget.
+check_memory_overflow() {
+    local mem ls bs
+    for mem in "$CLAUDE_DIR"/projects/*/memory/MEMORY.md; do
+        [ -f "$mem" ] || continue
+        ls=$(wc -l < "$mem"); bs=$(wc -c < "$mem")
+        if [ "$ls" -gt "$MEMORY_MAX_LINES" ] || [ "$bs" -gt "$MEMORY_MAX_BYTES" ]; then
+            error "[MEMORY-OVERFLOW] ${mem#$CLAUDE_DIR/}: $ls lines / $bs bytes (max $MEMORY_MAX_LINES lines / $MEMORY_MAX_BYTES bytes)"
+        fi
+    done
+}
+
+# Flag hook timeouts above 2x the documented per-type default.
+check_hook_timeouts() {
+    local json_file="$1" display="$2" typ t
+    [ -f "$json_file" ] || return 0
+    command -v jq >/dev/null 2>&1 || return 0
+    while IFS=$'\t' read -r typ t; do
+        case "${t:-}" in ''|*[!0-9]*) continue ;; esac
+        if [ "$typ" = "command" ] && [ "$t" -gt $((HOOK_TIMEOUT_COMMAND * 2)) ]; then
+            warning "[SUSPICIOUS-TIMEOUT] $display: a command hook has timeout ${t}s (>2x the ${HOOK_TIMEOUT_COMMAND}s default)"
+        elif [ "$typ" = "prompt" ] && [ "$t" -gt $((HOOK_TIMEOUT_PROMPT * 2)) ]; then
+            warning "[SUSPICIOUS-TIMEOUT] $display: a prompt hook has timeout ${t}s (>2x the ${HOOK_TIMEOUT_PROMPT}s default)"
+        fi
+    done < <(jq -r '.hooks? // {} | .. | objects | select(has("type") and has("timeout")) | "\(.type)\t\(.timeout)"' "$json_file" 2>/dev/null || true)
+}
+
 # Sum description + when_to_use chars across every SKILL.md and command .md
 # under CLAUDE_DIR. Mirrors what Claude Code feeds into the skill-listing block.
 compute_listing_cost() {
@@ -297,7 +441,7 @@ bold "=== .claude/ Ecosystem Compliance Validator ==="
 echo "Target: $CLAUDE_DIR"
 echo ""
 
-# --- Check 1: CLAUDE.md line count ---
+# --- Check 1: CLAUDE.md (line count + dead .claude/ references) ---
 bold "--- CLAUDE.md ---"
 if [ -f "$CLAUDE_MD" ]; then
     lines=$(wc -l < "$CLAUDE_MD")
@@ -306,6 +450,7 @@ if [ -f "$CLAUDE_MD" ]; then
     else
         ok "CLAUDE.md: $lines lines (under $CLAUDE_MD_MAX_LINES)"
     fi
+    check_dead_refs_in_file "$CLAUDE_MD" "CLAUDE.md"
 else
     warning "No CLAUDE.md found"
 fi
@@ -405,18 +550,34 @@ for sub_refs in "$CLAUDE_DIR"/*/references; do
 done
 echo ""
 
-# --- Check 5: settings.json duplicate keys ---
+# --- Check 5: Settings (validity, duplicates, dead guide refs, MCP, timeouts) ---
 bold "--- Settings ---"
 settings_checked=0
 for settings_file in "$CLAUDE_DIR/settings.json" "$CLAUDE_DIR/settings.local.json"; do
     [ -f "$settings_file" ] || continue
     settings_checked=$((settings_checked + 1))
-    check_json_duplicate_keys "$settings_file" "$(basename "$settings_file")"
-    check_json_duplicate_entries "$settings_file" "$(basename "$settings_file")"
+    sdisp=$(basename "$settings_file")
+    if check_json_valid "$settings_file" "$sdisp"; then
+        check_json_duplicate_keys    "$settings_file" "$sdisp"
+        check_json_duplicate_entries "$settings_file" "$sdisp"
+        check_settings_guide_refs    "$settings_file" "$sdisp"
+        check_mcp_preapproved        "$settings_file" "$sdisp"
+        check_hook_timeouts          "$settings_file" "$sdisp"
+    fi
 done
 if [ "$settings_checked" -eq 0 ]; then
     ok "No settings.json found (skipped)"
 fi
+echo ""
+
+# --- Check 6: Hooks (registration) ---
+bold "--- Hooks ---"
+check_unregistered_hooks
+echo ""
+
+# --- Check 7: Auto-memory index size ---
+bold "--- Memory ---"
+check_memory_overflow
 echo ""
 
 # --- Summary ---
