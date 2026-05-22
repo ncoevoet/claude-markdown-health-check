@@ -59,6 +59,7 @@ MEMORY_MAX_LINES=200
 MEMORY_MAX_BYTES=25600
 HOOK_TIMEOUT_COMMAND=600
 HOOK_TIMEOUT_PROMPT=30
+HOOK_TIMEOUT_AGENT=60
 
 # Skill listing budget — see https://code.claude.com/docs/en/skills
 # "The budget scales dynamically at 1% of the context window, with a fallback of 8,000 characters."
@@ -155,11 +156,15 @@ validate_skill_md() {
         if [ "${#name}" -gt "$NAME_MAX" ]; then
             error "[BAD-NAME] $skill_name: name is ${#name} chars (max: $NAME_MAX)"
         fi
-        for reserved in "${RESERVED_NAMES[@]}"; do
-            if [ "$name" = "$reserved" ]; then
-                error "[RESERVED-NAME] $skill_name: name '$name' is a reserved word"
-            fi
-        done
+        if [ "$is_skill_md" = 1 ]; then
+            for reserved in "${RESERVED_NAMES[@]}"; do
+                case "$name" in
+                    *"$reserved"*)
+                        error "[RESERVED-NAME] $skill_name: name '$name' contains reserved word '$reserved' (a skill name may not contain it)"
+                        ;;
+                esac
+            done
+        fi
     fi
     # Check: a SKILL.md frontmatter name must match its directory name
     if [ "$is_skill_md" = 1 ] && [ -n "$name_field" ] && [ "$name_field" != "$dir_name" ]; then
@@ -319,10 +324,12 @@ check_mcp_preapproved() {
         [ -z "$srv" ] && continue
         if ! jq -e --arg s "$srv" '
             (.preApprovedTools // {}) as $p
+            | (.permissions.allow // []) as $allow
             | ($p | has($s))
               or ([$p[]? | arrays | .[]] | any(type == "string" and test("mcp__\($s)__")))
+              or ($allow | any(type == "string" and test("mcp__\($s)__")))
         ' "$json_file" >/dev/null 2>&1; then
-            error "[MISSING-PRE-APPROVED] $display: MCP server \"$srv\" not in preApprovedTools"
+            error "[MISSING-PRE-APPROVED] $display: MCP server \"$srv\" not in preApprovedTools or permissions.allow"
         fi
     done < <(jq -r '.mcpServers? // {} | keys[]' "$json_file" 2>/dev/null || true)
 }
@@ -337,7 +344,7 @@ check_unregistered_hooks() {
         base=$(basename "$h")
         case "$base" in pre-commit.sh|check-signals.sh) continue ;; esac
         found=0
-        for s in "$CLAUDE_DIR/settings.json" "$CLAUDE_DIR/settings.local.json"; do
+        for s in "$CLAUDE_DIR/settings.json" "$CLAUDE_DIR/settings.local.json" "$hooks_dir/hooks.json"; do
             [ -f "$s" ] || continue
             if grep -qF "$base" "$s" 2>/dev/null; then found=1; break; fi
         done
@@ -359,19 +366,28 @@ check_memory_overflow() {
     done
 }
 
-# Flag hook timeouts above 2x the documented per-type default.
+# Flag hook timeouts above 2x the documented per-type default. Defaults:
+# command/http/mcp_tool 600s, prompt 30s, agent 60s — but a command hook under
+# a UserPromptSubmit event defaults to 30s.
 check_hook_timeouts() {
-    local json_file="$1" display="$2" typ t
+    local json_file="$1" display="$2" ev typ t def
     [ -f "$json_file" ] || return 0
     command -v jq >/dev/null 2>&1 || return 0
-    while IFS=$'\t' read -r typ t; do
+    while IFS=$'\t' read -r ev typ t; do
         case "${t:-}" in ''|*[!0-9]*) continue ;; esac
-        if [ "$typ" = "command" ] && [ "$t" -gt $((HOOK_TIMEOUT_COMMAND * 2)) ]; then
-            warning "[SUSPICIOUS-TIMEOUT] $display: a command hook has timeout ${t}s (>2x the ${HOOK_TIMEOUT_COMMAND}s default)"
-        elif [ "$typ" = "prompt" ] && [ "$t" -gt $((HOOK_TIMEOUT_PROMPT * 2)) ]; then
-            warning "[SUSPICIOUS-TIMEOUT] $display: a prompt hook has timeout ${t}s (>2x the ${HOOK_TIMEOUT_PROMPT}s default)"
+        case "$typ" in
+            command|http|mcp_tool) def=$HOOK_TIMEOUT_COMMAND ;;
+            prompt)                def=$HOOK_TIMEOUT_PROMPT ;;
+            agent)                 def=$HOOK_TIMEOUT_AGENT ;;
+            *) continue ;;
+        esac
+        if [ "$typ" = "command" ] && [ "$ev" = "UserPromptSubmit" ]; then
+            def=$HOOK_TIMEOUT_PROMPT
         fi
-    done < <(jq -r '.hooks? // {} | .. | objects | select(has("type") and has("timeout")) | "\(.type)\t\(.timeout)"' "$json_file" 2>/dev/null || true)
+        if [ "$t" -gt $((def * 2)) ]; then
+            warning "[SUSPICIOUS-TIMEOUT] $display: a $typ hook ($ev) has timeout ${t}s (>2x the ${def}s default)"
+        fi
+    done < <(jq -r '.hooks // {} | to_entries[] | .key as $ev | .value[]? | .hooks[]? | select(has("type") and has("timeout")) | "\($ev)\t\(.type)\t\(.timeout)"' "$json_file" 2>/dev/null || true)
 }
 
 # Sum description + when_to_use chars across every SKILL.md and command .md
@@ -418,6 +434,11 @@ compute_listing_cost() {
 # CLAUDE_CONTEXT_TOKENS defaults to 200000 (Sonnet/Haiku worst case); set it
 # to 1000000 for Opus 1M sessions to avoid under-flagging budget overflows.
 if [ "$LISTING_COST_ONLY" = 1 ]; then
+    # settings.json maxSkillDescriptionChars overrides the per-entry cap.
+    if [ -f "$CLAUDE_DIR/settings.json" ] && command -v jq >/dev/null 2>&1; then
+        msdc=$(jq -r '.maxSkillDescriptionChars // empty' "$CLAUDE_DIR/settings.json" 2>/dev/null)
+        case "$msdc" in ''|*[!0-9]*) ;; *) DESC_SOFT_MAX=$msdc ;; esac
+    fi
     read -r LIST_TOTAL LIST_COUNT < <(compute_listing_cost)
     CONTEXT_TOKENS="${CLAUDE_CONTEXT_TOKENS:-200000}"
     if [ -n "${SLASH_COMMAND_TOOL_CHAR_BUDGET:-}" ]; then

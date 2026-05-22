@@ -64,12 +64,14 @@ Extract these values, write them as JSON to `$CACHE`, and populate the Threshold
 | hookTimeout.command   | hooks doc          | 600      |
 | hookTimeout.prompt    | hooks doc          | 30       |
 | hookTimeout.agent     | hooks doc          | 60       |
-| hookTimeout.http      | hooks doc          | 30       |
+| hookTimeout.http      | hooks doc          | 600      |
 | skillListing.budgetFraction | settings.json / `/doctor` | 0.01 |
 | skillListing.charFloor      | skills doc ("fallback of 8,000") | 8000 |
 | skillListing.entryMax       | skills doc ("capped at 1,536")   | 1536 |
 
 If a fetched value differs from the fallback hardcoded above, use the fetched value AND emit `[STALE-THRESHOLD] <key>: <old> → <new>` so the command itself gets updated.
+
+Note: a `command` hook under a `UserPromptSubmit` event defaults to 30s (not 600s) — `validate-skills.sh` accounts for this in `SUSPICIOUS-TIMEOUT`.
 
 ## Phase 2 — Select Depth
 
@@ -129,7 +131,7 @@ This is the deterministic layer. Trust its output for: name regex, reserved word
 
 Audits whether the cumulative skill-listing block fits Claude Code's runtime budget (1% of context window, 8,000-char floor; `/doctor` exposes it as `skillListingBudgetFraction`). Emits `SKILL-BUDGET-OVERFLOW` (Critical) plus `SKILL-LOW-RELEVANCE` and `SKILL-DUPLICATE-DOMAIN` (Structural).
 
-Read `~/.claude/claude-markdown-health-check/references/skill-listing-budget.md` for the full audit logic, the `validate-skills.sh --listing-cost` invocation, and the prioritized remediation order (trim descriptions → per-project `disabledSkills` / `/skills` → trim `enabledPlugins` → raise the budget). If the installed copy is missing (installer not run yet), fall back to `commands/claude-markdown-health-check/references/skill-listing-budget.md` resolved against the current repo root.
+Read `~/.claude/claude-markdown-health-check/references/skill-listing-budget.md` for the full audit logic, the `validate-skills.sh --listing-cost` invocation, and the prioritized remediation order (trim descriptions → per-project `skillOverrides` / `/skills` → trim `enabledPlugins` → raise the budget). If the installed copy is missing (installer not run yet), fall back to `commands/claude-markdown-health-check/references/skill-listing-budget.md` resolved against the current repo root.
 
 ## Phase 5 — Skill Semantic Audit
 
@@ -164,9 +166,10 @@ For each skill under `$USER_DIR/skills/*/SKILL.md` AND `$PROJECT_DIR/skills/*/SK
 - Two agents covering the same problem space with no differentiation → `OVERLAPPING-AGENT`
 
 **Settings (`settings.json`)**
-- `validate-skills.sh` flags malformed JSON → `INVALID-JSON`, duplicate keys → `DUPLICATE-KEY`, duplicate array entries → `DUPLICATE-ENTRY`, and MCP servers absent from `preApprovedTools` → `MISSING-PRE-APPROVED` — relay, do NOT re-check.
+- `validate-skills.sh` flags malformed JSON → `INVALID-JSON`, duplicate keys → `DUPLICATE-KEY`, duplicate array entries → `DUPLICATE-ENTRY`, and MCP servers absent from `preApprovedTools`/`permissions.allow` → `MISSING-PRE-APPROVED` — relay, do NOT re-check.
 - Bash pattern broader than necessary (e.g., `Bash(cat:*)` — reads any file) → `BROAD-PATTERN`
 - `reminders` entry contradicts current skill instructions, or references removed/renamed file → `STALE-REMINDER`
+- Current settings keys are valid — do not flag `permissions`, `skillOverrides`, `maxSkillDescriptionChars`, `claudeMdExcludes`, `autoMemoryDirectory`, `autoMemoryEnabled`, `enabledPlugins` as unknown.
 
 ## Phase 7 — Cross-references and Orphans
 
@@ -239,7 +242,7 @@ Tool calls: X (Y% ok) | Reworks: Z | Corrections: W | Builds: V/N
 - Disable candidates (zero hits in project): <names>
 - Suggested actions (cheapest first):
   1. Trim description+when_to_use on bloat top 5 (zero ongoing cost)
-  2. Disable low-relevance skills via /skills, OR add `disabledSkills: [...]` to project `.claude/settings.json`
+  2. Disable low-relevance skills via /skills, OR add `skillOverrides` entries to project `.claude/settings.json`
   3. Remove unused plugins from `enabledPlugins` in `~/.claude/settings.json` — list the candidates: <plugin names not invoked recently>
   4. Last resort: raise `SLASH_COMMAND_TOOL_CHAR_BUDGET` env var or `skillListingBudgetFraction` (cost: ~4k tokens/turn, faster rate-limit burn — per /doctor warning)
 

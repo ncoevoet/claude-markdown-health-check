@@ -35,7 +35,7 @@ The script's count covers user + project SKILL.md + commands. Plugin, marketplac
 When `SKILL-BUDGET-OVERFLOW` fires, the report's "Skill Listing Budget" block MUST list these options verbatim so the user can pick one. Do not collapse the list — each option has different cost and reversibility.
 
 1. **Trim descriptions in source** — for the top 5 bloat contributors, propose tightening `description` + `when_to_use`. Anthropic's own first recommendation: "trim the description and when_to_use text at the source: put the key use case first." Zero ongoing cost.
-2. **Disable irrelevant skills per-project** — for each `SKILL-LOW-RELEVANCE` candidate, suggest either `/skills` (interactive) or adding `disabledSkills: [<name>, …]` to the project's settings.json. Per-project disables don't affect other repos.
+2. **Disable irrelevant skills per-project** — for each `SKILL-LOW-RELEVANCE` candidate, suggest either `/skills` (interactive) or adding `skillOverrides: {"<name>": "off"}` (or `"name-only"` to keep it invocable) to the project's settings.json. Per-project overrides don't affect other repos.
 3. **Trim `enabledPlugins`** — if any enabled plugin provides skills not used in the current project, propose removing it from `enabledPlugins` in the user settings. Plugins are per-machine; check `git log` of the user settings file and recent skill invocations before suggesting (don't propose disabling a plugin the user enabled this week).
 4. **Raise the budget — last resort** — `SLASH_COMMAND_TOOL_CHAR_BUDGET` env var (documented) or `skillListingBudgetFraction` in the user settings (e.g., `0.02`). Trade-off the `/doctor` warning calls out: ~4k extra tokens per turn and faster rate-limit burn. Only suggest if 1–3 are exhausted.
 
@@ -53,7 +53,7 @@ When `SKILL-DUPLICATE-DOMAIN` fires, propose **merging or deleting one of the pa
 - Disable candidates (zero hits in project): <names>
 - Suggested actions (cheapest first):
   1. Trim description+when_to_use on bloat top 5 (zero ongoing cost)
-  2. Disable low-relevance skills via /skills, OR add disabledSkills to project settings.json
+  2. Disable low-relevance skills via /skills, OR add skillOverrides entries to project settings.json
   3. Remove unused plugins from enabledPlugins in user settings.json — list candidates: <plugin names not invoked recently>
   4. Last resort: raise SLASH_COMMAND_TOOL_CHAR_BUDGET or skillListingBudgetFraction (cost: ~4k tokens/turn, faster rate-limit burn — per /doctor warning)
 ```
