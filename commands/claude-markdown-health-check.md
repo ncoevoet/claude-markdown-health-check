@@ -1,6 +1,6 @@
 ---
 description: Audits the .claude/ ecosystem (skills, hooks, guides, agents, settings) for dead refs, weak triggers, token bloat, rule drift, and frontmatter violations. Reports findings, then applies user-approved fixes. Run before publishing skill changes or when configuration feels stale.
-allowed-tools: Bash(bash ~/.claude/commands/scripts/validate-skills.sh:*) Bash(ls:*) Bash(wc:*) Bash(jq:*) Bash(find:*) Bash(stat:*) Bash(cat:*) Bash(mkdir:*) Read Glob Grep WebFetch Write Edit
+allowed-tools: Bash(bash ~/.claude/commands/scripts/validate-skills.sh:*) Bash(bash:*commands/scripts/validate-skills.sh:*) Bash(ls:*) Bash(wc:*) Bash(jq:*) Bash(find:*) Bash(stat:*) Bash(cat:*) Bash(mkdir:*) Read Glob Grep WebFetch Write Edit
 argument-hint: "[quick|deep|--refresh|<focus message>]"
 ---
 
@@ -23,7 +23,7 @@ if [[ -d "$PWD/.claude" ]]; then PROJECT_DIR="$PWD/.claude"; fi
 
 - After the report prints, STOP and wait for the user to name which findings to fix.
 - NEVER edit, delete, move, or rename any file before the user names the items.
-- NEVER write the report (or any copy / summary / "full version" of it) to disk. The chat channel is the only output. No plan files, no log files, no `.md` dumps under `~/.claude/plans/` or anywhere else. The user can copy from chat if they want a saved artifact. (The Bash-side guidance cache at `~/.claude/.cache/claude-markdown-health-check-guidance.json` is internal state, NOT report content — that write is explicitly allowed.)
+- NEVER write the report (or any copy / summary / "full version" of it) to disk. The chat channel is the only output. No plan files, no log files, no `.md` dumps under `~/.claude/plans/` or anywhere else. The user can copy from chat if they want a saved artifact. (The Bash-side guidance cache at `${CLAUDE_PLUGIN_DATA:-~/.claude/.cache}/claude-markdown-health-check-guidance.json` is internal state, NOT report content — that write is explicitly allowed.)
 - For `REPURPOSE` items: the destination `references/*.md` MUST be written and the SKILL.md References section MUST be updated BEFORE the source orphan is deleted.
 - Done when: report printed in chat AND user has either named fixes OR explicitly declined further action.
 
@@ -32,7 +32,8 @@ if [[ -d "$PWD/.claude" ]]; then PROJECT_DIR="$PWD/.claude"; fi
 Source of truth is the official Anthropic docs. Cache the fetch to avoid 5 round-trips per invocation.
 
 ```bash
-CACHE=~/.claude/.cache/claude-markdown-health-check-guidance.json
+# ${CLAUDE_PLUGIN_DATA} persists across plugin updates; fall back for make install.
+CACHE="${CLAUDE_PLUGIN_DATA:-$HOME/.claude/.cache}/claude-markdown-health-check-guidance.json"
 mkdir -p "$(dirname "$CACHE")"
 AGE_SEC=$(( $(date +%s) - $(stat -c %Y "$CACHE" 2>/dev/null || echo 0) ))
 ```
@@ -121,8 +122,11 @@ If `$LATEST` exists, extract: tool success rate, files reworked >1×, count of c
 ## Phase 4 — Run validate-skills.sh (per scope)
 
 ```bash
-bash ~/.claude/commands/scripts/validate-skills.sh "$USER_DIR"
-[[ -n "$PROJECT_DIR" ]] && bash ~/.claude/commands/scripts/validate-skills.sh "$PROJECT_DIR"
+# `make install` puts the script under ~/.claude/commands/scripts/; a plugin
+# install exposes it under ${CLAUDE_PLUGIN_ROOT}/commands/scripts/.
+VALIDATE="${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}/commands/scripts/validate-skills.sh"
+bash "$VALIDATE" "$USER_DIR"
+[[ -n "$PROJECT_DIR" ]] && bash "$VALIDATE" "$PROJECT_DIR"
 ```
 
 This is the deterministic layer. Trust its output for: name regex, reserved words, name/dir mismatch, missing descriptions, voice violations, line counts, chained references, dead links (skill `references/*.md`, settings `guides`, CLAUDE.md `.claude/…` paths), JSON validity, duplicate keys and array entries, MCP pre-approval, unregistered hooks, hook timeouts, memory-index size, rule scoping, TOC presence, description sizes. Phases 5–7 MUST NOT re-check anything this script already covers — they MUST only handle what the script can't.
@@ -131,7 +135,7 @@ This is the deterministic layer. Trust its output for: name regex, reserved word
 
 Audits whether the cumulative skill-listing block fits Claude Code's runtime budget (1% of context window, 8,000-char floor; `/doctor` exposes it as `skillListingBudgetFraction`). Emits `SKILL-BUDGET-OVERFLOW` (Critical) plus `SKILL-LOW-RELEVANCE` and `SKILL-DUPLICATE-DOMAIN` (Structural).
 
-Read `~/.claude/claude-markdown-health-check/references/skill-listing-budget.md` for the full audit logic, the `validate-skills.sh --listing-cost` invocation, and the prioritized remediation order (trim descriptions → per-project `skillOverrides` / `/skills` → trim `enabledPlugins` → raise the budget). If the installed copy is missing (installer not run yet), fall back to `commands/claude-markdown-health-check/references/skill-listing-budget.md` resolved against the current repo root.
+Read `skill-listing-budget.md` for the full audit logic, the `validate-skills.sh --listing-cost` invocation, and the prioritized remediation order (trim descriptions → per-project `skillOverrides` / `/skills` → trim `enabledPlugins` → raise the budget). Resolve it as the first that exists: `${CLAUDE_PLUGIN_ROOT}/commands/claude-markdown-health-check/references/skill-listing-budget.md`, `~/.claude/claude-markdown-health-check/references/skill-listing-budget.md`, or the repo `commands/` copy.
 
 ## Phase 5 — Skill Semantic Audit
 
@@ -157,7 +161,7 @@ For each skill under `$USER_DIR/skills/*/SKILL.md` AND `$PROJECT_DIR/skills/*/SK
 
 Phase 1 checks CLAUDE.md *size*; `validate-skills.sh` checks its *dead links*. This phase judges whether each CLAUDE.md / `CLAUDE.local.md` in scope is actually *useful* to a fresh session.
 
-Read `~/.claude/claude-markdown-health-check/references/claude-md-quality.md` for the rubric (fall back to the repo copy under `commands/claude-markdown-health-check/references/` if the installed copy is missing). For each CLAUDE.md found, verify its commands and paths against the real tree, then emit:
+Read `claude-md-quality.md` for the rubric — resolve it as the first that exists: `${CLAUDE_PLUGIN_ROOT}/commands/claude-markdown-health-check/references/claude-md-quality.md`, `~/.claude/claude-markdown-health-check/references/claude-md-quality.md`, or the repo copy. For each CLAUDE.md found, verify its commands and paths against the real tree, then emit:
 - A command, path, or version CLAUDE.md states that the codebase contradicts → `CLAUDEMD-STALE`
 - Generic boilerplate not specific to this repo → `CLAUDEMD-GENERIC`
 - No build/test/run commands, or no architecture map → `CLAUDEMD-THIN`
