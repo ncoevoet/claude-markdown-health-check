@@ -83,6 +83,7 @@ The report prints in chat. Reply naming the findings to fix and the command appl
 | 4 — Validator | Runs `validate-skills.sh` per scope — the deterministic layer (name regex, line counts, voice, TOC, description sizes) |
 | 5a — Listing budget | Audits the cumulative skill-listing block against Claude Code's runtime budget |
 | 5 — Skill semantics | Judgment-call checks the validator can't do — trigger quality, structure, resolvability |
+| 5b — CLAUDE.md quality | Whether each CLAUDE.md actually helps — stale commands, generic boilerplate, thin coverage |
 | 6 — Hooks / agents / settings | Registration, duplication, timeouts, broad patterns, stale reminders |
 | 7 — Cross-refs + orphans | Dead paths, orphaned guides/patterns, missing triggers, memory-index overflow |
 | 8 — Report | One flat prioritized report: Critical · Structural · Hygiene · Discovery |
