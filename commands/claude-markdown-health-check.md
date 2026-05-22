@@ -115,7 +115,7 @@ bash ~/.claude/commands/scripts/validate-skills.sh "$USER_DIR"
 [[ -n "$PROJECT_DIR" ]] && bash ~/.claude/commands/scripts/validate-skills.sh "$PROJECT_DIR"
 ```
 
-This is the deterministic layer. Trust its output for: name regex, reserved words, voice violations, line counts, chained references, dead `references/*.md` links, duplicate JSON keys in settings, TOC presence, description sizes. Phase 5 MUST NOT re-check anything this script already covers — it MUST only handle what the script can't.
+This is the deterministic layer. Trust its output for: name regex, reserved words, voice violations, line counts, chained references, dead `references/*.md` links, duplicate JSON keys and array entries in settings, TOC presence, description sizes. Phase 5 MUST NOT re-check anything this script already covers — it MUST only handle what the script can't.
 
 ## Phase 5a — Skill Listing Budget Audit
 
@@ -158,7 +158,7 @@ For each skill under `$USER_DIR/skills/*/SKILL.md` AND `$PROJECT_DIR/skills/*/SK
 - Two agents covering the same problem space with no differentiation → `OVERLAPPING-AGENT`
 
 **Settings (`settings.json`)**
-- `validate-skills.sh` flags duplicate JSON keys → `DUPLICATE-KEY` — relay, do NOT re-check.
+- `validate-skills.sh` flags duplicate JSON keys → `DUPLICATE-KEY` and duplicate array entries (e.g. a permission listed twice) → `DUPLICATE-ENTRY` — relay, do NOT re-check.
 - MCP server defined but not in `preApprovedTools` → `MISSING-PRE-APPROVED`
 - Bash pattern broader than necessary (e.g., `Bash(cat:*)` — reads any file) → `BROAD-PATTERN`
 - `reminders` entry contradicts current skill instructions, or references removed/renamed file → `STALE-REMINDER`
@@ -273,7 +273,7 @@ Tool calls: X (Y% ok) | Reworks: Z | Corrections: W | Builds: V/N
 `UNDER-TRIGGER`, `OVER-TRIGGER`, `MISSING-TRIGGER`, `MISSING-AGENT-TRIGGER`, `OVERLAPPING-AGENT`, `DUPLICATE-LOGIC`, `MISSING-ENFORCEMENT`, `NEEDS-REFERENCES`, `NO-EXAMPLES`, `NO-TROUBLESHOOTING`, `BURIED-CRITICAL`, `WEAK-DESC`, `ORPHAN-GUIDE`, `ORPHAN-PATTERN`, `REPURPOSE`, `SKILL-LOW-RELEVANCE`, `SKILL-DUPLICATE-DOMAIN`
 
 **Hygiene** (cosmetic / token efficiency)
-`BROAD-PATTERN`, `SUSPICIOUS-TIMEOUT`, `STALE-REMINDER`
+`BROAD-PATTERN`, `SUSPICIOUS-TIMEOUT`, `STALE-REMINDER`, `DUPLICATE-ENTRY`
 
 **Discovery** (from Phase 3, additive only)
 `NEW-RULE`, `NEW-PATTERN`, `NEW-TRIGGER`, `NEW-REFERENCE`, `SKILL-UPDATE`

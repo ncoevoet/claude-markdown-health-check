@@ -207,6 +207,29 @@ check_json_duplicate_keys() {
     fi
 }
 
+# Detect duplicate string entries within any array of a JSON file (e.g. the
+# same Bash(...) permission listed twice in preApprovedTools.bash, or a guide
+# repeated in an automatic-guide-triggers list). Harmless at runtime but a
+# careless-edit smell — same family as duplicate keys. Needs jq; skips without.
+check_json_duplicate_entries() {
+    local json_file="$1" display="$2" dups line
+    [ -f "$json_file" ] || return 0
+    command -v jq >/dev/null 2>&1 || return 0
+    dups=$(jq -r '
+        paths(arrays) as $p
+        | (getpath($p) | map(select(type == "string"))) as $a
+        | ($a | group_by(.) | map(select(length > 1)) | map(.[0])) as $d
+        | select(($d | length) > 0)
+        | "\($p | map(tostring) | join(".")) :: \($d | join(", "))"
+    ' "$json_file" 2>/dev/null || true)
+    if [ -n "$dups" ]; then
+        while IFS= read -r line; do
+            [ -z "$line" ] && continue
+            warning "[DUPLICATE-ENTRY] $display: array ${line%% :: *} repeats: ${line#* :: }"
+        done <<< "$dups"
+    fi
+}
+
 # Sum description + when_to_use chars across every SKILL.md and command .md
 # under CLAUDE_DIR. Mirrors what Claude Code feeds into the skill-listing block.
 compute_listing_cost() {
@@ -389,6 +412,7 @@ for settings_file in "$CLAUDE_DIR/settings.json" "$CLAUDE_DIR/settings.local.jso
     [ -f "$settings_file" ] || continue
     settings_checked=$((settings_checked + 1))
     check_json_duplicate_keys "$settings_file" "$(basename "$settings_file")"
+    check_json_duplicate_entries "$settings_file" "$(basename "$settings_file")"
 done
 if [ "$settings_checked" -eq 0 ]; then
     ok "No settings.json found (skipped)"
