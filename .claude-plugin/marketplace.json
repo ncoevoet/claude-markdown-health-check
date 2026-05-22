@@ -7,7 +7,7 @@
     {
       "name": "claude-markdown-health-check",
       "displayName": ".claude/ Health Check",
-      "source": ".",
+      "source": "./",
       "version": "0.2.0",
       "description": "Audits the .claude/ ecosystem — skills, commands, hooks, agents, settings — for dead references, weak triggers, token bloat, skill-listing-budget overflow, and frontmatter violations.",
       "author": {
