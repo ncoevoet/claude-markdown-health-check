@@ -390,6 +390,26 @@ check_hook_timeouts() {
     done < <(jq -r '.hooks // {} | to_entries[] | .key as $ev | .value[]? | .hooks[]? | select(has("type") and has("timeout")) | "\($ev)\t\(.type)\t\(.timeout)"' "$json_file" 2>/dev/null || true)
 }
 
+# Audit .claude/rules/ path-scoped rule files. A rule with a `paths:` key that
+# lists no glob is a silent bug (it then loads unconditionally); a large rule
+# with no `paths:` scope loads into every session and costs tokens.
+check_rules() {
+    local rules_dir="$CLAUDE_DIR/rules" rf rel pf lc has_paths
+    [ -d "$rules_dir" ] || return 0
+    while IFS= read -r rf; do
+        [ -f "$rf" ] || continue
+        rel=${rf#$CLAUDE_DIR/}
+        lc=$(wc -l < "$rf")
+        pf=$(extract_field "$rf" "paths")
+        if grep -qE '^paths:' "$rf" 2>/dev/null; then has_paths=1; else has_paths=0; fi
+        if [ "$has_paths" = 1 ] && [ -z "$pf" ]; then
+            warning "[BAD-RULE-FRONTMATTER] $rel: 'paths:' declared but lists no glob"
+        elif [ "$has_paths" = 0 ] && [ "$lc" -gt "$CLAUDE_MD_MAX_LINES" ]; then
+            warning "[RULE-OVERSIZED] $rel: $lc lines, no 'paths:' scope — loaded into every session"
+        fi
+    done < <(find -L "$rules_dir" -name '*.md' -type f 2>/dev/null || true)
+}
+
 # Sum description + when_to_use chars across every SKILL.md and command .md
 # under CLAUDE_DIR. Mirrors what Claude Code feeds into the skill-listing block.
 compute_listing_cost() {
@@ -475,6 +495,11 @@ if [ -f "$CLAUDE_MD" ]; then
 else
     warning "No CLAUDE.md found"
 fi
+# CLAUDE.local.md — personal, gitignored overrides; dead-ref check too.
+for cl in "$CLAUDE_DIR/CLAUDE.local.md" "$CLAUDE_DIR/../CLAUDE.local.md"; do
+    [ -f "$cl" ] || continue
+    check_dead_refs_in_file "$cl" "$(basename "$cl")"
+done
 echo ""
 
 # --- Check 2: Skills (SKILL.md files) ---
@@ -599,6 +624,11 @@ echo ""
 # --- Check 7: Auto-memory index size ---
 bold "--- Memory ---"
 check_memory_overflow
+echo ""
+
+# --- Check 8: Path-scoped rules ---
+bold "--- Rules ---"
+check_rules
 echo ""
 
 # --- Summary ---

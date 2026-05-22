@@ -125,7 +125,7 @@ bash ~/.claude/commands/scripts/validate-skills.sh "$USER_DIR"
 [[ -n "$PROJECT_DIR" ]] && bash ~/.claude/commands/scripts/validate-skills.sh "$PROJECT_DIR"
 ```
 
-This is the deterministic layer. Trust its output for: name regex, reserved words, name/dir mismatch, missing descriptions, voice violations, line counts, chained references, dead links (skill `references/*.md`, settings `guides`, CLAUDE.md `.claude/…` paths), JSON validity, duplicate keys and array entries, MCP pre-approval, unregistered hooks, hook timeouts, memory-index size, TOC presence, description sizes. Phases 5–7 MUST NOT re-check anything this script already covers — they MUST only handle what the script can't.
+This is the deterministic layer. Trust its output for: name regex, reserved words, name/dir mismatch, missing descriptions, voice violations, line counts, chained references, dead links (skill `references/*.md`, settings `guides`, CLAUDE.md `.claude/…` paths), JSON validity, duplicate keys and array entries, MCP pre-approval, unregistered hooks, hook timeouts, memory-index size, rule scoping, TOC presence, description sizes. Phases 5–7 MUST NOT re-check anything this script already covers — they MUST only handle what the script can't.
 
 ## Phase 5a — Skill Listing Budget Audit
 
@@ -188,6 +188,10 @@ Treat `.claude/commands/*.md` and `.claude/skills/<name>/SKILL.md` as a single n
 
 **Auto memory**
 - `validate-skills.sh` checks every `projects/*/memory/MEMORY.md` against the line/byte budget → `MEMORY-OVERFLOW` — relay, do NOT re-check.
+
+**Rules** (`.claude/rules/`)
+- `validate-skills.sh` flags a rule whose `paths:` lists no glob → `BAD-RULE-FRONTMATTER`, and a large rule with no `paths:` scope → `RULE-OVERSIZED` — relay.
+- It also runs the dead-reference scan over `CLAUDE.local.md`; for a monorepo, additionally check any nested `**/CLAUDE.md` the same way.
 
 ### Phase 7a — Orphan Repurposing
 
@@ -277,10 +281,10 @@ Tool calls: X (Y% ok) | Reworks: Z | Corrections: W | Builds: V/N
 `DEAD-REF`, `DUPLICATE-KEY`, `INVALID-JSON`, `MISSING-DESC`, `DEAD-MATCHER`, `UNREGISTERED-HOOK`, `MISSING-PRE-APPROVED`, `MEMORY-OVERFLOW`, `SKILL-BUDGET-OVERFLOW`, `STALE-THRESHOLD`, `GUIDANCE-FETCH-FAILED`
 
 **Structural** (works but should be reorganised)
-`UNDER-TRIGGER`, `OVER-TRIGGER`, `MISSING-TRIGGER`, `MISSING-AGENT-TRIGGER`, `OVERLAPPING-AGENT`, `DUPLICATE-LOGIC`, `MISSING-ENFORCEMENT`, `NEEDS-REFERENCES`, `NO-EXAMPLES`, `NO-TROUBLESHOOTING`, `BURIED-CRITICAL`, `WEAK-DESC`, `NAME-MISMATCH`, `ORPHAN-GUIDE`, `ORPHAN-PATTERN`, `REPURPOSE`, `SKILL-LOW-RELEVANCE`, `SKILL-DUPLICATE-DOMAIN`
+`UNDER-TRIGGER`, `OVER-TRIGGER`, `MISSING-TRIGGER`, `MISSING-AGENT-TRIGGER`, `OVERLAPPING-AGENT`, `DUPLICATE-LOGIC`, `MISSING-ENFORCEMENT`, `NEEDS-REFERENCES`, `NO-EXAMPLES`, `NO-TROUBLESHOOTING`, `BURIED-CRITICAL`, `WEAK-DESC`, `NAME-MISMATCH`, `BAD-RULE-FRONTMATTER`, `ORPHAN-GUIDE`, `ORPHAN-PATTERN`, `REPURPOSE`, `SKILL-LOW-RELEVANCE`, `SKILL-DUPLICATE-DOMAIN`
 
 **Hygiene** (cosmetic / token efficiency)
-`BROAD-PATTERN`, `SUSPICIOUS-TIMEOUT`, `STALE-REMINDER`, `DUPLICATE-ENTRY`
+`BROAD-PATTERN`, `SUSPICIOUS-TIMEOUT`, `STALE-REMINDER`, `DUPLICATE-ENTRY`, `RULE-OVERSIZED`
 
 **Discovery** (from Phase 3, additive only)
 `NEW-RULE`, `NEW-PATTERN`, `NEW-TRIGGER`, `NEW-REFERENCE`, `SKILL-UPDATE`
