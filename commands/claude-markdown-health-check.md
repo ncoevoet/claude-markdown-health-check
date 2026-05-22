@@ -115,7 +115,7 @@ bash ~/.claude/commands/scripts/validate-skills.sh "$USER_DIR"
 [[ -n "$PROJECT_DIR" ]] && bash ~/.claude/commands/scripts/validate-skills.sh "$PROJECT_DIR"
 ```
 
-This is the deterministic layer. Trust its output for: name regex, reserved words, voice violations, line counts, chained references, TOC presence, description sizes. Phase 5 MUST NOT re-check anything this script already covers — it MUST only handle what the script can't.
+This is the deterministic layer. Trust its output for: name regex, reserved words, voice violations, line counts, chained references, dead `references/*.md` links, duplicate JSON keys in settings, TOC presence, description sizes. Phase 5 MUST NOT re-check anything this script already covers — it MUST only handle what the script can't.
 
 ## Phase 5a — Skill Listing Budget Audit
 
@@ -140,7 +140,8 @@ For each skill under `$USER_DIR/skills/*/SKILL.md` AND `$PROJECT_DIR/skills/*/SK
 - Critical instructions buried below line 50 → `BURIED-CRITICAL`
 
 **Resolvability**
-- Every internal path mentioned in the SKILL.md MUST resolve on disk → `DEAD-REF`
+- `validate-skills.sh` already resolves every `references/*.md` path a SKILL.md cites — relay its `DEAD-REF` lines, do NOT re-scan those.
+- Any OTHER internal path a SKILL.md mentions (a guide, a pattern, a sibling skill) MUST resolve on disk → `DEAD-REF`
 
 ## Phase 6 — Hooks, Agents, Settings
 
@@ -157,6 +158,7 @@ For each skill under `$USER_DIR/skills/*/SKILL.md` AND `$PROJECT_DIR/skills/*/SK
 - Two agents covering the same problem space with no differentiation → `OVERLAPPING-AGENT`
 
 **Settings (`settings.json`)**
+- `validate-skills.sh` flags duplicate JSON keys → `DUPLICATE-KEY` — relay, do NOT re-check.
 - MCP server defined but not in `preApprovedTools` → `MISSING-PRE-APPROVED`
 - Bash pattern broader than necessary (e.g., `Bash(cat:*)` — reads any file) → `BROAD-PATTERN`
 - `reminders` entry contradicts current skill instructions, or references removed/renamed file → `STALE-REMINDER`
@@ -167,8 +169,8 @@ Treat `.claude/commands/*.md` and `.claude/skills/<name>/SKILL.md` as a single n
 
 **Dead references** (`DEAD-REF`)
 - Every path in `settings.json` `guides` MUST resolve
-- Every path in CLAUDE.md MUST resolve
-- Every path in any skill's `references/` MUST resolve
+- Every path in CLAUDE.md MUST resolve (project CLAUDE.md is at the repo root — the parent of `.claude/`)
+- SKILL.md `references/*.md` links are resolved by `validate-skills.sh` — relay its findings, don't re-scan
 
 **Orphans**
 - File under `documentation/guides/` not referenced from CLAUDE.md, settings.json, or any skill → `ORPHAN-GUIDE`
@@ -265,7 +267,7 @@ Tool calls: X (Y% ok) | Reworks: Z | Corrections: W | Builds: V/N
 ## Tag Set (canonical — MUST be drawn from this list)
 
 **Critical** (broken; blocks correct behaviour)
-`DEAD-REF`, `DEAD-MATCHER`, `UNREGISTERED-HOOK`, `MISSING-PRE-APPROVED`, `MEMORY-OVERFLOW`, `SKILL-BUDGET-OVERFLOW`, `STALE-THRESHOLD`, `GUIDANCE-FETCH-FAILED`
+`DEAD-REF`, `DUPLICATE-KEY`, `DEAD-MATCHER`, `UNREGISTERED-HOOK`, `MISSING-PRE-APPROVED`, `MEMORY-OVERFLOW`, `SKILL-BUDGET-OVERFLOW`, `STALE-THRESHOLD`, `GUIDANCE-FETCH-FAILED`
 
 **Structural** (works but should be reorganised)
 `UNDER-TRIGGER`, `OVER-TRIGGER`, `MISSING-TRIGGER`, `MISSING-AGENT-TRIGGER`, `OVERLAPPING-AGENT`, `DUPLICATE-LOGIC`, `MISSING-ENFORCEMENT`, `NEEDS-REFERENCES`, `NO-EXAMPLES`, `NO-TROUBLESHOOTING`, `BURIED-CRITICAL`, `WEAK-DESC`, `ORPHAN-GUIDE`, `ORPHAN-PATTERN`, `REPURPOSE`, `SKILL-LOW-RELEVANCE`, `SKILL-DUPLICATE-DOMAIN`

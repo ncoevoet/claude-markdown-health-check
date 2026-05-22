@@ -12,7 +12,7 @@ It reports first and waits. Nothing is edited, moved, or deleted until you reply
 | **Skill-listing budget** | cumulative `description` + `when_to_use` block exceeding Claude Code's 1%-of-context budget; low-relevance and duplicate-domain skills |
 | **Hooks** | files on disk not registered in `settings.json`, duplicate logic, suspicious timeouts, matchers that match no real tool |
 | **Agents** | triggers unreachable from `CLAUDE.md`, overlapping agents |
-| **Settings** | MCP servers missing from `preApprovedTools`, over-broad Bash patterns, stale reminders |
+| **Settings** | duplicate JSON keys, MCP servers missing from `preApprovedTools`, over-broad Bash patterns, stale reminders |
 | **Cross-references** | dead paths in `settings.json` / `CLAUDE.md` / skill `references/`, orphaned guides and patterns, missing triggers |
 | **Memory** | `MEMORY.md` over the loaded-slice line/byte budget |
 
@@ -40,6 +40,8 @@ make install
 - `validate-skills.sh` → `~/.claude/commands/scripts/`
 
 `make uninstall` removes the command and its reference tree. The bundled `validate-skills.sh` is left in place — it lives in a shared directory and other commands may depend on it.
+
+> **`make install` is the supported install.** The command resolves `validate-skills.sh` and its references at the `~/.claude/` paths the Makefile creates. The bundled `.claude-plugin/` manifest lets the repo appear in a plugin marketplace, but a marketplace install alone does not place `validate-skills.sh` where Phase 4 expects it — run `make install` after enabling the plugin.
 
 This command works in Claude Code only — it depends on filesystem access and bash.
 

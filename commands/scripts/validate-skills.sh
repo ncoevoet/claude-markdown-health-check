@@ -28,7 +28,16 @@ done
 CLAUDE_DIR="${POS_ARGS[0]:-${CLAUDE_DIR:-$HOME/.claude}}"
 SKILLS_DIR="$CLAUDE_DIR/skills"
 COMMANDS_DIR="$CLAUDE_DIR/commands"
-CLAUDE_MD="$CLAUDE_DIR/CLAUDE.md"
+# CLAUDE.md is at $CLAUDE_DIR/CLAUDE.md for the user tree (~/.claude/CLAUDE.md),
+# but at the project ROOT for a project tree (<proj>/CLAUDE.md — the parent of
+# <proj>/.claude). Resolve both so a project CLAUDE.md is not silently skipped.
+if [ -f "$CLAUDE_DIR/CLAUDE.md" ]; then
+    CLAUDE_MD="$CLAUDE_DIR/CLAUDE.md"
+elif [ -f "$CLAUDE_DIR/../CLAUDE.md" ]; then
+    CLAUDE_MD="$CLAUDE_DIR/../CLAUDE.md"
+else
+    CLAUDE_MD="$CLAUDE_DIR/CLAUDE.md"
+fi
 EXIT_CODE=0
 ERRORS=0
 WARNINGS=0
@@ -97,8 +106,10 @@ validate_skill_md() {
             warning "[DESCRIPTION-TRUNCATED] $skill_name: description + when_to_use = $combined chars (>$DESC_SOFT_MAX truncated in skill listing)"
         fi
 
-        # Check: third-person voice (heuristic)
-        if echo "$desc" | grep -Eqi '(\bI\b|\bI'\''ll\b|\bI can\b|\byou can\b|\byour\b)'; then
+        # Check: third-person voice (heuristic). No -i: a case-insensitive
+        # \bI\b also matches the "i" in "i.e."/"e.g."; first person is always
+        # a capital I. Second-person words stay case-tolerant via [Yy].
+        if echo "$desc" | grep -Eq '(\bI\b|\bI'\''ll\b|\bI can\b|\b[Yy]ou can\b|\b[Yy]our\b)'; then
             warning "[THIRD-PERSON] $skill_name: description appears to use first/second person; docs require third person"
         fi
     fi
@@ -125,6 +136,74 @@ validate_skill_md() {
     skill_dir=$(dirname "$skill_file")
     if [ "$lines" -gt "$SKILL_REF_DIR_THRESHOLD" ] && [ ! -d "$skill_dir/references" ]; then
         warning "[NO-PROGRESSIVE-DISCLOSURE] $skill_name: $lines lines with no references/ dir"
+    fi
+
+    # Check: every cited references/*.md path resolves on disk (DEAD-REF).
+    # Deterministic — must not be left to model judgement. A SKILL.md resolves
+    # refs against its own dir; a command file foo.md against the foo/ sibling.
+    # Only enforced when a references/ dir exists: a skill WITHOUT one (e.g.
+    # skill-creator) mentions references/*.md paths only as illustrative
+    # examples, not as real progressive-disclosure links.
+    local ref_base ref
+    if [ "$(basename "$skill_file")" = "SKILL.md" ]; then
+        ref_base="$skill_dir"
+    else
+        ref_base="${skill_file%.md}"
+    fi
+    if [ -d "$ref_base/references" ]; then
+        while IFS= read -r ref; do
+            [ -z "$ref" ] && continue
+            if [ ! -f "$ref_base/$ref" ]; then
+                error "[DEAD-REF] $skill_name: cites $ref — missing at $ref_base/$ref"
+            fi
+        done < <(awk '{
+            s = $0; gsub(/[^A-Za-z0-9._\/-]/, " ", s); n = split(s, a, " ")
+            for (i = 1; i <= n; i++)
+                if (a[i] ~ /^references\/[A-Za-z0-9._\/-]+\.md$/) print a[i]
+        }' "$skill_file" 2>/dev/null | sort -u || true)
+    fi
+}
+
+# Detect duplicate keys inside a single JSON object. jq silently keeps only the
+# last value of a duplicated key, so a char-level scan is required: track brace
+# depth (ignoring braces inside strings) and flag any key seen twice within the
+# same object instance.
+check_json_duplicate_keys() {
+    local json_file="$1" display="$2" dups k
+    [ -f "$json_file" ] || return 0
+    dups=$(awk '
+        BEGIN { depth = 0; in_str = 0; esc = 0; pending = ""; cur = "" }
+        {
+            L = length($0)
+            for (i = 1; i <= L; i++) {
+                c = substr($0, i, 1)
+                if (in_str) {
+                    if (esc)       { esc = 0; cur = cur c; continue }
+                    if (c == "\\") { esc = 1; cur = cur c; continue }
+                    if (c == "\"") { in_str = 0; pending = cur; continue }
+                    cur = cur c; continue
+                }
+                if (c == "\"") { in_str = 1; cur = ""; continue }
+                if (c == "{")  { depth++; objseq[depth]++; pending = ""; continue }
+                if (c == "}")  { if (depth > 0) depth--; pending = ""; continue }
+                if (c == ":") {
+                    if (pending != "") {
+                        k = depth SUBSEP objseq[depth] SUBSEP pending
+                        if (k in seen) print pending; else seen[k] = 1
+                        pending = ""
+                    }
+                    continue
+                }
+                if (c == " " || c == "\t" || c == "\r") continue
+                pending = ""
+            }
+        }
+    ' "$json_file" 2>/dev/null | sort -u || true)
+    if [ -n "$dups" ]; then
+        while IFS= read -r k; do
+            [ -z "$k" ] && continue
+            error "[DUPLICATE-KEY] $display: key \"$k\" defined more than once in the same object"
+        done <<< "$dups"
     fi
 }
 
@@ -303,6 +382,19 @@ for sub_refs in "$CLAUDE_DIR"/*/references; do
 done
 echo ""
 
+# --- Check 5: settings.json duplicate keys ---
+bold "--- Settings ---"
+settings_checked=0
+for settings_file in "$CLAUDE_DIR/settings.json" "$CLAUDE_DIR/settings.local.json"; do
+    [ -f "$settings_file" ] || continue
+    settings_checked=$((settings_checked + 1))
+    check_json_duplicate_keys "$settings_file" "$(basename "$settings_file")"
+done
+if [ "$settings_checked" -eq 0 ]; then
+    ok "No settings.json found (skipped)"
+fi
+echo ""
+
 # --- Summary ---
 bold "=== Summary ==="
 # `-L` so symlinked skills (per sync-skills.sh) are counted as dirs and the
@@ -314,6 +406,7 @@ total_refs=$((total_refs + sub_refs_count))
 echo "  Skills checked:           $total_skills"
 echo "  Commands checked:         $total_cmds"
 echo "  Reference files checked:  $total_refs"
+echo "  Settings files checked:   $settings_checked"
 if [ -f "$CLAUDE_MD" ]; then
     echo "  CLAUDE.md lines:          $(wc -l < "$CLAUDE_MD")"
 else
