@@ -59,6 +59,7 @@ Inside Claude Code:
 | `quick` | Fast pass — validator + budget audit + spot-check the 3 highest-risk skills |
 | `deep` | Full audit plus session analytics and a token deep-dive |
 | `--refresh` | Re-fetch threshold values from the Anthropic docs instead of using the week-long cache |
+| `--compress-bodies` | Opt-in caveman:lite rewrite of skill / rule / reference bodies that pass the filler-density gate; requires the caveman plugin |
 | _any other text_ | Treated as a focus message — that topic becomes the #1 priority, and the session is scanned for violations of it |
 
 Examples:
@@ -68,6 +69,7 @@ Examples:
 /claude-markdown-health-check quick
 /claude-markdown-health-check deep
 /claude-markdown-health-check --refresh
+/claude-markdown-health-check --compress-bodies
 /claude-markdown-health-check check that every skill has a Troubleshooting section
 ```
 
@@ -84,6 +86,7 @@ The report prints in chat. Reply naming the findings to fix and the command appl
 | 5a — Listing budget | Audits the cumulative skill-listing block against Claude Code's runtime budget |
 | 5 — Skill semantics | Judgment-call checks the validator can't do — trigger quality, structure, resolvability |
 | 5b — CLAUDE.md quality | Whether each CLAUDE.md actually helps — stale commands, generic boilerplate, thin coverage |
+| 5.5 — Body compression | Detects high-filler skill / rule / reference bodies; the `--compress-bodies` flag opens the opt-in caveman:lite rewrite path (caveman plugin required) |
 | 6 — Hooks / agents / settings | Registration, duplication, timeouts, broad patterns, stale reminders |
 | 7 — Cross-refs + orphans | Dead paths, orphaned guides/patterns, missing triggers, memory-index overflow |
 | 8 — Report | One flat prioritized report: Critical · Structural · Hygiene · Discovery |

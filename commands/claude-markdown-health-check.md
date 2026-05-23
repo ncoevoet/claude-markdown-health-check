@@ -1,7 +1,7 @@
 ---
 description: Audits the .claude/ ecosystem (skills, hooks, guides, agents, settings) for dead refs, weak triggers, token bloat, rule drift, and frontmatter violations. Reports findings, then applies user-approved fixes. Run before publishing skill changes or when configuration feels stale.
 allowed-tools: Bash(bash ~/.claude/commands/scripts/validate-skills.sh:*) Bash(bash:*commands/scripts/validate-skills.sh:*) Bash(ls:*) Bash(wc:*) Bash(jq:*) Bash(find:*) Bash(stat:*) Bash(cat:*) Bash(mkdir:*) Read Glob Grep WebFetch Write Edit
-argument-hint: "[quick|deep|--refresh|<focus message>]"
+argument-hint: "[quick|deep|--refresh|--compress-bodies|<focus message>]"
 ---
 
 You are a `.claude/` ecosystem auditor. Scan silently, then print one flat prioritized report.
@@ -168,6 +168,27 @@ Read `claude-md-quality.md` for the rubric — resolve it as the first that exis
 
 Skip at Quick depth. A short but accurate CLAUDE.md is not a finding.
 
+## Phase 5.5 — Body Compression Opportunities (detection + opt-in rewrite)
+
+Detects prose drift in skill bodies, rule bodies, and reference files. The detection sub-phase always runs at Standard/Deep depth and emits `BODY-FILLER-HIGH` Hygiene findings. The rewrite sub-phase is opt-in only — triggered by the user passing `--compress-bodies`.
+
+Read `body-compression.md` for the full filler-density formula, the candidate selection rules, the constrained cavecrew-builder prompt template, the post-rewrite validation gates, and the idempotency marker convention. Resolve it as the first that exists: `${CLAUDE_PLUGIN_ROOT}/commands/claude-markdown-health-check/references/body-compression.md`, `~/.claude/claude-markdown-health-check/references/body-compression.md`, or the repo copy.
+
+Detection summary:
+- For each `*.md` under `skills/*/SKILL.md`, `rules/*.md`, `documentation/guides/*.md`, `patterns/*.md`, and `skills/*/references/*.md`:
+  - Skip when body < 150 lines, when ≥ 70% of body is fenced code, when the file carries `<!-- caveman:lite v1 -->` or `<!-- DO NOT COMPRESS -->`.
+  - Compute filler density: filler-word hits over body-word count, excluding YAML frontmatter and fenced code.
+  - Emit `[BODY-FILLER-HIGH] [scope] path — N% filler over M body words; run --compress-bodies to fix` when density > 6%.
+
+Rewrite mode (only when `--compress-bodies` is set):
+- Verify caveman plugin is installed; if not, offer install via `AskUserQuestion` once.
+- Refuse when the working tree is dirty for any candidate path.
+- For each candidate (max 10 per invocation, sorted by `filler_hits × body_lines` descending), spawn `caveman:cavecrew-builder` with the constrained prompt from `body-compression.md`.
+- Reject the rewrite when section count, bullet count, code-fence count, or frontmatter changes; restore from git and emit `BODY-COMPRESSION-REJECTED`.
+- Reject when body delta is < 8% (no value) or > 25% (too aggressive); restore and report.
+- On success, append `<!-- caveman:lite v1 -->` to the file and emit `BODY-COMPRESSED`.
+- After all candidates, present a single batch commit menu via `AskUserQuestion`; land changes on `chore/caveman-lite-bodies-<date>` branch. Never push.
+
 ## Phase 6 — Hooks, Agents, Settings
 
 **Hooks**
@@ -299,7 +320,7 @@ Tool calls: X (Y% ok) | Reworks: Z | Corrections: W | Builds: V/N
 `UNDER-TRIGGER`, `OVER-TRIGGER`, `MISSING-TRIGGER`, `MISSING-AGENT-TRIGGER`, `OVERLAPPING-AGENT`, `DUPLICATE-LOGIC`, `MISSING-ENFORCEMENT`, `NEEDS-REFERENCES`, `NO-EXAMPLES`, `NO-TROUBLESHOOTING`, `BURIED-CRITICAL`, `WEAK-DESC`, `NAME-MISMATCH`, `BAD-RULE-FRONTMATTER`, `ORPHAN-GUIDE`, `ORPHAN-PATTERN`, `REPURPOSE`, `SKILL-LOW-RELEVANCE`, `SKILL-DUPLICATE-DOMAIN`, `CLAUDEMD-STALE`, `CLAUDEMD-GENERIC`, `CLAUDEMD-THIN`
 
 **Hygiene** (cosmetic / token efficiency)
-`BROAD-PATTERN`, `SUSPICIOUS-TIMEOUT`, `STALE-REMINDER`, `DUPLICATE-ENTRY`, `RULE-OVERSIZED`
+`BROAD-PATTERN`, `SUSPICIOUS-TIMEOUT`, `STALE-REMINDER`, `DUPLICATE-ENTRY`, `RULE-OVERSIZED`, `BODY-FILLER-HIGH`, `BODY-COMPRESSED`, `BODY-COMPRESSION-REJECTED`
 
 **Discovery** (from Phase 3, additive only)
 `NEW-RULE`, `NEW-PATTERN`, `NEW-TRIGGER`, `NEW-REFERENCE`, `SKILL-UPDATE`
