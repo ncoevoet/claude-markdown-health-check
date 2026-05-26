@@ -246,6 +246,9 @@ validate_skill_md() {
                 if (a[i] ~ /^references\/[A-Za-z0-9._\/-]+\.md$/) print a[i]
         }' "$skill_file" 2>/dev/null | sort -u || true)
     fi
+
+    check_embedded_secrets      "$skill_file" "$skill_name"
+    check_unflagged_destructive "$skill_file" "$skill_name"
 }
 
 # Detect duplicate keys inside a single JSON object. jq silently keeps only the
@@ -454,6 +457,73 @@ check_rules() {
     done < <(find -L "$rules_dir" -name '*.md' -type f 2>/dev/null || true)
 }
 
+# Scan a markdown file for embedded credentials (real-looking API keys / tokens).
+# Skips placeholder lines (example, $VAR, <your-key>, xxxx, 0000, redacted).
+# Patterns target well-known credential prefixes that have low false-positive rates.
+check_embedded_secrets() {
+    local file="$1" display="$2" hit ln rest snippet
+    [ -f "$file" ] || return 0
+    while IFS=: read -r ln rest; do
+        [ -z "$ln" ] && continue
+        if printf '%s' "$rest" | grep -qiE '(example|placeholder|your[-_]?(key|token|secret|api)|<your|xxxx|0000|redacted|replace[-_]?me|\$\{?[A-Z][A-Z0-9_]*\}?)'; then
+            continue
+        fi
+        hit=$(printf '%s' "$rest" | grep -oE '(sk-[A-Za-z0-9_-]{20,}|AKIA[0-9A-Z]{16}|gh[pousr]_[A-Za-z0-9]{20,}|xox[baprs]-[A-Za-z0-9-]{10,}|AIza[0-9A-Za-z_-]{35}|glpat-[A-Za-z0-9_-]{20,})' | head -1)
+        if [ -n "$hit" ]; then
+            snippet=$(printf '%s' "$hit" | cut -c1-10)
+            error "[EMBEDDED-SECRET] $display:$ln — credential pattern ${snippet}… in markdown body; replace with \$ENV_VAR placeholder"
+        fi
+    done < <(grep -nE '(sk-[A-Za-z0-9_-]{20,}|AKIA[0-9A-Z]{16}|gh[pousr]_[A-Za-z0-9]{20,}|xox[baprs]-[A-Za-z0-9-]{10,}|AIza[0-9A-Za-z_-]{35}|glpat-[A-Za-z0-9_-]{20,})' "$file" 2>/dev/null || true)
+}
+
+# Scan a markdown file for destructive shell commands lacking a nearby warning
+# marker (⚠, WARNING, DANGER, --dry-run, confirm, etc.). Looks 5 lines before
+# and 2 after each hit. Snippet is truncated to 60 chars to keep findings tight.
+check_unflagged_destructive() {
+    local file="$1" display="$2" ln snippet
+    [ -f "$file" ] || return 0
+    while IFS=$'\t' read -r ln snippet; do
+        [ -z "$ln" ] && continue
+        warning "[UNFLAGGED-DESTRUCTIVE] $display:$ln — $snippet — add WARNING note, ⚠ marker, or --dry-run guard"
+    done < <(awk '
+        function has_warn(s,    t) {
+            if (s ~ /⚠/) return 1
+            t = tolower(s)
+            return t ~ /warning|danger|destructive|confirm|--dry-run|do not run|never run|caution|do not modify/
+        }
+        function is_dest(s,    t) {
+            t = tolower(s)
+            return t ~ /rm[[:space:]]+-rf/ \
+                || t ~ /git[[:space:]]+push[[:space:]]+(--force|-f([[:space:]]|$))/ \
+                || t ~ /git[[:space:]]+reset[[:space:]]+--hard/ \
+                || t ~ /drop[[:space:]]+(table|database|schema)/ \
+                || t ~ /truncate[[:space:]]+table/ \
+                || t ~ /mkfs\./ \
+                || t ~ /chmod[[:space:]]+-r[[:space:]]+777/ \
+                || (t ~ /dd[[:space:]]+if=/ && t ~ /of=\/dev\//)
+        }
+        { lines[NR] = $0 }
+        END {
+            for (i = 1; i <= NR; i++) {
+                if (is_dest(lines[i])) {
+                    warned = 0
+                    s = (i - 5 < 1 ? 1 : i - 5)
+                    e = (i + 2 > NR ? NR : i + 2)
+                    for (j = s; j <= e; j++) {
+                        if (has_warn(lines[j])) { warned = 1; break }
+                    }
+                    if (!warned) {
+                        snip = lines[i]
+                        sub(/^[[:space:]]+/, "", snip)
+                        if (length(snip) > 60) snip = substr(snip, 1, 57) "..."
+                        printf "%d\t%s\n", i, snip
+                    }
+                }
+            }
+        }
+    ' "$file" 2>/dev/null || true)
+}
+
 # Detect basename overlap between skills/ and commands/. Same name in both
 # namespaces shadows in the slash-command UI; skill wins per docs but the
 # duplication is a maintenance trap and worth flagging.
@@ -638,6 +708,9 @@ for ref_file in "$SKILLS_DIR"/*/references/*.md; do
         error "[CHAINED-REF] $ref_name links to external .claude/ path (allowed: .claude/$skill_name/ or .claude/$skill_name.*)"
         echo "    $chained" | head -2
     fi
+
+    check_embedded_secrets      "$ref_file" "$ref_name"
+    check_unflagged_destructive "$ref_file" "$ref_name"
 done
 
 # Command-support reference trees (e.g. ~/.claude/review-all/references/).
@@ -669,6 +742,9 @@ for sub_refs in "$CLAUDE_DIR"/*/references; do
             error "[CHAINED-REF] $ref_name links to external .claude/ path (allowed: .claude/$sub/ or .claude/$sub.*)"
             echo "    $chained" | head -2
         fi
+
+        check_embedded_secrets      "$ref_file" "$ref_name"
+        check_unflagged_destructive "$ref_file" "$ref_name"
     done
 done
 echo ""

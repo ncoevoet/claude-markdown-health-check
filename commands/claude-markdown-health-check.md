@@ -135,7 +135,7 @@ bash "$VALIDATE" "$USER_DIR"
 [[ -n "$PROJECT_DIR" ]] && bash "$VALIDATE" "$PROJECT_DIR"
 ```
 
-This is the deterministic layer. Trust its output for: name regex, reserved words, name/dir mismatch, missing descriptions, voice violations, line counts, chained references, dead links (skill `references/*.md`, settings `guides`, CLAUDE.md `.claude/…` paths), JSON validity, duplicate keys and array entries, MCP pre-approval, unregistered hooks, hook timeouts, memory-index size, rule scoping, TOC presence, description sizes, frontmatter schema (description min length, `model` whitelist, `allowed-tools` syntax), unknown frontmatter fields, and name collisions between `commands/` and `skills/`. Later phases MUST NOT re-check anything this script already covers — they MUST only handle what the script can't.
+This is the deterministic layer. Trust its output for: name regex, reserved words, name/dir mismatch, missing descriptions, voice violations, line counts, chained references, dead links (skill `references/*.md`, settings `guides`, CLAUDE.md `.claude/…` paths), JSON validity, duplicate keys and array entries, MCP pre-approval, unregistered hooks, hook timeouts, memory-index size, rule scoping, TOC presence, description sizes, frontmatter schema (description min length, `model` whitelist, `allowed-tools` syntax), unknown frontmatter fields, name collisions between `commands/` and `skills/`, embedded credentials in skill/reference markdown (`EMBEDDED-SECRET`), and destructive shell commands without nearby warning markers (`UNFLAGGED-DESTRUCTIVE`). Later phases MUST NOT re-check anything this script already covers — they MUST only handle what the script can't.
 
 ## Phase 6 — Skill Listing Budget
 
@@ -363,13 +363,13 @@ Tool calls: X (Y% ok) | Reworks: Z | Corrections: W | Builds: V/N
 ## Tag Set (canonical — MUST be drawn from this list)
 
 **Critical** (broken; blocks correct behaviour)
-`DEAD-REF`, `DUPLICATE-KEY`, `INVALID-JSON`, `MISSING-DESC`, `DEAD-MATCHER`, `UNREGISTERED-HOOK`, `MISSING-PRE-APPROVED`, `MEMORY-OVERFLOW`, `SKILL-BUDGET-OVERFLOW`, `STALE-THRESHOLD`, `GUIDANCE-FETCH-FAILED`, `BAD-FRONTMATTER-SCHEMA`, `NAME-COLLISION`, `SKILL-ORPHAN`, `MISSING-SKILL-GAP`, `PLUGIN-BROKEN-REF`, `PLUGIN-MISSING-MANIFEST`, `MEMORY-DEAD-LINK`, `REF-CIRCULAR`, `HOOK-FAILING`
+`DEAD-REF`, `DUPLICATE-KEY`, `INVALID-JSON`, `MISSING-DESC`, `DEAD-MATCHER`, `UNREGISTERED-HOOK`, `MISSING-PRE-APPROVED`, `MEMORY-OVERFLOW`, `SKILL-BUDGET-OVERFLOW`, `STALE-THRESHOLD`, `GUIDANCE-FETCH-FAILED`, `BAD-FRONTMATTER-SCHEMA`, `NAME-COLLISION`, `SKILL-ORPHAN`, `MISSING-SKILL-GAP`, `PLUGIN-BROKEN-REF`, `PLUGIN-MISSING-MANIFEST`, `MEMORY-DEAD-LINK`, `REF-CIRCULAR`, `HOOK-FAILING`, `EMBEDDED-SECRET`
 
 **Structural** (works but should be reorganised)
 `UNDER-TRIGGER`, `OVER-TRIGGER`, `MISSING-TRIGGER`, `MISSING-AGENT-TRIGGER`, `OVERLAPPING-AGENT`, `DUPLICATE-LOGIC`, `MISSING-ENFORCEMENT`, `NEEDS-REFERENCES`, `NO-EXAMPLES`, `NO-TROUBLESHOOTING`, `BURIED-CRITICAL`, `WEAK-DESC`, `NAME-MISMATCH`, `BAD-RULE-FRONTMATTER`, `ORPHAN-GUIDE`, `ORPHAN-PATTERN`, `REPURPOSE`, `SKILL-LOW-RELEVANCE`, `SKILL-DUPLICATE-DOMAIN`, `CLAUDEMD-STALE`, `CLAUDEMD-GENERIC`, `CLAUDEMD-THIN`, `SKILL-NEVER-FIRED`, `SKILL-DORMANT`, `SKILL-MISFIRING`, `RECURRING-DENIAL`, `SKILL-TOOL-UNDECLARED`, `HOOK-EVENT-MISMATCH`, `AGENT-NEVER-SPAWNED`, `REF-TOO-DEEP`, `CONTEXT-BLOAT`, `PLUGIN-VERSION-DRIFT`
 
 **Hygiene** (cosmetic / token efficiency)
-`BROAD-PATTERN`, `SUSPICIOUS-TIMEOUT`, `STALE-REMINDER`, `DUPLICATE-ENTRY`, `RULE-OVERSIZED`, `BODY-FILLER-HIGH`, `BODY-COMPRESSED`, `BODY-COMPRESSION-REJECTED`, `UNKNOWN-FRONTMATTER-FIELD`, `RECURRING-CORRECTION`, `SKILL-TOOL-UNUSED`, `PERM-DEAD-ENTRY`, `PERM-OVERBROAD`, `HOOK-NEVER-FIRED`, `REF-ORPHAN`, `MEMORY-ORPHAN-FILE`, `MEMORY-DUP-ENTRY`, `MEMORY-STALE-DATE`, `LOW-CACHE-HIT`
+`BROAD-PATTERN`, `SUSPICIOUS-TIMEOUT`, `STALE-REMINDER`, `DUPLICATE-ENTRY`, `RULE-OVERSIZED`, `BODY-FILLER-HIGH`, `BODY-COMPRESSED`, `BODY-COMPRESSION-REJECTED`, `UNKNOWN-FRONTMATTER-FIELD`, `RECURRING-CORRECTION`, `SKILL-TOOL-UNUSED`, `PERM-DEAD-ENTRY`, `PERM-OVERBROAD`, `HOOK-NEVER-FIRED`, `REF-ORPHAN`, `MEMORY-ORPHAN-FILE`, `MEMORY-DUP-ENTRY`, `MEMORY-STALE-DATE`, `LOW-CACHE-HIT`, `UNFLAGGED-DESTRUCTIVE`
 
 **Discovery** (from Phase 4, additive only)
 `NEW-RULE`, `NEW-PATTERN`, `NEW-TRIGGER`, `NEW-REFERENCE`, `SKILL-UPDATE`
