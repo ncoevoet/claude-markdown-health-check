@@ -46,12 +46,15 @@ WARNINGS=0
 # truncated at 1536 chars in skill listing.
 DESC_HARD_MAX=1024
 DESC_SOFT_MAX=1536
+DESC_MIN=40
 NAME_MAX=64
 SKILL_MAX_LINES=500
 SKILL_REF_DIR_THRESHOLD=300
 REF_TOC_THRESHOLD=100
 CLAUDE_MD_MAX_LINES=200
 RESERVED_NAMES=("anthropic" "claude")
+KNOWN_FRONTMATTER_FIELDS=("name" "description" "when_to_use" "allowed-tools" "argument-hint" "model" "color" "user-invocable")
+MODEL_WHITELIST_RE='^(opus|sonnet|haiku|inherit|claude-(opus|sonnet|haiku)-[0-9])'
 # Support/utility directories under skills/ that are not themselves skills.
 SKILLS_DIR_EXCLUDES=("bootstrap" "commands")
 # Auto-memory index budget (loaded slice) and hook-timeout defaults (seconds).
@@ -119,11 +122,14 @@ validate_skill_md() {
         warning "$skill_name: $lines lines (approaching $SKILL_MAX_LINES limit)"
     fi
 
-    # Check: description present, then length (1024 hard, 1536 combined)
+    # Check: description present, then length (40 min, 1024 hard, 1536 combined)
     desc=$(extract_field "$skill_file" "description")
     when_to_use=$(extract_field "$skill_file" "when_to_use")
     if [ -n "$desc" ]; then
         local desc_len=${#desc}
+        if [ "$desc_len" -lt "$DESC_MIN" ]; then
+            error "[BAD-FRONTMATTER-SCHEMA] $skill_name: description is $desc_len chars (min: $DESC_MIN — too short to trigger reliably)"
+        fi
         if [ "$desc_len" -gt "$DESC_HARD_MAX" ]; then
             error "[DESCRIPTION-TOO-LONG] $skill_name: description is $desc_len chars (max: $DESC_HARD_MAX)"
         fi
@@ -140,6 +146,44 @@ validate_skill_md() {
         fi
     elif [ "$is_skill_md" = 1 ]; then
         error "[MISSING-DESC] $skill_name: no 'description' in frontmatter (required — without it the skill cannot be auto-routed)"
+    fi
+
+    # Check: model field whitelist (when present).
+    local model_field
+    model_field=$(extract_field "$skill_file" "model")
+    if [ -n "$model_field" ] && ! echo "$model_field" | grep -qE "$MODEL_WHITELIST_RE"; then
+        error "[BAD-FRONTMATTER-SCHEMA] $skill_name: model '$model_field' not in {opus|sonnet|haiku|inherit|claude-(opus|sonnet|haiku)-N}"
+    fi
+
+    # Check: allowed-tools syntax. Tokens look like `Read`, `WebFetch`, or
+    # `Bash(...)` / `Bash(jq:*)` / `Bash(bash path:*)`. Strip every valid token
+    # via sed; if anything non-whitespace remains, the field is malformed.
+    local allowed_tools_field at_remainder
+    allowed_tools_field=$(extract_field "$skill_file" "allowed-tools")
+    if [ -n "$allowed_tools_field" ]; then
+        at_remainder=$(printf '%s' "$allowed_tools_field" | sed -E 's/[A-Z][A-Za-z_]+(\([^()]*\))?//g' | tr -d ' \t\n')
+        if [ -n "$at_remainder" ]; then
+            error "[BAD-FRONTMATTER-SCHEMA] $skill_name: allowed-tools has unparseable residue '$at_remainder' — token shape is Name or Name(args)"
+        fi
+    fi
+
+    # Check: unknown frontmatter keys. Scan top-level keys between the first
+    # two `---` markers and compare to KNOWN_FRONTMATTER_FIELDS. Indented keys
+    # (nested mappings) are not flagged.
+    local frontmatter_keys key found k
+    frontmatter_keys=$(awk '
+        /^---[[:space:]]*$/ { if (++c == 2) exit; next }
+        c == 1 && /^[a-zA-Z_][a-zA-Z0-9_-]*:/ { sub(/:.*/, ""); print }
+    ' "$skill_file" 2>/dev/null | sort -u || true)
+    if [ -n "$frontmatter_keys" ]; then
+        while IFS= read -r key; do
+            [ -z "$key" ] && continue
+            found=0
+            for k in "${KNOWN_FRONTMATTER_FIELDS[@]}"; do
+                [ "$key" = "$k" ] && { found=1; break; }
+            done
+            [ "$found" = 0 ] && warning "[UNKNOWN-FRONTMATTER-FIELD] $skill_name: key '$key' is not in the known frontmatter set"
+        done <<< "$frontmatter_keys"
     fi
 
     # Check: name field — charset, length, reserved words
@@ -410,6 +454,39 @@ check_rules() {
     done < <(find -L "$rules_dir" -name '*.md' -type f 2>/dev/null || true)
 }
 
+# Detect basename overlap between skills/ and commands/. Same name in both
+# namespaces shadows in the slash-command UI; skill wins per docs but the
+# duplication is a maintenance trap and worth flagging.
+check_name_collisions() {
+    [ -d "$SKILLS_DIR" ] || return 0
+    [ -d "$COMMANDS_DIR" ] || return 0
+    local skill_names cmd_names common name skip ex
+    skill_names=$(
+        for d in "$SKILLS_DIR"/*/; do
+            [ -d "$d" ] || continue
+            name=$(basename "$d"); skip=0
+            for ex in "${SKILLS_DIR_EXCLUDES[@]}"; do [ "$name" = "$ex" ] && skip=1 && break; done
+            [ "$skip" = 1 ] && continue
+            printf '%s\n' "$name"
+        done | sort -u
+    )
+    cmd_names=$(
+        for f in "$COMMANDS_DIR"/*.md; do
+            [ -f "$f" ] || continue
+            printf '%s\n' "$(basename "$f" .md)"
+        done | sort -u
+    )
+    [ -z "$skill_names" ] && return 0
+    [ -z "$cmd_names" ] && return 0
+    common=$(comm -12 <(printf '%s' "$skill_names") <(printf '%s' "$cmd_names"))
+    if [ -n "$common" ]; then
+        while IFS= read -r name; do
+            [ -z "$name" ] && continue
+            error "[NAME-COLLISION] $name: defined in both skills/$name/SKILL.md and commands/$name.md (skill wins; duplication is a maintenance trap)"
+        done <<< "$common"
+    fi
+}
+
 # Sum description + when_to_use chars across every SKILL.md and command .md
 # under CLAUDE_DIR. Mirrors what Claude Code feeds into the skill-listing block.
 compute_listing_cost() {
@@ -629,6 +706,11 @@ echo ""
 # --- Check 8: Path-scoped rules ---
 bold "--- Rules ---"
 check_rules
+echo ""
+
+# --- Check 9: Name collisions (commands vs skills) ---
+bold "--- Name Collisions ---"
+check_name_collisions
 echo ""
 
 # --- Summary ---
