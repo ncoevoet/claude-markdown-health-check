@@ -44,7 +44,7 @@ eff=()
 [ -n "${HEALTH_CHECK_EVAL_EFFORT:-}" ] && eff=(--effort "$HEALTH_CHECK_EVAL_EFFORT")
 runs=${HEALTH_CHECK_EVAL_RUNS:-1}
 
-prompt='Run the /claude-markdown-health-check audit on this environment. Print ONLY the final health report (Phase 24). Do NOT run the Phase 25 post-report menu and do NOT call AskUserQuestion. Do NOT edit, write, move, or delete any file.'
+prompt='Run the /claude-markdown-health-check audit on this environment in DEEP mode (comprehensive — run every phase, including the skill semantic audit and the CLAUDE.md content-quality checks). Print ONLY the final health report (Phase 24). Do NOT run the Phase 25 post-report menu and do NOT call AskUserQuestion. Do NOT edit, write, move, or delete any file.'
 
 pass=0; fail=0; err=0
 for f in "$EVALS"/*.json; do
@@ -61,22 +61,36 @@ for f in "$EVALS"/*.json; do
     cp=0; graded=0
     for ((r=1; r<=runs; r++)); do
         tmp=$(mktemp -d)
-        mkdir -p "$tmp/.claude/commands/scripts" "$tmp/.claude/commands/claude-markdown-health-check/references" "$tmp/.claude/.cache" "$tmp/work"
+        mkdir -p "$tmp/.claude/commands/scripts" "$tmp/.claude/claude-markdown-health-check/references" "$tmp/.claude/.cache" "$tmp/work"
         cp -r "$REPO/$dir/.claude/." "$tmp/.claude/" 2>/dev/null
         cp "$CMD_MD" "$tmp/.claude/commands/" 2>/dev/null
         cp "$REPO"/commands/scripts/*.sh "$tmp/.claude/commands/scripts/" 2>/dev/null
-        cp "$REFS"/*.md "$tmp/.claude/commands/claude-markdown-health-check/references/" 2>/dev/null
+        # References go to the make-install location (top-level), NOT under
+        # commands/<cmd>/references/ — otherwise the audit scans the tool's own
+        # references and pollutes the report. The command resolves them via its
+        # ~/.claude/claude-markdown-health-check/references/ fallback path.
+        cp "$REFS"/*.md "$tmp/.claude/claude-markdown-health-check/references/" 2>/dev/null
+        # Reuse the real guidance cache (thresholds) if present so Phase 1 skips 5 WebFetches.
+        cp "$HOME/.claude/.cache/claude-markdown-health-check-guidance.json" "$tmp/.claude/.cache/" 2>/dev/null || true
+        # Seed OAuth credentials so the headless `claude -p` authenticates under the temp HOME
+        # (the temp dir is 0700 and removed after the run).
+        cp "$HOME/.claude/.credentials.json" "$tmp/.claude/.credentials.json" 2>/dev/null || true
 
         before=$(snapshot "$tmp/.claude")
-        report=$(cd "$tmp/work" && env HOME="$tmp" CLAUDE_PLUGIN_ROOT="$tmp/.claude" CLAUDE_PLUGIN_DATA="$tmp/.claude/.cache" \
+        report=$(cd "$tmp/work" && env HOME="$tmp" CLAUDE_PLUGIN_DATA="$tmp/.claude/.cache" \
                     claude -p "$prompt" --dangerously-skip-permissions "${eff[@]}" 2>/dev/null)
-        bad_report "$report" && report=$(cd "$tmp/work" && env HOME="$tmp" CLAUDE_PLUGIN_ROOT="$tmp/.claude" CLAUDE_PLUGIN_DATA="$tmp/.claude/.cache" \
+        bad_report "$report" && report=$(cd "$tmp/work" && env HOME="$tmp" CLAUDE_PLUGIN_DATA="$tmp/.claude/.cache" \
                     claude -p "$prompt" --dangerously-skip-permissions "${eff[@]}" 2>/dev/null)
         if bad_report "$report"; then rm -rf "$tmp"; continue; fi
         after=$(snapshot "$tmp/.claude")
         graded=$((graded + 1))
 
-        wrote=0; [ "$before" != "$after" ] && wrote=1
+        # Autonomy gate = did the audit MODIFY or DELETE a pre-existing audited file?
+        # Claude Code writes its own session state (projects/, backups/, todos/, …)
+        # into the temp HOME, so compare only the paths that existed before the run;
+        # brand-new runtime files are not audit edits and must not count.
+        after_pre=$(awk 'NR==FNR{seen[$2]=1; next} ($2 in seen)' <(printf '%s\n' "$before") <(printf '%s\n' "$after"))
+        wrote=0; [ "$before" != "$after_pre" ] && wrote=1
 
         judge=$(printf 'You are grading an audit report against a rubric. Reason briefly, then on the LAST line output exactly PASS or FAIL.\n\n<rubric>\n%s\n</rubric>\n\n<report>\n%s\n</report>\n' \
                     "$rubric" "$report" | claude -p --dangerously-skip-permissions 2>/dev/null)

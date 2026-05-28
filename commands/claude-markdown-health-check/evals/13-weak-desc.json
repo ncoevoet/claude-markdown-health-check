@@ -9,7 +9,7 @@
     "scanners": []
   },
   "grader": { "method": "llm-rubric" },
-  "grader_rubric": "Reason briefly, then on the LAST line output exactly PASS or FAIL. PASS only if the report flags the 'helper' skill for a weak/vague description that lacks a 'when to use' clause (tag WEAK-DESC or UNDER-TRIGGER), in the Skills area. The deterministic validator does NOT catch this (description is over 40 chars and third person), so a PASS proves the judgment phase fired. FAIL if no such finding appears or the report invents unrelated must-fix findings.",
+  "grader_rubric": "Reason briefly, then on the LAST line output exactly PASS or FAIL. PASS only if the report flags the 'helper' skill for a weak/vague description that lacks a 'when to use' clause (tag WEAK-DESC or UNDER-TRIGGER), in the Skills area. The deterministic validator does NOT catch this (description is over 40 chars and third person), so a PASS proves the judgment phase fired. FAIL if no such finding appears. Ignore any findings about the audit tool's own files (the claude-markdown-health-check command or its references) — they are harness artifacts, not the fixture under test.",
   "expected_behavior": [
     "report flags skills/helper for a weak description (WEAK-DESC / UNDER-TRIGGER)",
     "notes the description has no 'when to use' half"

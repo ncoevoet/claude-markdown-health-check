@@ -9,7 +9,7 @@
     "scanners": []
   },
   "grader": { "method": "llm-rubric" },
-  "grader_rubric": "Reason briefly, then output PASS or FAIL on the last line. PASS only if the report flags the CLAUDE.md as thin or generic (tag CLAUDEMD-THIN or CLAUDEMD-GENERIC): it is boilerplate with no build/test/run commands and no architecture map. FAIL if the report claims the CLAUDE.md is fine or omits it.",
+  "grader_rubric": "Reason briefly, then output PASS or FAIL on the last line. PASS only if the report flags the CLAUDE.md as thin or generic (tag CLAUDEMD-THIN or CLAUDEMD-GENERIC): it is boilerplate with no build/test/run commands and no architecture map. FAIL if the report claims the CLAUDE.md is fine or omits it. Ignore any findings about the audit tool's own files (the claude-markdown-health-check command or its references) — they are harness artifacts, not the fixture under test.",
   "expected_behavior": [
     "report flags CLAUDE.md as thin or generic (CLAUDEMD-THIN / CLAUDEMD-GENERIC)"
   ],
