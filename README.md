@@ -10,21 +10,21 @@ It reports first and waits. Nothing is edited, moved, or deleted until you reply
 |---|---|
 | **Skills** | missing or oversized `description`, frontmatter `name` ≠ directory, triggers that don't match real usage, oversized `SKILL.md` with no `references/`, missing Examples / Troubleshooting sections, dead internal paths |
 | **Skill-listing budget** | cumulative `description` + `when_to_use` block exceeding Claude Code's 1%-of-context budget; low-relevance and duplicate-domain skills |
-| **Skill usage** (NEW) | dormant skills (no fires in 30d), never-fired skills, misfiring skills (loaded but no follow-through), orphan ledger entries |
-| **Skill–tool contract** (NEW) | tools declared in `allowed-tools` but never called, tools called but not declared |
-| **Frontmatter schema** (NEW) | `description` too short, `model` not in whitelist, `allowed-tools` malformed, unknown fields |
+| **Skill usage** | dormant skills (no fires in 30d), never-fired skills, misfiring skills (loaded but no follow-through), orphan ledger entries |
+| **Skill–tool contract** | tools declared in `allowed-tools` but never called, tools called but not declared |
+| **Frontmatter schema** | `description` too short, `model` not in whitelist, `allowed-tools` malformed, unknown fields |
 | **Hooks** | files on disk not registered in `settings.json`, duplicate logic, suspicious timeouts, matchers that match no real tool |
-| **Hook reliability** (NEW) | high failure-rate hooks, hooks registered but never fired, event-type mismatches |
+| **Hook reliability** | high failure-rate hooks, hooks registered but never fired, event-type mismatches |
 | **Agents** | triggers unreachable from `CLAUDE.md`, overlapping agents, agents on disk never spawned in 30d |
 | **Settings** | malformed JSON, duplicate JSON keys, duplicate array entries, MCP servers missing from `preApprovedTools`, over-broad Bash patterns, stale reminders |
-| **Permission hygiene** (NEW) | dead allowlist entries (zero grants), over-broad `:*` patterns, name collisions between `commands/` and `skills/` |
-| **Plugins** (NEW) | `installed_plugins.json` entries with missing `installPath`, missing `plugin.json` manifest, version drift between manifest and on-disk |
+| **Permission hygiene** | dead allowlist entries (zero grants), over-broad `:*` patterns, name collisions between `commands/` and `skills/` |
+| **Plugins** | `installed_plugins.json` entries with missing `installPath`, missing `plugin.json` manifest, version drift between manifest and on-disk |
 | **Cross-references** | dead paths in `settings.json` / `CLAUDE.md` / skill `references/`, orphaned guides and patterns, missing triggers |
-| **Reference graph** (NEW) | cycles in `references/*.md`, depth exceeding `MAX_REF_DEPTH`, orphan reference files (in-degree 0) |
+| **Reference graph** | cycles in `references/*.md`, depth exceeding `MAX_REF_DEPTH`, orphan reference files (in-degree 0) |
 | **Memory** | `MEMORY.md` over the loaded-slice line/byte budget |
-| **Memory hygiene** (NEW) | dead `- [Title](file.md)` links, orphan files in memory dir, duplicate entries, stale dates (>365d) |
-| **Context trend** (NEW, Deep depth) | low cache-hit sessions, output bloat per session |
-| **Cross-session patterns** (NEW, Deep depth) | recurring tool denials, recurring user corrections, missing skill gaps (subagents repeatedly spawned with no matching skill) |
+| **Memory hygiene** | dead `- [Title](file.md)` links, orphan files in memory dir, duplicate entries, stale dates (>365d) |
+| **Context trend** (Deep depth) | low cache-hit sessions, output bloat per session |
+| **Cross-session patterns** (Deep depth) | recurring tool denials, recurring user corrections, missing skill gaps (subagents repeatedly spawned with no matching skill) |
 
 Thresholds — line counts, description caps, budget fractions, hook timeouts — are pulled live from the official Anthropic docs and cached for a week, so the audit tracks the spec instead of hardcoding it.
 
@@ -95,34 +95,34 @@ The report prints in chat. Reply naming the findings to fix and the command appl
 
 ## How it works — phases
 
-The phase sequence runs flat from 1 to 25. New (history-aware and graph) phases are marked **NEW**; the rest were renumbered from the previous 5a / 5b / 5.5 / 7a scheme — see the [Migration note](#migration-note) below.
+The phase sequence runs flat from 1 to 25, renumbered from the previous 5a / 5b / 5.5 / 7a scheme — see the [Migration note](#migration-note) below.
 
 | Phase | What it does | Depth |
 |---|---|---|
 | 1 — Load Thresholds | Fetches skill / memory / settings / hooks limits from the Anthropic docs; caches at `~/.claude/.cache/claude-markdown-health-check-guidance.json` | All |
-| 2 — Plugin Install Integrity **(NEW)** | `installed_plugins.json` vs on-disk cache: broken refs, missing manifests, version drift | Standard + Deep |
+| 2 — Plugin Install Integrity | `installed_plugins.json` vs on-disk cache: broken refs, missing manifests, version drift | Standard + Deep |
 | 3 — Select Depth | Picks Quick / Standard / Deep from the argument and the size of your ecosystem | All |
 | 4 — Focus + History | Reads the focus message (if any) and mines the current session for recurring bugs, corrections, uncovered patterns | Standard + Deep |
 | 5 — Run validate-skills.sh | Deterministic layer: name regex, line counts, voice, TOC, description sizes, frontmatter schema, name collisions | All |
 | 6 — Skill Listing Budget | Cumulative skill-listing block vs Claude Code's runtime budget | Standard + Deep |
-| 7 — Skill Usage Metrics **(NEW)** | Per-skill 30-day invocation, dormancy, misfiring, orphan detection from `~/.claude/projects/**/*.jsonl` + `~/.claude.json#skillUsage` | Standard + Deep |
+| 7 — Skill Usage Metrics | Per-skill 30-day invocation, dormancy, misfiring, orphan detection from `~/.claude/projects/**/*.jsonl` + `~/.claude.json#skillUsage` | Standard + Deep |
 | 8 — Skill Semantic Audit | Judgment-call checks the validator can't do — trigger quality, structure, resolvability | Standard + Deep |
-| 9 — Skill–Tool Contract **(NEW)** | Declared `allowed-tools` vs actually-called tools, per skill | Standard + Deep |
-| 10 — Frontmatter Strict Schema **(NEW)** | Description min length, `model` whitelist, `allowed-tools` syntax, unknown fields (runs inside Phase 5) | All |
-| 11 — Reference Graph Health **(NEW)** | Cycles, depth violations, orphan ref files | Standard + Deep |
+| 9 — Skill–Tool Contract | Declared `allowed-tools` vs actually-called tools, per skill | Standard + Deep |
+| 10 — Frontmatter Strict Schema | Description min length, `model` whitelist, `allowed-tools` syntax, unknown fields (runs inside Phase 5) | All |
+| 11 — Reference Graph Health | Cycles, depth violations, orphan ref files | Standard + Deep |
 | 12 — CLAUDE.md Content Quality | Whether each CLAUDE.md actually helps — stale commands, generic boilerplate, thin coverage | Standard + Deep |
 | 13 — Body Compression | Detects high-filler bodies; `--compress-bodies` opens the opt-in caveman:lite rewrite path | Standard + Deep |
 | 14 — Hooks, Agents, Settings | Registration, duplication, timeouts, broad patterns, stale reminders | Standard + Deep |
-| 15 — Permission Allowlist Hygiene **(NEW)** | Dead entries, over-broad `:*` patterns | Standard + Deep |
-| 16 — Hook Latency + Reliability **(NEW)** | Per-hook failure-rate, never-fired hooks, event-type mismatches | Standard + Deep |
+| 15 — Permission Allowlist Hygiene | Dead entries, over-broad `:*` patterns | Standard + Deep |
+| 16 — Hook Latency + Reliability | Per-hook failure-rate, never-fired hooks, event-type mismatches | Standard + Deep |
 | 17 — Cross-references + Orphans | Dead paths, orphaned guides/patterns, missing triggers, memory-index overflow | Standard + Deep |
 | 18 — Orphan Repurposing | For each orphan, propose repurposing into an existing skill before deletion | Standard + Deep |
-| 19 — Cross-Session Pattern Mining **(NEW)** | Recurring denials, correction clusters, missing-skill gaps | Deep |
-| 20 — Auto-memory Hygiene **(NEW)** | Dead `- [Title](file.md)` links, orphan files, duplicates, stale dates | Standard + Deep |
-| 21 — Name Collisions **(NEW)** | Same basename in `commands/` and `skills/` (runs inside Phase 5) | All |
-| 22 — Agents Never-Spawned **(NEW)** | Agents on disk never invoked in window | Standard + Deep |
-| 23 — Token Trend **(NEW)** | Per-session input/output/cache tokens — low cache-hit, output bloat | Deep |
-| 24 — Report | Scorecard + findings grouped by area, each a plain-language line with a must-fix / should / polish chip and a trailing tag code; optional summary blocks per active NEW phase | All |
+| 19 — Cross-Session Pattern Mining | Recurring denials, correction clusters, missing-skill gaps | Deep |
+| 20 — Auto-memory Hygiene | Dead `- [Title](file.md)` links, orphan files, duplicates, stale dates | Standard + Deep |
+| 21 — Name Collisions | Same basename in `commands/` and `skills/` (runs inside Phase 5) | All |
+| 22 — Agents Never-Spawned | Agents on disk never invoked in window | Standard + Deep |
+| 23 — Token Trend | Per-session input/output/cache tokens — low cache-hit, output bloat | Deep |
+| 24 — Report | Scorecard + findings grouped by area, each a plain-language line with a must-fix / should / polish chip and a trailing tag code; optional summary blocks per active phase | All |
 | 25 — Post-Report Menu | Pick a fix scope, apply, re-validate, loop until done | All |
 
 ## Migration note
@@ -166,7 +166,7 @@ Cases live in `commands/claude-markdown-health-check/evals/*.json` (`grader.meth
 
 - [Claude Code CLI](https://docs.claude.com/en/docs/claude-code/overview)
 - `bash`, `awk`, `grep`, `find`, `date` (defaults on macOS/Linux)
-- `jq` — required for the NEW phases (plugin integrity, skill usage, hook reliability, etc.); strongly recommended for the existing skill-listing-budget check
+- `jq` — required for the history-aware and graph phases (plugin integrity, skill usage, hook reliability, etc.); strongly recommended for the existing skill-listing-budget check
 - Optional: `nproc` for parallel JSONL scanning (falls back to 4 workers if absent)
 - For development: `jq` for `make test`; the authenticated `claude` CLI for `make evals`; `shellcheck` (CI uses it at `-S warning`)
 
@@ -178,37 +178,37 @@ commands/
 ├── claude-markdown-health-check/
 │   ├── references/
 │   │   ├── skill-listing-budget.md          # Phase 6 audit logic
-│   │   ├── skill-usage-metrics.md           # Phase 7 (NEW)
-│   │   ├── skill-tool-contract.md           # Phase 9 (NEW)
-│   │   ├── frontmatter-schema.md            # Phase 10 (NEW)
-│   │   ├── reference-graph.md               # Phase 11 (NEW)
+│   │   ├── skill-usage-metrics.md           # Phase 7
+│   │   ├── skill-tool-contract.md           # Phase 9
+│   │   ├── frontmatter-schema.md            # Phase 10
+│   │   ├── reference-graph.md               # Phase 11
 │   │   ├── claude-md-quality.md             # Phase 12 rubric
 │   │   ├── body-compression.md              # Phase 13 logic
-│   │   ├── permission-hygiene.md            # Phase 15 (NEW)
-│   │   ├── hook-reliability.md              # Phase 16 (NEW)
-│   │   ├── cross-session-patterns.md        # Phase 19 + 22 (NEW)
-│   │   ├── memory-hygiene.md                # Phase 20 (NEW)
-│   │   ├── plugin-integrity.md              # Phase 2 (NEW)
-│   │   ├── token-trend.md                   # Phase 23 (NEW)
-│   │   ├── report-format.md                 # Phase 24 report rendering — domain map + scorecard (NEW)
+│   │   ├── permission-hygiene.md            # Phase 15
+│   │   ├── hook-reliability.md              # Phase 16
+│   │   ├── cross-session-patterns.md        # Phase 19 + 22
+│   │   ├── memory-hygiene.md                # Phase 20
+│   │   ├── plugin-integrity.md              # Phase 2
+│   │   ├── token-trend.md                   # Phase 23
+│   │   ├── report-format.md                 # Phase 24 report rendering — domain map + scorecard
 │   │   └── post-report-menu.md              # Phase 25 menu
-│   └── evals/                               # data-driven eval cases (NEW)
+│   └── evals/                               # data-driven eval cases
 │       ├── 01-clean-zero-findings.json … 35-secret-word-boundary.json  (32 code + 3 LLM)
 │       └── README.md                        # eval schema + how to run
 └── scripts/
     ├── validate-skills.sh                   # deterministic compliance validator (Phase 5)
-    ├── scan-graph.sh                        # static graph scanner (Phases 2, 11, 20) — NEW
-    ├── scan-history.sh                      # session-log miner (Phases 7, 9, 15, 16, 19, 22, 23) — NEW
-    ├── run-evals-headless.sh                # opt-in LLM-graded eval runner (NEW)
-    └── run-evals.sh                         # manual eval runner (NEW)
+    ├── scan-graph.sh                        # static graph scanner (Phases 2, 11, 20)
+    ├── scan-history.sh                      # session-log miner (Phases 7, 9, 15, 16, 19, 22, 23)
+    ├── run-evals-headless.sh                # opt-in LLM-graded eval runner
+    └── run-evals.sh                         # manual eval runner
 
-tests/                                       # deterministic test suite (NEW, dev-only, CI)
+tests/                                       # deterministic test suite (dev-only, CI)
 ├── run.sh                                   # entrypoint → test_scripts.sh
 ├── lib.sh                                   # assert helpers + tag extractors
 ├── test_scripts.sh                          # data-driven runner over evals/*.json
 └── fixtures/<case>/.claude/…                # synthetic trees, one planted defect each
 
-.github/workflows/ci.yml                     # shellcheck + bash -n + JSON + tests/run.sh (NEW)
+.github/workflows/ci.yml                     # shellcheck + bash -n + JSON + tests/run.sh
 ```
 
 All plain Markdown and shell — read, fork, extend.
