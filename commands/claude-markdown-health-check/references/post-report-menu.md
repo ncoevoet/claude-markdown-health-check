@@ -1,24 +1,24 @@
 # Post-Report Menu
 
-Loaded by `/claude-markdown-health-check` Phase 9. After the report prints, this turns the passive "wait for the user" step into an explicit action menu.
+Loaded by `/claude-markdown-health-check` Phase 25. After the report prints, this turns the passive "wait for the user" step into an explicit action menu.
 
 ## When to show
 
-- Show the menu only when the report has at least one actionable finding (Critical, Structural, or Hygiene). If every section is empty, print "No findings — ecosystem is healthy." and stop; no menu.
-- `Discovery` items (`NEW-*`) and `OBSERVATION` lines are informational — they do not by themselves trigger the menu.
+- Show the menu only when the report has at least one actionable finding (`[must-fix]`, `[should]`, or `[polish]`). If every domain is empty, print "No findings — ecosystem is healthy." and stop; no menu.
+- `[idea]` Suggestions (`NEW-*`) and `OBSERVATION` lines are informational — they do not by themselves trigger the menu.
 
 ## Primary menu (single-select, via `AskUserQuestion`)
 
-`AskUserQuestion` caps at 4 options. Build the list dynamically — include only the tiers that actually have findings:
+`AskUserQuestion` caps at 4 options. Build the list dynamically — include only the severities that actually have findings (chips map to the report's severity tiers):
 
 | Label | Offer when | Action |
 |-------|-----------|--------|
-| **Fix Critical (recommended)** | >=1 Critical finding | Apply every Critical `Proposed Change` |
-| **Fix Critical + Structural** | >=1 Critical or Structural finding | Apply Critical + Structural changes |
-| **Fix everything** | >=1 finding of any tier | Apply all `Proposed Changes` |
-| **Choose findings** | always, when any finding exists | Free-text via `Other` — name tiers, tags, or finding numbers; apply the union |
+| **Fix must-fix (recommended)** | >=1 `[must-fix]` finding | Apply every `[must-fix]` `Proposed Change` |
+| **Fix must-fix + should** | >=1 `[must-fix]` or `[should]` finding | Apply `[must-fix]` + `[should]` changes |
+| **Fix everything** | >=1 finding of any severity | Apply all `Proposed Changes` |
+| **Choose findings** | always, when any finding exists | Free-text via `Other` — name severities, domains, tags, or finding numbers; apply the union |
 
-If only one tier has findings the first three collapse — still offer the one relevant "Fix ..." option plus "Choose findings". Never build one option per finding (the 4-option cap makes that crash on large reports) — use the free-text `Choose findings` option instead.
+If only one severity has findings the first three collapse — still offer the one relevant "Fix ..." option plus "Choose findings". Never build one option per finding (the 4-option cap makes that crash on large reports) — use the free-text `Choose findings` option instead.
 
 ## Applying fixes
 

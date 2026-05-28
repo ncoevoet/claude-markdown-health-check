@@ -19,6 +19,31 @@ Telemetry-side latency data (`waiting_for_user_permission_ms`) is NOT captured b
 
 `HOOK-FAILING` is owned by this phase (not phase 19) so it fires at Standard depth too.
 
+## Hook events and their matchers (canonical)
+
+A hook `matcher` matches a TOOL NAME only for tool-events. For every other event
+the matcher is an event-specific keyword, so judging it against the tool list
+(Phase 14 `DEAD-MATCHER`, or `HOOK-EVENT-MISMATCH` here) would mis-flag valid
+hooks. Per the [hooks doc](https://code.claude.com/docs/en/hooks):
+
+| Event | Matcher matches |
+|---|---|
+| `PreToolUse` `PostToolUse` `PostToolUseFailure` `PermissionRequest` `PermissionDenied` | a tool name (`Bash`, `Edit\|Write`, `mcp__server__.*`) |
+| `SessionStart` | `startup` `resume` `clear` `compact` |
+| `SessionEnd` | `clear` `resume` `logout` `prompt_input_exit` |
+| `PreCompact` `PostCompact` | `manual` `auto` |
+| `Notification` | notification type (`permission_prompt`, `idle_prompt`, …) |
+| `SubagentStart` `SubagentStop` | agent type (`Explore`, `Plan`, custom) |
+| `ConfigChange` | config source (`user_settings`, `project_settings`, …) |
+| `UserPromptSubmit` `Stop` `PostToolBatch` `SessionEnd`-less events | no matcher (always fires) |
+
+Other current events that take no/elsewhere-defined matchers: `Setup`,
+`UserPromptExpansion`, `TaskCreated`, `TaskCompleted`, `StopFailure`,
+`InstructionsLoaded`, `CwdChanged`, `FileChanged`, `WorktreeCreate`,
+`WorktreeRemove`, `Elicitation`, `ElicitationResult`, `MessageDisplay`,
+`TeammateIdle`. Treat any of these event NAMES as valid — do not flag an
+unfamiliar event as an error.
+
 ## Report block
 
 ```

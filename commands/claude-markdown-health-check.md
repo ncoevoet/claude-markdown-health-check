@@ -220,7 +220,7 @@ Rewrite mode (when `--compress-bodies`):
 - `validate-skills.sh` flags hook scripts on disk that no settings file references → `UNREGISTERED-HOOK`, and hook timeouts above 2× the documented per-type default → `SUSPICIOUS-TIMEOUT` — relay.
 - Two hooks doing the same check → `DUPLICATE-LOGIC`
 - Critical rule with no hook enforcement and a deterministic check exists → `MISSING-ENFORCEMENT`
-- Matcher pattern doesn't match any real tool name → `DEAD-MATCHER`
+- Matcher pattern doesn't match any real tool name → `DEAD-MATCHER`. ONLY for tool-events (`PreToolUse`, `PostToolUse`, `PostToolUseFailure`, `PermissionRequest`, `PermissionDenied`) whose matcher IS a tool name. For event-typed matchers the matcher is an event-specific string, NOT a tool — never flag those: `SessionStart` (`startup|resume|clear|compact`), `PreCompact`/`PostCompact` (`manual|auto`), `SessionEnd`, `Notification`, `SubagentStart`/`SubagentStop`, `ConfigChange`, etc. See `references/hook-reliability.md` for the event→matcher table
 
 **Agents** (`.claude/agents/*.md`)
 - Agent description triggers MUST be reachable from CLAUDE.md → `MISSING-AGENT-TRIGGER`
@@ -305,13 +305,20 @@ Per-session `message.usage` aggregates from `history-scan.json` → `.tokenUsage
 - Session: X tool calls (Y% ok), Z reworks, W corrections   ← if available
 
 ### Action Items
-1. [TAG] path — problem
+1. [must-fix] <plain-language problem>                          · TAG
 ```
 
 ### Full Report (Standard / Deep)
 
+Render per `references/report-format.md`: a scorecard, then findings grouped by
+DOMAIN (not by severity tier), each a plain-language sentence with a
+`[must-fix]`/`[should]`/`[polish]` chip and the tag trailing as a machine code.
+Resolve the spec file the same way as `post-report-menu.md`. One scorecard +
+grouped block per scope present.
+
 ```
-## Ecosystem Health Report
+## .claude health (<scope>) — grade <A|B|C|D>
+issues: <Domain N · Domain N · …>          ← only domains with findings
 
 ### Session Metrics                       ← deep depth current-session, omit otherwise
 Tool calls: X (Y% ok) | Reworks: Z | Corrections: W | Builds: V/N
@@ -325,51 +332,56 @@ Tool calls: X (Y% ok) | Reworks: Z | Corrections: W | Builds: V/N
 ### Cross-session patterns (last 30d)     ← phase 19, deep only
 ### Context Trend (last 30d)              ← phase 23, deep only
 
-### Critical
-1. [TAG] path — problem
+## <Domain>                               ← fixed order; omit empty (see report-format.md)
+ N. [must-fix] <plain-language problem>
+               <path/locator>                                   · TAG
 
-### Structural
-1. [TAG] path — problem
-
-### Hygiene
-1. [TAG] path — problem
+### Suggestions                           ← Discovery [idea] items, omit if none
+ N. [idea] <plain-language suggestion>                          · TAG
 
 ### Skill Listing Budget                  ← omit if no overflow and no candidates
 - Source / Effective / Counted / Verdict / Bloat top 5 / Disable candidates / Suggested actions
 
 ### Suggested CLAUDE.md Updates           ← omit if none
 
-### Proposed Changes
-- [TAG] path — fix
+### Proposed Changes                      ← keyed to the finding numbers for the Phase 25 menu
+- finding N — <fix> · TAG
 - [REPURPOSE] orphan → skill/references/name.md — reason
 ```
 
 ### Worked example
 
 ```
-### Critical
-1. [DEAD-REF] settings.json:42 — guides.angular points to documentation/guides/angular-old.md (missing)
-2. [SKILL-DORMANT] skills/atlassian — invokes=0 over 30d, cost=4200 chars (in this install)
+## .claude health (user) — grade B
+issues: Skills 3 · Hooks 1 · Settings & Permissions 1
 
-### Structural
-1. [NEEDS-REFERENCES] skills/atlassian/SKILL.md — 412 lines, no references/ subdir
-2. [HOOK-FAILING] PreToolUse:Edit — 284/304 failures (93%)
+## Skills
+ 1. [must-fix] atlassian links to a missing file (references/api.md)
+               skills/atlassian/SKILL.md                          · DEAD-REF
+ 2. [should]   atlassian body is 412 lines with no references/ split
+               skills/atlassian/SKILL.md                   · NEEDS-REFERENCES
+ 3. [should]   atlassian is unused in the last 30 days but loads 4.2k chars per session
+               skills/atlassian                               · SKILL-DORMANT
 
-### Hygiene
-1. [BROAD-PATTERN] settings.json:permissions — Bash(cat:*) reads any file; scope to ~/.claude
-2. [REF-ORPHAN] skills/review-all/references/config-keys.md — no skill references this file
+## Hooks
+ 4. [must-fix] the Edit hook fails on almost every run (284/304, 93%)
+               PreToolUse:Edit                                  · HOOK-FAILING
+
+## Settings & Permissions
+ 5. [polish]   Bash(cat:*) lets any file be read — scope it to ~/.claude
+               settings.json                                   · BROAD-PATTERN
 ```
 
 ## Tag Set (canonical — MUST be drawn from this list)
 
 **Critical** (broken; blocks correct behaviour)
-`DEAD-REF`, `DUPLICATE-KEY`, `INVALID-JSON`, `MISSING-DESC`, `DEAD-MATCHER`, `UNREGISTERED-HOOK`, `MISSING-PRE-APPROVED`, `MEMORY-OVERFLOW`, `SKILL-BUDGET-OVERFLOW`, `STALE-THRESHOLD`, `GUIDANCE-FETCH-FAILED`, `BAD-FRONTMATTER-SCHEMA`, `NAME-COLLISION`, `SKILL-ORPHAN`, `MISSING-SKILL-GAP`, `PLUGIN-BROKEN-REF`, `PLUGIN-MISSING-MANIFEST`, `MEMORY-DEAD-LINK`, `REF-CIRCULAR`, `HOOK-FAILING`, `EMBEDDED-SECRET`
+`DEAD-REF`, `DUPLICATE-KEY`, `INVALID-JSON`, `MISSING-DESC`, `DEAD-MATCHER`, `UNREGISTERED-HOOK`, `MISSING-PRE-APPROVED`, `MEMORY-OVERFLOW`, `SKILL-BUDGET-OVERFLOW`, `STALE-THRESHOLD`, `GUIDANCE-FETCH-FAILED`, `BAD-FRONTMATTER-SCHEMA`, `NAME-COLLISION`, `SKILL-ORPHAN`, `MISSING-SKILL-GAP`, `PLUGIN-BROKEN-REF`, `PLUGIN-MISSING-MANIFEST`, `MEMORY-DEAD-LINK`, `REF-CIRCULAR`, `HOOK-FAILING`, `EMBEDDED-SECRET`, `BAD-NAME`, `RESERVED-NAME`
 
 **Structural** (works but should be reorganised)
-`UNDER-TRIGGER`, `OVER-TRIGGER`, `MISSING-TRIGGER`, `MISSING-AGENT-TRIGGER`, `OVERLAPPING-AGENT`, `DUPLICATE-LOGIC`, `MISSING-ENFORCEMENT`, `NEEDS-REFERENCES`, `NO-EXAMPLES`, `NO-TROUBLESHOOTING`, `BURIED-CRITICAL`, `WEAK-DESC`, `NAME-MISMATCH`, `BAD-RULE-FRONTMATTER`, `ORPHAN-GUIDE`, `ORPHAN-PATTERN`, `REPURPOSE`, `SKILL-LOW-RELEVANCE`, `SKILL-DUPLICATE-DOMAIN`, `CLAUDEMD-STALE`, `CLAUDEMD-GENERIC`, `CLAUDEMD-THIN`, `SKILL-NEVER-FIRED`, `SKILL-DORMANT`, `SKILL-MISFIRING`, `RECURRING-DENIAL`, `SKILL-TOOL-UNDECLARED`, `HOOK-EVENT-MISMATCH`, `AGENT-NEVER-SPAWNED`, `REF-TOO-DEEP`, `CONTEXT-BLOAT`, `PLUGIN-VERSION-DRIFT`
+`UNDER-TRIGGER`, `OVER-TRIGGER`, `MISSING-TRIGGER`, `MISSING-AGENT-TRIGGER`, `OVERLAPPING-AGENT`, `DUPLICATE-LOGIC`, `MISSING-ENFORCEMENT`, `NEEDS-REFERENCES`, `NO-EXAMPLES`, `NO-TROUBLESHOOTING`, `BURIED-CRITICAL`, `WEAK-DESC`, `NAME-MISMATCH`, `BAD-RULE-FRONTMATTER`, `ORPHAN-GUIDE`, `ORPHAN-PATTERN`, `REPURPOSE`, `SKILL-LOW-RELEVANCE`, `SKILL-DUPLICATE-DOMAIN`, `CLAUDEMD-STALE`, `CLAUDEMD-GENERIC`, `CLAUDEMD-THIN`, `SKILL-NEVER-FIRED`, `SKILL-DORMANT`, `SKILL-MISFIRING`, `RECURRING-DENIAL`, `SKILL-TOOL-UNDECLARED`, `HOOK-EVENT-MISMATCH`, `AGENT-NEVER-SPAWNED`, `REF-TOO-DEEP`, `CONTEXT-BLOAT`, `PLUGIN-VERSION-DRIFT`, `DESCRIPTION-TOO-LONG`, `OVER-500-LINES`, `CHAINED-REF`, `NO-PROGRESSIVE-DISCLOSURE`, `DESCRIPTION-TRUNCATED`
 
 **Hygiene** (cosmetic / token efficiency)
-`BROAD-PATTERN`, `SUSPICIOUS-TIMEOUT`, `STALE-REMINDER`, `DUPLICATE-ENTRY`, `RULE-OVERSIZED`, `BODY-FILLER-HIGH`, `BODY-COMPRESSED`, `BODY-COMPRESSION-REJECTED`, `UNKNOWN-FRONTMATTER-FIELD`, `RECURRING-CORRECTION`, `SKILL-TOOL-UNUSED`, `PERM-DEAD-ENTRY`, `PERM-OVERBROAD`, `HOOK-NEVER-FIRED`, `REF-ORPHAN`, `MEMORY-ORPHAN-FILE`, `MEMORY-DUP-ENTRY`, `MEMORY-STALE-DATE`, `LOW-CACHE-HIT`, `UNFLAGGED-DESTRUCTIVE`
+`BROAD-PATTERN`, `SUSPICIOUS-TIMEOUT`, `STALE-REMINDER`, `DUPLICATE-ENTRY`, `RULE-OVERSIZED`, `BODY-FILLER-HIGH`, `BODY-COMPRESSED`, `BODY-COMPRESSION-REJECTED`, `UNKNOWN-FRONTMATTER-FIELD`, `RECURRING-CORRECTION`, `SKILL-TOOL-UNUSED`, `PERM-DEAD-ENTRY`, `PERM-OVERBROAD`, `HOOK-NEVER-FIRED`, `REF-ORPHAN`, `MEMORY-ORPHAN-FILE`, `MEMORY-DUP-ENTRY`, `MEMORY-STALE-DATE`, `LOW-CACHE-HIT`, `UNFLAGGED-DESTRUCTIVE`, `THIRD-PERSON`, `MISSING-TOC`
 
 **Discovery** (from Phase 4, additive only)
 `NEW-RULE`, `NEW-PATTERN`, `NEW-TRIGGER`, `NEW-REFERENCE`, `SKILL-UPDATE`
@@ -378,11 +390,12 @@ Tool calls: X (Y% ok) | Reworks: Z | Corrections: W | Builds: V/N
 
 ## Output Rules
 
-- Findings MUST be one line: `[TAG] [scope] path — problem`
-- Empty sections MUST be omitted
+- Render per `references/report-format.md`: a scorecard line, then findings grouped by DOMAIN (fixed order, omit empty domains), each a plain-language sentence with a `[must-fix]`/`[should]`/`[polish]` chip and the tag trailing as ` · TAG`.
+- Scope is conveyed by a per-scope block header `## .claude health (user|project) — grade X`. Print one scorecard + grouped block per scope present. Do NOT prefix each finding line with the scope.
+- Number findings 1…N globally in reading order (domain order, then chip severity within a domain) so the Phase 25 menu can reference "finding N" and "all must-fix".
+- Empty domains and empty summary blocks MUST be omitted
 - Output MUST NOT contain XML tags
-- Related findings MUST be grouped under the same tag
-- Number findings continuously across Critical → Structural → Hygiene (Finding 1…N) so the Phase 25 menu can reference them
+- Every tag shown MUST be drawn from the canonical Tag Set; the tag is the trailing machine code and MUST NOT be dropped
 - Summary blocks (Plugin Integrity, Skill Usage, Reference Graph, Permission Hygiene, Hook Health, Auto-memory, Cross-session patterns, Context Trend) MUST be omitted when their phase produced no signal
 
 ## Pre-print pass (MANDATORY before printing the report)
@@ -390,7 +403,7 @@ Tool calls: X (Y% ok) | Reworks: Z | Corrections: W | Builds: V/N
 1. **Tag canon enforcement** — every `[TAG]` in the draft MUST appear in the Tag Set above. For any tag that does not:
    - Relabel to the closest canonical tag
    - If no canonical tag fits, drop the finding rather than invent a new tag
-2. **Scope prefix enforcement** — every finding line MUST start with `[TAG] [user]` or `[TAG] [project]` (one or the other, never both, never neither)
+2. **Scope enforcement** — every finding belongs to exactly one scope block, whose header states the scope (`## .claude health (user|project)`). No finding may appear outside a scope block.
 3. **Single output channel** — confirm no Write/Edit tool calls were made to disk during this run. If one slipped through, list it under `[OBSERVATION] self-violation: wrote <path> against autonomy-gate rule` at the top.
 4. **Privacy** — confirm no raw `cwd` paths or full session UUIDs from `history-scan.json` leaked into findings. Session IDs may appear as 8-char prefixes only.
 

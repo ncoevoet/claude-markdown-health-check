@@ -8,9 +8,14 @@ Builds the `references/*.md` link graph rooted in every SKILL.md and command `.m
 
 ## Variables
 
-- `MAX_REF_DEPTH` = `${MAX_REF_DEPTH:-3}` (env-tunable).
+- `MAX_REF_DEPTH` = `${MAX_REF_DEPTH:-3}` (env-tunable hard cap). Note the
+  [skill best-practice](https://platform.claude.com/docs/en/agents-and-tools/agent-skills/best-practices):
+  references should sit **one level deep** from SKILL.md — depth 1 is ideal, and
+  the cap is a backstop, not a target.
 - Graph nodes: every SKILL.md, every command `.md` (the "roots"), and every file under a sibling `references/` directory (the "ref leaves").
-- Graph edges: any `references/foo.md` substring inside a node's body, resolved against the node's reference base.
+- Graph edges: any `references/foo.md` substring inside a node's body, resolved against the node's reference base. A reference file's own citations resolve against the OWNING skill/command root (the dir containing `references/`), so a ref citing a sibling ref builds a real edge instead of doubling the path — this is what makes `REF-CIRCULAR`/`REF-TOO-DEEP` reachable and stops a cited sibling being mislabelled `REF-ORPHAN`.
+
+> Follow-up (not yet implemented): CLAUDE.md `@path` imports have a separate hard limit of **4 hops** per the [memory doc](https://code.claude.com/docs/en/memory); a dedicated `@import`-depth check could live here.
 
 ## Tags
 
