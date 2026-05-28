@@ -10,7 +10,7 @@ Two grading tiers (develop-tests: code-grading > LLM-grading):
 | `grader.method` | Run by | Cost | What it proves |
 |-----------------|--------|------|----------------|
 | `code` | `tests/run.sh` (CI) | free, deterministic | the scanners emit exactly the right tag set for a planted defect, and **zero** findings for the clean tree |
-| `llm-rubric` | `scripts/run-evals-headless.sh` (opt-in) | tokens | the judgment phases (weak description, thin CLAUDE.md, autonomy gate) behave, graded by an LLM against `grader_rubric` |
+| `llm-rubric` | `commands/scripts/run-evals-headless.sh` (opt-in, `make evals`) | tokens | the judgment phases (weak description, thin CLAUDE.md, autonomy gate) behave, graded by an LLM against `grader_rubric` |
 
 ## Schema
 

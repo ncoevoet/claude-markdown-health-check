@@ -1,6 +1,6 @@
 # Skill Listing Budget Audit
 
-Loaded by `/claude-markdown-health-check` Phase 5a. Audits whether the cumulative skill-listing block fits Claude Code's runtime budget and proposes remediations.
+Loaded by `/claude-markdown-health-check` Phase 6. Audits whether the cumulative skill-listing block fits Claude Code's runtime budget and proposes remediations.
 
 ## Why this exists
 
@@ -41,7 +41,7 @@ When `SKILL-BUDGET-OVERFLOW` fires, the report's "Skill Listing Budget" block MU
 
 When `SKILL-DUPLICATE-DOMAIN` fires, propose **merging or deleting one of the pair** instead of disabling — duplicates indicate a design issue, not a budget issue.
 
-## Report block (emitted from Phase 8)
+## Report block (emitted from Phase 24)
 
 ```
 ### Skill Listing Budget                  ← omit if no overflow and no candidates

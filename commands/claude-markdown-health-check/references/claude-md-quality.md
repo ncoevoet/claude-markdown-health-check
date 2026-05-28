@@ -1,6 +1,6 @@
 # CLAUDE.md Content Quality
 
-Loaded by `/claude-markdown-health-check` Phase 5b. Phase 1 already checks CLAUDE.md *size* and `validate-skills.sh` checks its *dead links*; this rubric judges whether the file is actually *useful* to a fresh Claude session.
+Loaded by `/claude-markdown-health-check` Phase 12. Phase 1 already checks CLAUDE.md *size* and `validate-skills.sh` checks its *dead links*; this rubric judges whether the file is actually *useful* to a fresh Claude session.
 
 ## What a good CLAUDE.md contains
 

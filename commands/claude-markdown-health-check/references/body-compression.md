@@ -1,6 +1,15 @@
-# Phase 5.5 — Body Compression (opt-in)
+# Phase 13 — Body Compression (opt-in)
 
 Optional pass that proposes caveman:lite rewrites of skill bodies, rule bodies, and reference files when filler density justifies it. Off by default. Invoked only when the user passes `--compress-bodies` to the command.
+
+## Contents
+
+- Why this is opt-in
+- Detection sub-mode (always on, cheap)
+- `--compress-bodies` mode — precondition checks, candidate selection, per-file rewrite, batch commit
+- Guardrails
+- When NOT to use this phase
+- Why detection-only is a valid stopping point
 
 ## Why this is opt-in
 
@@ -39,7 +48,7 @@ It points at the opt-in mode but never auto-runs.
 
 ## --compress-bodies mode (opt-in only)
 
-Phase 5.5 runs only when the user invokes `/claude-markdown-health-check --compress-bodies` (alone or combined with depth flags). Sequence:
+Phase 13 runs only when the user invokes `/claude-markdown-health-check --compress-bodies` (alone or combined with depth flags). Sequence:
 
 ### Step 1 — Precondition checks
 
@@ -58,7 +67,7 @@ fi
 If `CAVEMAN_AVAILABLE=0`, offer one-time install via `AskUserQuestion` (single-select):
 
 - **Install caveman plugin** — runs `claude plugin install caveman@JuliusBrussee/caveman` (or equivalent marketplace add)
-- **Skip compression** — print "Phase 5.5 skipped: caveman plugin not installed" and continue
+- **Skip compression** — print "Phase 13 skipped: caveman plugin not installed" and continue
 
 Never silently install. Never re-prompt within the same session if the user declined.
 
@@ -152,8 +161,8 @@ added to prevent re-compression.
 
 ## Guardrails
 
-- Phase 5.5 NEVER runs without `--compress-bodies`. The detection finding (`BODY-FILLER-HIGH`) does not imply consent — it documents the opportunity, no more.
-- Phase 5.5 NEVER runs on uncommitted working trees. If `git status --porcelain` shows any modification to the candidate paths, abort with: `Phase 5.5: working tree dirty for <path> — commit or stash before running.`
+- Phase 13 NEVER runs without `--compress-bodies`. The detection finding (`BODY-FILLER-HIGH`) does not imply consent — it documents the opportunity, no more.
+- Phase 13 NEVER runs on uncommitted working trees. If `git status --porcelain` shows any modification to the candidate paths, abort with: `Phase 13: working tree dirty for <path> — commit or stash before running.`
 - The cavecrew agent is given the file path; the orchestrator never includes file contents in its own prompts so the main thread context stays cold.
 - All rewrites land on a feature branch (`chore/caveman-lite-bodies-<date>`). The orchestrator never pushes.
 
