@@ -57,8 +57,8 @@ TMP_FINDINGS="$TMP_DIR/findings.jsonl"
 NODES_FILE="$TMP_DIR/nodes"
 EDGES_FILE="$TMP_DIR/edges"
 REFS_FILE="$TMP_DIR/refs"
-: >"$TMP_FINDINGS" >"$NODES_FILE" >"$EDGES_FILE" >"$REFS_FILE"
-trap "rm -rf $TMP_DIR" EXIT
+for _f in "$TMP_FINDINGS" "$NODES_FILE" "$EDGES_FILE" "$REFS_FILE"; do : >"$_f"; done
+trap 'rm -rf "$TMP_DIR"' EXIT
 
 emit_finding() {
     local phase="$1" tag="$2" path="$3" message="$4"
@@ -110,6 +110,15 @@ _ref_base() {
             [ -d "$sub" ] && { printf '%s' "$sub"; return; }
             printf '%s' "$(dirname "$src")"
             ;;
+        */references/*)
+            # A reference file. Its `references/X.md` citations are written
+            # relative to the owning skill/command root (the dir that CONTAINS
+            # references/), not to the file's own dir — otherwise the path
+            # doubles (.../references/references/X.md) and the edge never
+            # resolves, which both hides ref->ref cycles/depth and falsely
+            # flags a cited sibling as REF-ORPHAN.
+            printf '%s' "${src%/references/*}"
+            ;;
         *)
             printf '%s' "$(dirname "$src")"
             ;;
@@ -124,7 +133,7 @@ scan_ref_graph() {
         for sk in "$skills_dir"/*/SKILL.md; do
             [ -f "$sk" ] || continue
             printf '%s\troot\n' "$sk" >>"$NODES_FILE"
-            local sd=$(dirname "$sk")
+            local sd; sd=$(dirname "$sk")
             if [ -d "$sd/references" ]; then
                 while IFS= read -r r; do
                     [ -f "$r" ] || continue
@@ -219,7 +228,7 @@ scan_memory() {
     local mem
     while IFS= read -r mem; do
         [ -f "$mem" ] || continue
-        local memdir=$(dirname "$mem")
+        local memdir; memdir=$(dirname "$mem")
         local rel="${mem#$USER_TREE/}"
         local linked_count
         linked_count=$(grep -cE '^- \[.+\]\([^)]+\.md\)' "$mem" 2>/dev/null || echo 0)
@@ -248,7 +257,7 @@ scan_memory() {
             while IFS= read -r memfile; do
                 [ -f "$memfile" ] || continue
                 local memrel="${memfile#$USER_TREE/}"
-                local bn=$(basename "$memfile")
+                local bn; bn=$(basename "$memfile")
                 [ "$bn" = "MEMORY.md" ] && continue
                 if ! grep -qFx "$bn" "$seen_targets_file"; then
                     emit_finding 20 "MEMORY-ORPHAN-FILE" "$memrel" "no MEMORY.md entry links to $bn"

@@ -21,7 +21,6 @@ set -uo pipefail
 WINDOW_DAYS=30
 NO_CACHE=0
 REFRESH=0
-QUICK_SCAN=0
 TIME_BUDGET=${SCAN_HISTORY_BUDGET:-60}
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -29,7 +28,7 @@ while [ $# -gt 0 ]; do
         --window-days=*) WINDOW_DAYS="${1#*=}"; shift ;;
         --no-cache) NO_CACHE=1; shift ;;
         --refresh)  REFRESH=1; shift ;;
-        --quick-scan) QUICK_SCAN=1; TIME_BUDGET=30; shift ;;
+        --quick-scan) TIME_BUDGET=30; shift ;;
         *) shift ;;
     esac
 done
@@ -61,11 +60,10 @@ GEN_AT=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
 PROJECTS_DIR="$HOME/.claude/projects"
 TELEMETRY_DIR="$HOME/.claude/telemetry"
-USAGE_DIR="$HOME/.claude/usage-data"
 SKILLUSAGE_FILE="$HOME/.claude.json"
 
 TMP_DIR=$(mktemp -d)
-trap "rm -rf $TMP_DIR" EXIT
+trap 'rm -rf "$TMP_DIR"' EXIT
 EXTRACT_DIR="$TMP_DIR/extract"
 mkdir -p "$EXTRACT_DIR"
 
@@ -76,6 +74,7 @@ log() { printf '[scan-history] %s\n' "$1" >&2; }
 elapsed() { echo $(( $(date +%s) - START_TS )); }
 over_budget() { [ "$(elapsed)" -ge "$TIME_BUDGET" ]; }
 
+# shellcheck disable=SC2089  # this is a jq program (a string literal), not shell
 PER_FILE_FILTER='
 def epoch_of:
     (.timestamp // empty)
@@ -130,6 +129,7 @@ process_jsonl() {
 }
 
 export -f process_jsonl
+# shellcheck disable=SC2090  # PER_FILE_FILTER is a jq program string, exported intentionally
 export PER_FILE_FILTER T_CUTOFF MAX_LINE_BYTES
 
 collect_jsonl_events() {
@@ -141,7 +141,7 @@ collect_jsonl_events() {
     [ "$total" = 0 ] && { log "no jsonl files in window"; return 0; }
     log "scanning $total jsonl files (window=${WINDOW_DAYS}d)"
 
-    local parallel=$(nproc 2>/dev/null || echo 4)
+    local parallel; parallel=$(nproc 2>/dev/null || echo 4)
     local count=0
     while IFS= read -r f; do
         if over_budget; then
@@ -245,6 +245,7 @@ collect_telemetry() {
     [ "$total" = 0 ] && { echo '{}'; return 0; }
     log "scanning $total telemetry files"
 
+    # shellcheck disable=SC2046  # intentional word-split: session jsonl paths have no spaces
     jq -s '
         [ .[] | .[]? | select(.event_data? != null) | .event_data.event_name ]
         | group_by(.) | map({key:.[0], value:length}) | from_entries

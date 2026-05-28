@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 # validate-skills.sh — Deterministic compliance checks for .claude/ ecosystem
-# Based on Anthropic's official best practices (verified 2026-04-17):
+# Based on Anthropic's official best practices (verified 2026-05-28; thresholds
+# re-checked against the live docs with no drift — name 64 / desc 1024 / skill
+# 500 lines / memory 200 lines+25600 bytes / listing 1% & 8000 floor & 1536 entry /
+# hook timeouts 600/30/60 + UserPromptSubmit 30):
 #   https://platform.claude.com/docs/en/agents-and-tools/agent-skills/best-practices
 #   https://code.claude.com/docs/en/skills
 #   https://code.claude.com/docs/en/memory
@@ -53,7 +56,7 @@ SKILL_REF_DIR_THRESHOLD=300
 REF_TOC_THRESHOLD=100
 CLAUDE_MD_MAX_LINES=200
 RESERVED_NAMES=("anthropic" "claude")
-KNOWN_FRONTMATTER_FIELDS=("name" "description" "when_to_use" "allowed-tools" "argument-hint" "model" "color" "user-invocable")
+KNOWN_FRONTMATTER_FIELDS=("name" "description" "when_to_use" "allowed-tools" "disallowed-tools" "argument-hint" "arguments" "model" "color" "user-invocable" "disable-model-invocation" "effort" "context" "agent" "hooks" "paths" "shell")
 MODEL_WHITELIST_RE='^(opus|sonnet|haiku|inherit|claude-(opus|sonnet|haiku)-[0-9])'
 # Support/utility directories under skills/ that are not themselves skills.
 SKILLS_DIR_EXCLUDES=("bootstrap" "commands")
@@ -156,12 +159,13 @@ validate_skill_md() {
     fi
 
     # Check: allowed-tools syntax. Tokens look like `Read`, `WebFetch`, or
-    # `Bash(...)` / `Bash(jq:*)` / `Bash(bash path:*)`. Strip every valid token
-    # via sed; if anything non-whitespace remains, the field is malformed.
+    # `Bash(...)` / `Bash(jq:*)` / `Bash(bash path:*)`, separated by spaces or
+    # commas (both documented). Strip every valid token via sed; if anything
+    # other than whitespace/commas remains, the field is malformed.
     local allowed_tools_field at_remainder
     allowed_tools_field=$(extract_field "$skill_file" "allowed-tools")
     if [ -n "$allowed_tools_field" ]; then
-        at_remainder=$(printf '%s' "$allowed_tools_field" | sed -E 's/[A-Z][A-Za-z_]+(\([^()]*\))?//g' | tr -d ' \t\n')
+        at_remainder=$(printf '%s' "$allowed_tools_field" | sed -E 's/[A-Z][A-Za-z_]+(\([^()]*\))?//g' | tr -d ' \t\n,')
         if [ -n "$at_remainder" ]; then
             error "[BAD-FRONTMATTER-SCHEMA] $skill_name: allowed-tools has unparseable residue '$at_remainder' — token shape is Name or Name(args)"
         fi
@@ -333,6 +337,7 @@ check_json_valid() {
 # Resolve a ".claude/<rest>" or "~/.claude/<rest>" reference to its on-disk path.
 # A bare .claude/ is scope-relative ($CLAUDE_DIR); a ~/.claude/ is the user tree.
 _resolve_dotclaude() {
+    # shellcheck disable=SC2088  # the "~/.claude/" pattern is a literal tilde (as written in a settings file), not an expansion
     case "$1" in
         "~/.claude/"*) printf '%s/%s\n' "$HOME/.claude" "${1#\~/.claude/}" ;;
         ".claude/"*)   printf '%s/%s\n' "$CLAUDE_DIR"   "${1#.claude/}" ;;
