@@ -1,0 +1,19 @@
+{
+  "id": "08-duplicate-key",
+  "command": "claude-markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/duplicate-key",
+    "needs_home_override": false,
+    "scanners": ["validate-skills"]
+  },
+  "grader": { "method": "code" },
+  "success_criteria": {
+    "must_detect": [ { "tag": "DUPLICATE-KEY", "path_substring": "settings.json" } ],
+    "must_not_flag": [],
+    "expect_clean": false
+  },
+  "expected_behavior": [
+    "validate-skills.sh emits [DUPLICATE-KEY] for the model key defined twice in settings.json"
+  ]
+}

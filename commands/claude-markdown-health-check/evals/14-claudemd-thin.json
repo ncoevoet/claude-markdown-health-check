@@ -1,0 +1,20 @@
+{
+  "id": "14-claudemd-thin",
+  "command": "claude-markdown-health-check",
+  "query": "/claude-markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/claudemd-thin",
+    "needs_home_override": true,
+    "scanners": []
+  },
+  "grader": { "method": "llm-rubric" },
+  "grader_rubric": "Reason briefly, then output PASS or FAIL on the last line. PASS only if the report flags the CLAUDE.md as thin or generic (tag CLAUDEMD-THIN or CLAUDEMD-GENERIC): it is boilerplate with no build/test/run commands and no architecture map. FAIL if the report claims the CLAUDE.md is fine or omits it.",
+  "expected_behavior": [
+    "report flags CLAUDE.md as thin or generic (CLAUDEMD-THIN / CLAUDEMD-GENERIC)"
+  ],
+  "expected_not_behavior": [
+    "does not claim the CLAUDE.md is adequate"
+  ],
+  "assert_no_writes": true
+}

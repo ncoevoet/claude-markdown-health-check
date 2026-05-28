@@ -1,0 +1,10 @@
+{
+  "plugins": {
+    "ghost-plugin": [
+      {
+        "installPath": "/nonexistent/ghost-plugin",
+        "version": "1.0.0"
+      }
+    ]
+  }
+}

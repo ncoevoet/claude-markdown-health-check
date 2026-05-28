@@ -1,0 +1,7 @@
+{
+  "model": "sonnet",
+  "model": "opus",
+  "permissions": {
+    "allow": ["Bash(ls:*)"]
+  }
+}

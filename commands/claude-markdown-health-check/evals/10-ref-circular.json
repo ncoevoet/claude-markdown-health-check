@@ -1,0 +1,19 @@
+{
+  "id": "10-ref-circular",
+  "command": "claude-markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/ref-circular",
+    "needs_home_override": false,
+    "scanners": ["scan-graph"]
+  },
+  "grader": { "method": "code" },
+  "success_criteria": {
+    "must_detect": [ { "tag": "REF-CIRCULAR" } ],
+    "must_not_flag": [],
+    "expect_clean": false
+  },
+  "expected_behavior": [
+    "scan-graph.sh emits [REF-CIRCULAR] for the a.md -> b.md -> a.md citation cycle"
+  ]
+}

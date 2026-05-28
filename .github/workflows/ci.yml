@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # shellcheck and jq are pre-installed on ubuntu-latest runners.
+      - name: ShellCheck
+        run: shellcheck -S warning commands/scripts/*.sh tests/*.sh
+
+      - name: Bash syntax check
+        run: |
+          for f in commands/scripts/*.sh tests/*.sh; do bash -n "$f"; done
+
+      - name: Validate eval JSON parses
+        run: |
+          for f in commands/claude-markdown-health-check/evals/*.json; do
+            jq empty "$f" || { echo "INVALID JSON: $f"; exit 1; }
+          done
+
+      - name: Deterministic test suite
+        run: bash tests/run.sh
+
+      # NOTE: the LLM-graded behavioural evals (make evals) are intentionally NOT
+      # run here — they cost tokens and need an authenticated `claude` CLI. Run
+      # them locally during prompt/judgment-phase iteration.

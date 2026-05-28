@@ -35,6 +35,8 @@ Thresholds — line counts, description caps, budget fractions, hook timeouts �
 - **Hygiene** — cosmetic / token efficiency (over-broad patterns, stale reminders, low cache-hit, unused declared tools)
 - **Discovery** — additive suggestions surfaced from the current session (new rules, patterns, triggers)
 
+The chat report groups findings by **area** (Skills, Hooks, Settings & Permissions, Memory, References, Plugins, CLAUDE.md, …) under a scorecard, each rendered as a plain-language line with a `[must-fix]` / `[should]` / `[polish]` chip; the canonical tag stays as a trailing machine code (e.g. ` · DEAD-REF`). See [`references/report-format.md`](commands/claude-markdown-health-check/references/report-format.md).
+
 ## Install
 
 ```bash
@@ -120,7 +122,7 @@ The phase sequence runs flat from 1 to 25. New (history-aware and graph) phases 
 | 21 — Name Collisions **(NEW)** | Same basename in `commands/` and `skills/` (runs inside Phase 5) | All |
 | 22 — Agents Never-Spawned **(NEW)** | Agents on disk never invoked in window | Standard + Deep |
 | 23 — Token Trend **(NEW)** | Per-session input/output/cache tokens — low cache-hit, output bloat | Deep |
-| 24 — Report | One flat prioritized report: Critical · Structural · Hygiene · Discovery, with optional summary blocks per active NEW phase | All |
+| 24 — Report | Scorecard + findings grouped by area, each a plain-language line with a must-fix / should / polish chip and a trailing tag code; optional summary blocks per active NEW phase | All |
 | 25 — Post-Report Menu | Pick a fix scope, apply, re-validate, loop until done | All |
 
 ## Migration note
@@ -143,12 +145,30 @@ If you previously referred to phases by the old letter scheme, here is the mappi
 | 8 (Report) | 24 |
 | 9 (Post-Report Menu) | 25 |
 
+## Testing
+
+Two layers, following Anthropic's [develop-tests](https://platform.claude.com/docs/en/test-and-evaluate/develop-tests) methodology (code-grading is the fastest, most reliable tier — so the bulk is code-graded, and LLM-grading is reserved for the judgment phases):
+
+- **Deterministic (code-graded, CI-safe, no API key).** Synthetic `.claude/` fixture trees under `tests/fixtures/<case>/` each plant one defect; the suite runs `validate-skills.sh` / `scan-graph.sh` against them and asserts the exact `[TAG]` set. A `clean/` fixture asserts **zero** findings — the false-positive guard.
+  ```bash
+  make test              # bash tests/run.sh — 20 cases, 53 assertions
+  bash tests/run.sh 02   # run one case / id-prefix
+  ```
+- **Behavioural (LLM-graded, opt-in, costs tokens).** Runs the full `/claude-markdown-health-check` headless against a fixture to exercise the judgment phases (weak descriptions, thin CLAUDE.md, autonomy-gate compliance), graded by an LLM rubric and scored by majority over N runs.
+  ```bash
+  make evals                            # needs the authenticated `claude` CLI
+  HEALTH_CHECK_EVAL_RUNS=3 make evals   # majority vote to smooth LLM noise
+  ```
+
+Cases live in `commands/claude-markdown-health-check/evals/*.json` (`grader.method` = `code` or `llm-rubric`); fixtures in `tests/fixtures/`. Tags are the stable machine contract, so the code-graded cases are immune to report-format changes. CI (`.github/workflows/ci.yml`) runs shellcheck + `bash -n` + JSON validation + the deterministic suite on every push; it does **not** run the token-spending LLM evals. Every real-world miss or false positive should become a new case.
+
 ## Requirements
 
 - [Claude Code CLI](https://docs.claude.com/en/docs/claude-code/overview)
 - `bash`, `awk`, `grep`, `find`, `date` (defaults on macOS/Linux)
 - `jq` — required for the NEW phases (plugin integrity, skill usage, hook reliability, etc.); strongly recommended for the existing skill-listing-budget check
 - Optional: `nproc` for parallel JSONL scanning (falls back to 4 workers if absent)
+- For development: `jq` for `make test`; the authenticated `claude` CLI for `make evals`; `shellcheck` (CI uses it at `-S warning`)
 
 ## Layout
 
@@ -156,25 +176,39 @@ If you previously referred to phases by the old letter scheme, here is the mappi
 commands/
 ├── claude-markdown-health-check.md          # the slash command (~400 lines, orchestrator)
 ├── claude-markdown-health-check/
-│   └── references/
-│       ├── skill-listing-budget.md          # Phase 6 audit logic
-│       ├── skill-usage-metrics.md           # Phase 7 (NEW)
-│       ├── skill-tool-contract.md           # Phase 9 (NEW)
-│       ├── frontmatter-schema.md            # Phase 10 (NEW)
-│       ├── reference-graph.md               # Phase 11 (NEW)
-│       ├── claude-md-quality.md             # Phase 12 rubric
-│       ├── body-compression.md              # Phase 13 logic
-│       ├── permission-hygiene.md            # Phase 15 (NEW)
-│       ├── hook-reliability.md              # Phase 16 (NEW)
-│       ├── cross-session-patterns.md        # Phase 19 + 22 (NEW)
-│       ├── memory-hygiene.md                # Phase 20 (NEW)
-│       ├── plugin-integrity.md              # Phase 2 (NEW)
-│       ├── token-trend.md                   # Phase 23 (NEW)
-│       └── post-report-menu.md              # Phase 25 menu
+│   ├── references/
+│   │   ├── skill-listing-budget.md          # Phase 6 audit logic
+│   │   ├── skill-usage-metrics.md           # Phase 7 (NEW)
+│   │   ├── skill-tool-contract.md           # Phase 9 (NEW)
+│   │   ├── frontmatter-schema.md            # Phase 10 (NEW)
+│   │   ├── reference-graph.md               # Phase 11 (NEW)
+│   │   ├── claude-md-quality.md             # Phase 12 rubric
+│   │   ├── body-compression.md              # Phase 13 logic
+│   │   ├── permission-hygiene.md            # Phase 15 (NEW)
+│   │   ├── hook-reliability.md              # Phase 16 (NEW)
+│   │   ├── cross-session-patterns.md        # Phase 19 + 22 (NEW)
+│   │   ├── memory-hygiene.md                # Phase 20 (NEW)
+│   │   ├── plugin-integrity.md              # Phase 2 (NEW)
+│   │   ├── token-trend.md                   # Phase 23 (NEW)
+│   │   ├── report-format.md                 # Phase 24 report rendering — domain map + scorecard (NEW)
+│   │   └── post-report-menu.md              # Phase 25 menu
+│   └── evals/                               # data-driven eval cases (NEW)
+│       ├── 01-clean-zero-findings.json … 20-chained-ref.json
+│       └── README.md                        # eval schema + how to run
 └── scripts/
     ├── validate-skills.sh                   # deterministic compliance validator (Phase 5)
     ├── scan-graph.sh                        # static graph scanner (Phases 2, 11, 20) — NEW
-    └── scan-history.sh                      # session-log miner (Phases 7, 9, 15, 16, 19, 22, 23) — NEW
+    ├── scan-history.sh                      # session-log miner (Phases 7, 9, 15, 16, 19, 22, 23) — NEW
+    ├── run-evals-headless.sh                # opt-in LLM-graded eval runner (NEW)
+    └── run-evals.sh                         # manual eval runner (NEW)
+
+tests/                                       # deterministic test suite (NEW, dev-only, CI)
+├── run.sh                                   # entrypoint → test_scripts.sh
+├── lib.sh                                   # assert helpers + tag extractors
+├── test_scripts.sh                          # data-driven runner over evals/*.json
+└── fixtures/<case>/.claude/…                # synthetic trees, one planted defect each
+
+.github/workflows/ci.yml                     # shellcheck + bash -n + JSON + tests/run.sh (NEW)
 ```
 
 All plain Markdown and shell — read, fork, extend.

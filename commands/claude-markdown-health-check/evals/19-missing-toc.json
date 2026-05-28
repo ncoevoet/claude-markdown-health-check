@@ -1,0 +1,19 @@
+{
+  "id": "19-missing-toc",
+  "command": "claude-markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/missing-toc",
+    "needs_home_override": false,
+    "scanners": ["validate-skills"]
+  },
+  "grader": { "method": "code" },
+  "success_criteria": {
+    "must_detect": [ { "tag": "MISSING-TOC", "path_substring": "manual" } ],
+    "must_not_flag": ["DEAD-REF"],
+    "expect_clean": false
+  },
+  "expected_behavior": [
+    "validate-skills.sh emits [MISSING-TOC] for a references/*.md over 100 lines with no Table of Contents"
+  ]
+}

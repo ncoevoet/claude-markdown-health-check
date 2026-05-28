@@ -1,0 +1,19 @@
+{
+  "id": "20-chained-ref",
+  "command": "claude-markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/chained-ref",
+    "needs_home_override": false,
+    "scanners": ["validate-skills"]
+  },
+  "grader": { "method": "code" },
+  "success_criteria": {
+    "must_detect": [ { "tag": "CHAINED-REF", "path_substring": "guide" } ],
+    "must_not_flag": ["DEAD-REF"],
+    "expect_clean": false
+  },
+  "expected_behavior": [
+    "validate-skills.sh emits [CHAINED-REF] because a reference file links to an external .claude/ path outside its own skill"
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "id": "18-no-progressive",
+  "command": "claude-markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/no-progressive",
+    "needs_home_override": false,
+    "scanners": ["validate-skills"]
+  },
+  "grader": { "method": "code" },
+  "success_criteria": {
+    "must_detect": [ { "tag": "NO-PROGRESSIVE-DISCLOSURE", "path_substring": "biggish" } ],
+    "must_not_flag": ["OVER-500-LINES"],
+    "expect_clean": false
+  },
+  "expected_behavior": [
+    "validate-skills.sh emits [NO-PROGRESSIVE-DISCLOSURE] for a >300-line SKILL.md with no references/ dir",
+    "it does NOT emit OVER-500-LINES (the body is under 500 lines) — isolates the two size checks"
+  ]
+}

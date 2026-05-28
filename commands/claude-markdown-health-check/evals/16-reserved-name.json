@@ -1,0 +1,19 @@
+{
+  "id": "16-reserved-name",
+  "command": "claude-markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/reserved-name",
+    "needs_home_override": false,
+    "scanners": ["validate-skills"]
+  },
+  "grader": { "method": "code" },
+  "success_criteria": {
+    "must_detect": [ { "tag": "RESERVED-NAME", "path_substring": "claude-helper" } ],
+    "must_not_flag": ["BAD-NAME", "NAME-MISMATCH"],
+    "expect_clean": false
+  },
+  "expected_behavior": [
+    "validate-skills.sh emits [RESERVED-NAME] because the skill name contains the reserved word 'claude'"
+  ]
+}

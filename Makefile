@@ -16,7 +16,7 @@ GRAPH_DEST  := $(CLAUDE_DIR)/commands/scripts/scan-graph.sh
 HIST_SRC    := commands/scripts/scan-history.sh
 HIST_DEST   := $(CLAUDE_DIR)/commands/scripts/scan-history.sh
 
-.PHONY: install uninstall check-self smoke-scan help
+.PHONY: install uninstall check-self smoke-scan test evals help
 
 help:
 	@echo "Targets:"
@@ -24,6 +24,8 @@ help:
 	@echo "  uninstall   remove the installed command + reference tree"
 	@echo "  check-self  install, then run /claude-markdown-health-check in Claude Code"
 	@echo "  smoke-scan  refresh both scan caches and print their meta blocks"
+	@echo "  test        run the deterministic test suite (code-graded, no API key)"
+	@echo "  evals       run the opt-in LLM-graded behavioural evals (needs the claude CLI)"
 
 install:
 	@mkdir -p "$(CLAUDE_DIR)/commands/scripts" "$(REF_DEST)"
@@ -53,3 +55,9 @@ check-self: install
 smoke-scan:
 	@bash "$(GRAPH_SRC)" --refresh 2>/dev/null | jq '.meta'
 	@bash "$(HIST_SRC)"  --refresh 2>/dev/null | jq '.meta'
+
+test:
+	@bash tests/run.sh
+
+evals:
+	@bash commands/scripts/run-evals-headless.sh

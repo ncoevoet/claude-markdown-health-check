@@ -1,0 +1,19 @@
+{
+  "id": "17-over-500-lines",
+  "command": "claude-markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/over-500-lines",
+    "needs_home_override": false,
+    "scanners": ["validate-skills"]
+  },
+  "grader": { "method": "code" },
+  "success_criteria": {
+    "must_detect": [ { "tag": "OVER-500-LINES", "path_substring": "huge" } ],
+    "must_not_flag": [],
+    "expect_clean": false
+  },
+  "expected_behavior": [
+    "validate-skills.sh emits [OVER-500-LINES] for a SKILL.md exceeding 500 lines"
+  ]
+}

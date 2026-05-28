@@ -1,0 +1,19 @@
+{
+  "id": "05-unflagged-destructive",
+  "command": "claude-markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/unflagged-destructive",
+    "needs_home_override": false,
+    "scanners": ["validate-skills"]
+  },
+  "grader": { "method": "code" },
+  "success_criteria": {
+    "must_detect": [ { "tag": "UNFLAGGED-DESTRUCTIVE", "path_substring": "cleanup" } ],
+    "must_not_flag": [],
+    "expect_clean": false
+  },
+  "expected_behavior": [
+    "validate-skills.sh emits [UNFLAGGED-DESTRUCTIVE] for the rm -rf with no nearby warning marker"
+  ]
+}

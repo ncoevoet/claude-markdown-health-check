@@ -1,0 +1,19 @@
+{
+  "id": "12-plugin-broken-ref",
+  "command": "claude-markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/plugin-broken-ref",
+    "needs_home_override": true,
+    "scanners": ["scan-graph"]
+  },
+  "grader": { "method": "code" },
+  "success_criteria": {
+    "must_detect": [ { "tag": "PLUGIN-BROKEN-REF", "path_substring": "ghost-plugin" } ],
+    "must_not_flag": [],
+    "expect_clean": false
+  },
+  "expected_behavior": [
+    "scan-graph.sh emits [PLUGIN-BROKEN-REF] because installed_plugins.json points at a missing installPath (user-tree gated, hence HOME override)"
+  ]
+}

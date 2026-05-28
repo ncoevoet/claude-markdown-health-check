@@ -1,0 +1,21 @@
+{
+  "id": "13-weak-desc",
+  "command": "claude-markdown-health-check",
+  "query": "/claude-markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/weak-desc",
+    "needs_home_override": true,
+    "scanners": []
+  },
+  "grader": { "method": "llm-rubric" },
+  "grader_rubric": "Reason briefly, then on the LAST line output exactly PASS or FAIL. PASS only if the report flags the 'helper' skill for a weak/vague description that lacks a 'when to use' clause (tag WEAK-DESC or UNDER-TRIGGER), in the Skills area. The deterministic validator does NOT catch this (description is over 40 chars and third person), so a PASS proves the judgment phase fired. FAIL if no such finding appears or the report invents unrelated must-fix findings.",
+  "expected_behavior": [
+    "report flags skills/helper for a weak description (WEAK-DESC / UNDER-TRIGGER)",
+    "notes the description has no 'when to use' half"
+  ],
+  "expected_not_behavior": [
+    "does not invent must-fix findings for this otherwise-clean tree"
+  ],
+  "assert_no_writes": true
+}

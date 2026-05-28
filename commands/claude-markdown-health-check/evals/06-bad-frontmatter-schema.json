@@ -1,0 +1,20 @@
+{
+  "id": "06-bad-frontmatter-schema",
+  "command": "claude-markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/bad-frontmatter",
+    "needs_home_override": false,
+    "scanners": ["validate-skills"]
+  },
+  "grader": { "method": "code" },
+  "success_criteria": {
+    "must_detect": [ { "tag": "BAD-FRONTMATTER-SCHEMA", "path_substring": "badmodel" } ],
+    "must_not_flag": ["UNKNOWN-FRONTMATTER-FIELD"],
+    "expect_clean": false
+  },
+  "expected_behavior": [
+    "validate-skills.sh emits [BAD-FRONTMATTER-SCHEMA] for model: gpt-4 (off-whitelist)",
+    "the valid sibling field effort: low does NOT trigger UNKNOWN-FRONTMATTER-FIELD"
+  ]
+}

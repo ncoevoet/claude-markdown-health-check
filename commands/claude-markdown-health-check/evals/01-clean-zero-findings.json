@@ -1,0 +1,34 @@
+{
+  "id": "01-clean-zero-findings",
+  "command": "claude-markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/clean",
+    "needs_home_override": false,
+    "scanners": ["validate-skills", "scan-graph"]
+  },
+  "grader": { "method": "code" },
+  "success_criteria": {
+    "must_detect": [],
+    "must_not_flag": [
+      "UNKNOWN-FRONTMATTER-FIELD",
+      "BAD-FRONTMATTER-SCHEMA",
+      "DEAD-REF",
+      "BAD-NAME",
+      "MISSING-DESC",
+      "THIRD-PERSON",
+      "NAME-COLLISION",
+      "EMBEDDED-SECRET",
+      "UNFLAGGED-DESTRUCTIVE",
+      "BAD-RULE-FRONTMATTER",
+      "REF-ORPHAN",
+      "REF-CIRCULAR"
+    ],
+    "expect_clean": true
+  },
+  "expected_behavior": [
+    "validate-skills.sh emits zero tagged findings",
+    "a SKILL.md using comma-separated allowed-tools plus disable-model-invocation / disallowed-tools / effort triggers neither BAD-FRONTMATTER-SCHEMA nor UNKNOWN-FRONTMATTER-FIELD",
+    "a rules/*.md scoped with paths: does not trigger BAD-RULE-FRONTMATTER"
+  ]
+}
