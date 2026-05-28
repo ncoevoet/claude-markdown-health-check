@@ -1,0 +1,19 @@
+{
+  "id": "27-missing-pre-approved",
+  "command": "claude-markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/missing-pre-approved",
+    "needs_home_override": false,
+    "scanners": ["validate-skills"]
+  },
+  "grader": { "method": "code" },
+  "success_criteria": {
+    "must_detect": [ { "tag": "MISSING-PRE-APPROVED", "path_substring": "settings.json" } ],
+    "must_not_flag": ["INVALID-JSON"],
+    "expect_clean": false
+  },
+  "expected_behavior": [
+    "validate-skills.sh emits [MISSING-PRE-APPROVED] because mcpServers.orphan-server is not in preApprovedTools or permissions.allow"
+  ]
+}

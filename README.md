@@ -151,7 +151,7 @@ Two layers, following Anthropic's [develop-tests](https://platform.claude.com/do
 
 - **Deterministic (code-graded, CI-safe, no API key).** Synthetic `.claude/` fixture trees under `tests/fixtures/<case>/` each plant one defect; the suite runs `validate-skills.sh` / `scan-graph.sh` against them and asserts the exact `[TAG]` set. A `clean/` fixture asserts **zero** findings — the false-positive guard.
   ```bash
-  make test              # bash tests/run.sh — 20 cases, 53 assertions
+  make test              # bash tests/run.sh — 32 code-graded cases, 97 assertions
   bash tests/run.sh 02   # run one case / id-prefix
   ```
 - **Behavioural (LLM-graded, opt-in, costs tokens).** Runs the full `/claude-markdown-health-check` headless against a fixture to exercise the judgment phases (weak descriptions, thin CLAUDE.md, autonomy-gate compliance), graded by an LLM rubric and scored by majority over N runs.
@@ -193,7 +193,7 @@ commands/
 │   │   ├── report-format.md                 # Phase 24 report rendering — domain map + scorecard (NEW)
 │   │   └── post-report-menu.md              # Phase 25 menu
 │   └── evals/                               # data-driven eval cases (NEW)
-│       ├── 01-clean-zero-findings.json … 20-chained-ref.json
+│       ├── 01-clean-zero-findings.json … 35-secret-word-boundary.json  (32 code + 3 LLM)
 │       └── README.md                        # eval schema + how to run
 └── scripts/
     ├── validate-skills.sh                   # deterministic compliance validator (Phase 5)

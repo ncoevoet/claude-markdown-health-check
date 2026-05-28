@@ -1,0 +1,19 @@
+{
+  "id": "26-bad-rule-frontmatter",
+  "command": "claude-markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/bad-rule-frontmatter",
+    "needs_home_override": false,
+    "scanners": ["validate-skills"]
+  },
+  "grader": { "method": "code" },
+  "success_criteria": {
+    "must_detect": [ { "tag": "BAD-RULE-FRONTMATTER", "path_substring": "bad.md" } ],
+    "must_not_flag": [],
+    "expect_clean": false
+  },
+  "expected_behavior": [
+    "validate-skills.sh emits [BAD-RULE-FRONTMATTER] for a rule that declares paths: but lists no glob"
+  ]
+}

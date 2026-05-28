@@ -1,0 +1,19 @@
+{
+  "id": "30-memory-stale-date",
+  "command": "claude-markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/memory-stale-date",
+    "needs_home_override": true,
+    "scanners": ["scan-graph"]
+  },
+  "grader": { "method": "code" },
+  "success_criteria": {
+    "must_detect": [ { "tag": "MEMORY-STALE-DATE", "path_substring": "MEMORY.md" } ],
+    "must_not_flag": ["MEMORY-DEAD-LINK"],
+    "expect_clean": false
+  },
+  "expected_behavior": [
+    "scan-graph.sh emits [MEMORY-STALE-DATE] for a MEMORY.md entry dated 2024-01-01 (older than 365 days)"
+  ]
+}

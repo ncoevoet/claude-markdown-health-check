@@ -1,0 +1,19 @@
+{
+  "id": "28-memory-dead-link",
+  "command": "claude-markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/memory-dead-link",
+    "needs_home_override": true,
+    "scanners": ["scan-graph"]
+  },
+  "grader": { "method": "code" },
+  "success_criteria": {
+    "must_detect": [ { "tag": "MEMORY-DEAD-LINK", "path_substring": "MEMORY.md" } ],
+    "must_not_flag": [],
+    "expect_clean": false
+  },
+  "expected_behavior": [
+    "scan-graph.sh emits [MEMORY-DEAD-LINK] for a MEMORY.md entry whose target gone.md is missing (user-tree gated, hence HOME override)"
+  ]
+}

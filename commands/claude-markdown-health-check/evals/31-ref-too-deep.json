@@ -1,0 +1,19 @@
+{
+  "id": "31-ref-too-deep",
+  "command": "claude-markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/ref-too-deep",
+    "needs_home_override": false,
+    "scanners": ["scan-graph"]
+  },
+  "grader": { "method": "code" },
+  "success_criteria": {
+    "must_detect": [ { "tag": "REF-TOO-DEEP" } ],
+    "must_not_flag": ["REF-ORPHAN", "REF-CIRCULAR"],
+    "expect_clean": false
+  },
+  "expected_behavior": [
+    "scan-graph.sh emits [REF-TOO-DEEP] for the SKILL->a->b->c->d chain (depth 4 > MAX_REF_DEPTH 3) — reachable thanks to the ref->ref resolution fix"
+  ]
+}

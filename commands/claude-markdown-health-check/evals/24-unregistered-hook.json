@@ -1,0 +1,19 @@
+{
+  "id": "24-unregistered-hook",
+  "command": "claude-markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/unregistered-hook",
+    "needs_home_override": false,
+    "scanners": ["validate-skills"]
+  },
+  "grader": { "method": "code" },
+  "success_criteria": {
+    "must_detect": [ { "tag": "UNREGISTERED-HOOK", "path_substring": "orphan" } ],
+    "must_not_flag": [],
+    "expect_clean": false
+  },
+  "expected_behavior": [
+    "validate-skills.sh emits [UNREGISTERED-HOOK] for hooks/orphan.sh, which no settings file references"
+  ]
+}

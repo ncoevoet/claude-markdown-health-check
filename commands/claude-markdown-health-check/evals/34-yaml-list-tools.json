@@ -1,0 +1,19 @@
+{
+  "id": "34-yaml-list-tools",
+  "command": "claude-markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/yaml-list-tools",
+    "needs_home_override": false,
+    "scanners": ["validate-skills", "scan-graph"]
+  },
+  "grader": { "method": "code" },
+  "success_criteria": {
+    "must_detect": [],
+    "must_not_flag": ["BAD-FRONTMATTER-SCHEMA", "UNKNOWN-FRONTMATTER-FIELD"],
+    "expect_clean": true
+  },
+  "expected_behavior": [
+    "a skill declaring allowed-tools as a YAML block list (- Read / - Grep / - Bash(npm test:*)) is NOT flagged BAD-FRONTMATTER-SCHEMA (the YAML-list form is documented-valid; locks the dogfood-found false positive)"
+  ]
+}

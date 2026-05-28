@@ -1,0 +1,19 @@
+{
+  "id": "21-runtime-path-mention",
+  "command": "claude-markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/runtime-path-mention",
+    "needs_home_override": false,
+    "scanners": ["validate-skills", "scan-graph"]
+  },
+  "grader": { "method": "code" },
+  "success_criteria": {
+    "must_detect": [],
+    "must_not_flag": ["CHAINED-REF", "MISSING-TOC", "DEAD-REF", "REF-ORPHAN"],
+    "expect_clean": true
+  },
+  "expected_behavior": [
+    "a reference doc that mentions ~/.claude/ runtime paths in prose is NOT flagged CHAINED-REF (locks the runtime-path exemption)"
+  ]
+}
