@@ -73,6 +73,12 @@ HOOK_TIMEOUT_AGENT=60
 # skillListingBudgetFraction (settings.json, observed in /doctor).
 LISTING_BUDGET_FLOOR=8000
 LISTING_BUDGET_FRACTION_DEFAULT="0.01"
+# Claude Code runtime/data paths a reference doc may legitimately MENTION in prose
+# (e.g. "scans ~/.claude/projects/*.jsonl", "reads .claude/plugins/installed_plugins.json").
+# These are not chained skill references, so they are exempt from CHAINED-REF; genuine
+# cross-component links (.claude/skills/<other>/…, .claude/commands/<other>) still fire.
+# shellcheck disable=SC2088  # the leading ~ is a literal regex char (matches "~/.claude/"), not a path to expand
+CLAUDE_RUNTIME_PATHS_RE='~/\.claude/|\.claude/(projects|plugins|\.?cache|telemetry|usage-data|logs|statsig|todos|shell-snapshots|backups|ide)|\.claude/\.(credentials|claude)|\.claude\.json'
 
 red()    { printf '\033[0;31m%s\033[0m\n' "$1"; }
 yellow() { printf '\033[0;33m%s\033[0m\n' "$1"; }
@@ -159,13 +165,14 @@ validate_skill_md() {
     fi
 
     # Check: allowed-tools syntax. Tokens look like `Read`, `WebFetch`, or
-    # `Bash(...)` / `Bash(jq:*)` / `Bash(bash path:*)`, separated by spaces or
-    # commas (both documented). Strip every valid token via sed; if anything
-    # other than whitespace/commas remains, the field is malformed.
+    # `Bash(...)` / `Bash(jq:*)` / `Bash(bash path:*)`. The documented forms are a
+    # space- or comma-separated string OR a YAML block list (`- Read`), so after
+    # stripping valid tokens the residue may legitimately contain separators
+    # (spaces, commas) and YAML list dashes; anything ELSE means the field is malformed.
     local allowed_tools_field at_remainder
     allowed_tools_field=$(extract_field "$skill_file" "allowed-tools")
     if [ -n "$allowed_tools_field" ]; then
-        at_remainder=$(printf '%s' "$allowed_tools_field" | sed -E 's/[A-Z][A-Za-z_]+(\([^()]*\))?//g' | tr -d ' \t\n,')
+        at_remainder=$(printf '%s' "$allowed_tools_field" | sed -E 's/[A-Z][A-Za-z_]+(\([^()]*\))?//g' | tr -d ' \t\n,-')
         if [ -n "$at_remainder" ]; then
             error "[BAD-FRONTMATTER-SCHEMA] $skill_name: allowed-tools has unparseable residue '$at_remainder' — token shape is Name or Name(args)"
         fi
@@ -473,12 +480,12 @@ check_embedded_secrets() {
         if printf '%s' "$rest" | grep -qiE '(example|placeholder|your[-_]?(key|token|secret|api)|<your|xxxx|0000|redacted|replace[-_]?me|\$\{?[A-Z][A-Z0-9_]*\}?)'; then
             continue
         fi
-        hit=$(printf '%s' "$rest" | grep -oE '(sk-[A-Za-z0-9_-]{20,}|AKIA[0-9A-Z]{16}|gh[pousr]_[A-Za-z0-9]{20,}|xox[baprs]-[A-Za-z0-9-]{10,}|AIza[0-9A-Za-z_-]{35}|glpat-[A-Za-z0-9_-]{20,})' | head -1)
+        hit=$(printf '%s' "$rest" | grep -oE '\b(sk-[A-Za-z0-9_-]{20,}|AKIA[0-9A-Z]{16}|gh[pousr]_[A-Za-z0-9]{20,}|xox[baprs]-[A-Za-z0-9-]{10,}|AIza[0-9A-Za-z_-]{35}|glpat-[A-Za-z0-9_-]{20,})' | head -1)
         if [ -n "$hit" ]; then
             snippet=$(printf '%s' "$hit" | cut -c1-10)
             error "[EMBEDDED-SECRET] $display:$ln — credential pattern ${snippet}… in markdown body; replace with \$ENV_VAR placeholder"
         fi
-    done < <(grep -nE '(sk-[A-Za-z0-9_-]{20,}|AKIA[0-9A-Z]{16}|gh[pousr]_[A-Za-z0-9]{20,}|xox[baprs]-[A-Za-z0-9-]{10,}|AIza[0-9A-Za-z_-]{35}|glpat-[A-Za-z0-9_-]{20,})' "$file" 2>/dev/null || true)
+    done < <(grep -nE '\b(sk-[A-Za-z0-9_-]{20,}|AKIA[0-9A-Z]{16}|gh[pousr]_[A-Za-z0-9]{20,}|xox[baprs]-[A-Za-z0-9-]{10,}|AIza[0-9A-Za-z_-]{35}|glpat-[A-Za-z0-9_-]{20,})' "$file" 2>/dev/null || true)
 }
 
 # Scan a markdown file for destructive shell commands lacking a nearby warning
@@ -708,6 +715,7 @@ for ref_file in "$SKILLS_DIR"/*/references/*.md; do
     # conventional shared output dir `.claude/reports/` — these are
     # consumer-project paths the skill creates/owns, not foreign cross-refs.
     chained=$(grep -n '\.claude/' "$ref_file" 2>/dev/null \
+              | grep -Ev "$CLAUDE_RUNTIME_PATHS_RE" \
               | grep -Ev "\.claude/(${skill_name}(/|\.[a-zA-Z0-9]+)|reports[/'\"\` ]?)" | head -3 || true)
     if [ -n "$chained" ]; then
         error "[CHAINED-REF] $ref_name links to external .claude/ path (allowed: .claude/$skill_name/ or .claude/$skill_name.*)"
@@ -742,6 +750,7 @@ for sub_refs in "$CLAUDE_DIR"/*/references; do
         # Allow refs to the subtree itself (`.claude/<sub>/...`) and to its
         # sibling config files (`.claude/<sub>.json`, `.claude/<sub>.md`, etc.).
         chained=$(grep -n '\.claude/' "$ref_file" 2>/dev/null \
+                  | grep -Ev "$CLAUDE_RUNTIME_PATHS_RE" \
                   | grep -Ev "\.claude/${sub}(/|\.[a-zA-Z0-9]+)" | head -3 || true)
         if [ -n "$chained" ]; then
             error "[CHAINED-REF] $ref_name links to external .claude/ path (allowed: .claude/$sub/ or .claude/$sub.*)"
