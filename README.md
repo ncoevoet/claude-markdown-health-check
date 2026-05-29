@@ -45,10 +45,10 @@ In Claude Code, add the marketplace and install:
 
 ```
 /plugin marketplace add ncoevoet/claude-markdown-health-check
-/plugin install claude-markdown-health-check@ncoevoet
+/plugin install claude-markdown-health-check@ncoevoet-health-check
 ```
 
-`/claude-markdown-health-check` is available right away. Update with `/plugin update claude-markdown-health-check@ncoevoet`, remove with `/plugin uninstall claude-markdown-health-check@ncoevoet`. CLI equivalents: `claude plugin marketplace add ncoevoet/claude-markdown-health-check` then `claude plugin install claude-markdown-health-check@ncoevoet`. The plugin is self-contained — the command resolves its scripts and reference docs from `${CLAUDE_PLUGIN_ROOT}`, so `make install` is **not** needed.
+`/claude-markdown-health-check` is available right away. Update with `/plugin update claude-markdown-health-check@ncoevoet-health-check`, remove with `/plugin uninstall claude-markdown-health-check@ncoevoet-health-check`. CLI equivalents: `claude plugin marketplace add ncoevoet/claude-markdown-health-check` then `claude plugin install claude-markdown-health-check@ncoevoet-health-check`. The plugin is self-contained — the command resolves its scripts and reference docs from `${CLAUDE_PLUGIN_ROOT}`, so `make install` is **not** needed.
 
 ### Manual (`make install`)
 
