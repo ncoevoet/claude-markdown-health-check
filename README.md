@@ -39,6 +39,21 @@ The chat report groups findings by **area** (Skills, Hooks, Settings & Permissio
 
 ## Install
 
+### Plugin (recommended)
+
+In Claude Code, add the marketplace and install:
+
+```
+/plugin marketplace add ncoevoet/claude-markdown-health-check
+/plugin install claude-markdown-health-check@ncoevoet
+```
+
+`/claude-markdown-health-check` is available right away. Update with `/plugin update claude-markdown-health-check@ncoevoet`, remove with `/plugin uninstall claude-markdown-health-check@ncoevoet`. CLI equivalents: `claude plugin marketplace add ncoevoet/claude-markdown-health-check` then `claude plugin install claude-markdown-health-check@ncoevoet`. The plugin is self-contained — the command resolves its scripts and reference docs from `${CLAUDE_PLUGIN_ROOT}`, so `make install` is **not** needed.
+
+### Manual (`make install`)
+
+For hacking on the command itself, install it straight into `~/.claude/`:
+
 ```bash
 git clone https://github.com/ncoevoet/claude-markdown-health-check.git
 cd claude-markdown-health-check
@@ -57,7 +72,7 @@ make install
 
 `make smoke-scan` refreshes both scan caches and prints their `meta` blocks — useful for verifying install before running the full audit.
 
-> **`make install` is the supported install.** The command resolves the scripts and references at the `~/.claude/` paths the Makefile creates. The bundled `.claude-plugin/` manifest lets the repo appear in a plugin marketplace, but a marketplace install alone does not place the scripts where Phase 5 / 7 / 11 / etc. expect them — run `make install` after enabling the plugin.
+> **Either install works.** As a plugin, the command resolves its scripts and references from `${CLAUDE_PLUGIN_ROOT}` (the installed plugin directory), so it is self-contained — no `make install` step is needed. With `make install` it falls back to the `~/.claude/` paths the Makefile creates. Pick the plugin for a one-step install, `make install` for local development on the command.
 
 This command works in Claude Code only — it depends on filesystem access and bash.
 
