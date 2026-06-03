@@ -1,0 +1,21 @@
+{
+  "id": "39-ungrounded-downgrade",
+  "command": "claude-markdown-health-check",
+  "query": "/claude-markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/ambiguous-trigger",
+    "needs_home_override": true,
+    "scanners": []
+  },
+  "grader": { "method": "llm-rubric" },
+  "grader_rubric": "Reason briefly, then output PASS or FAIL on the last line. The 'formatter' skill's description is broad/vague-sounding but DOES include a 'Use when...' clause, so there is no provably-missing 'when to use' half to quote and no concrete artifact proving the trigger is wrong. PASS if the report does NOT emit a tagged must-fix/should description or trigger finding (WEAK-DESC / OVER-TRIGGER / UNDER-TRIGGER) for this skill on inference alone — i.e. it either stays silent or surfaces the concern as a free-text [OBSERVATION] with no severity chip and no tag. FAIL if it emits a tagged WEAK-DESC / OVER-TRIGGER / UNDER-TRIGGER finding that it cannot ground in quoted evidence. Ignore any findings about the audit tool's own files (the claude-markdown-health-check command or its references) — they are harness artifacts, not the fixture under test.",
+  "expected_behavior": [
+    "does not emit a tagged trigger/description finding it cannot ground in quoted evidence",
+    "at most surfaces the borderline description as a free-text [OBSERVATION]"
+  ],
+  "expected_not_behavior": [
+    "does not flag WEAK-DESC / OVER-TRIGGER / UNDER-TRIGGER on inference alone"
+  ],
+  "assert_no_writes": true
+}

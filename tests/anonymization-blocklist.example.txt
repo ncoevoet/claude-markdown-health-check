@@ -1,0 +1,19 @@
+# Anonymization blocklist — PLACEHOLDER EXAMPLE (committed, safe to publish)
+#
+# The REAL list lives next to this file as `anonymization-blocklist.txt`, which is
+# gitignored and never committed. Copy this file to that name and replace the
+# invented patterns below with the real employer / product / repo / internal
+# ticket-prefix / scanned-project names you must never leak into published
+# artifacts (commands/, tests/fixtures/, README.md).
+#
+# Format: one POSIX extended-regex per line. Blank lines and #-comments ignored.
+# Matching is case-insensitive (grep -i). Keep patterns specific enough not to
+# match legitimate words.
+#
+# The invented patterns below never appear in real content, so on CI (where the
+# real list is absent) the gate runs CLEAN while still exercising the mechanism.
+
+ZZZ-INTERNAL-CODENAME-QUOKKA
+ACME(-|_)WIDGETWORKS(-|_)INTERNAL
+JIRA-PROJ-PREFIX-XYZZY-[0-9]+
+secret-customer-name-placeholder

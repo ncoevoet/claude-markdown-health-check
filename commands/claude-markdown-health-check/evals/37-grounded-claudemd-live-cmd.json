@@ -1,0 +1,20 @@
+{
+  "id": "37-grounded-claudemd-live-cmd",
+  "command": "claude-markdown-health-check",
+  "query": "/claude-markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/grounded-claudemd",
+    "needs_home_override": true,
+    "scanners": []
+  },
+  "grader": { "method": "llm-rubric" },
+  "grader_rubric": "Reason briefly, then output PASS or FAIL on the last line. The fixture's CLAUDE.md documents the command `bash skills/notes/scripts/check.sh`, and that script ACTUALLY EXISTS in the tree (skills/notes/scripts/check.sh); the architecture notes point to skills/notes/, which also exists. PASS only if the report does NOT call that working command or those live paths stale (no CLAUDEMD-STALE for the check.sh command or the skills/notes path) — the artifacts resolve on disk, so the grounding gate must disprove a stale claim. A clean CLAUDE.md verdict is the expected outcome. FAIL if the report flags the live command or path as stale. Ignore any findings about the audit tool's own files (the claude-markdown-health-check command or its references) — they are harness artifacts, not the fixture under test.",
+  "expected_behavior": [
+    "treats the CLAUDE.md command and paths as live (they resolve on disk)"
+  ],
+  "expected_not_behavior": [
+    "does not emit CLAUDEMD-STALE for a command or path that exists"
+  ],
+  "assert_no_writes": true
+}

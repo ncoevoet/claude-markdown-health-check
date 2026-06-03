@@ -1,0 +1,21 @@
+{
+  "id": "41-stale-claudemd-missing-cmd",
+  "command": "claude-markdown-health-check",
+  "query": "/claude-markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/stale-claudemd",
+    "needs_home_override": true,
+    "scanners": []
+  },
+  "grader": { "method": "llm-rubric" },
+  "grader_rubric": "Reason briefly, then output PASS or FAIL on the last line. The fixture's CLAUDE.md documents the command `bash skills/checker/lint.sh` and an architecture note for `skills/checker/`, but NEITHER EXISTS — the tree contains only CLAUDE.md, so that script and path are genuinely missing. The evidence-grounding gate's keep-condition is satisfied (the contradicting artifact — a missing path — is quotable), so the finding must SURVIVE. PASS only if the report flags the CLAUDE.md for pointing at a missing command/path (tag CLAUDEMD-STALE; a DEAD-REF for the same missing path is also acceptable). FAIL if the report calls the CLAUDE.md fine or omits the stale command — that would be the gate wrongly suppressing a real finding. This is the counterpart to case 37 (where the script EXISTS and must NOT be flagged): the gate keeps stale commands and drops live ones. Ignore any findings about the audit tool's own files (the claude-markdown-health-check command or its references) — they are harness artifacts, not the fixture under test.",
+  "expected_behavior": [
+    "flags the CLAUDE.md command/path as stale because skills/checker/lint.sh does not exist (CLAUDEMD-STALE or DEAD-REF)",
+    "the grounding gate keeps it because the missing path is the quotable proof"
+  ],
+  "expected_not_behavior": [
+    "does not treat a command pointing at a missing script as live"
+  ],
+  "assert_no_writes": true
+}

@@ -7,3 +7,6 @@ Thumbs.db
 
 # Transient scheduler runtime state
 .claude/scheduled_tasks.lock
+
+# Real anonymization blocklist — never commit (placeholder .example.txt ships instead)
+tests/anonymization-blocklist.txt

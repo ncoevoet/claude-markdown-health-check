@@ -37,6 +37,8 @@ Thresholds — line counts, description caps, budget fractions, hook timeouts �
 
 The chat report groups findings by **area** (Skills, Hooks, Settings & Permissions, Memory, References, Plugins, CLAUDE.md, …) under a scorecard, each rendered as a plain-language line with a `[must-fix]` / `[should]` / `[polish]` chip; the canonical tag stays as a trailing machine code (e.g. ` · DEAD-REF`). See [`references/report-format.md`](commands/claude-markdown-health-check/references/report-format.md).
 
+Before the report prints, every **judgment** finding (the heuristic calls — weak descriptions, orphaned guides, stale CLAUDE.md commands, …) passes an **evidence-grounding gate**: it survives only if it can be grounded in a quoted artifact on disk (a line, a resolved-or-missing path, a metric), and `[must-fix]` / `[should]` findings then carry that proof as an `Evidence:` locator. A finding that can't be grounded is downgraded to a non-actionable `[OBSERVATION]` or dropped — so a naive false positive (flagging a guide that _is_ referenced, or a command that _does_ exist) never reaches the report. Deterministic scanner findings skip the gate — the script is already the proof. See [`references/finding-verification.md`](commands/claude-markdown-health-check/references/finding-verification.md).
+
 ## Install
 
 ### Plugin (recommended)
@@ -108,13 +110,34 @@ Examples:
 
 The report prints in chat. Reply naming the findings to fix and the command applies them; until then it touches nothing.
 
+## Configuration (optional)
+
+Drop a `markdown-health-check.json` in `~/.claude/` (user defaults) and/or `./.claude/` (project overrides) to make tuning persistent. All keys are optional; a CLI argument always wins over the file. Precedence is **CLI > project > user > default**.
+
+| Key | Default | Effect |
+|---|---|---|
+| `windowDays` | `30` | History window for the telemetry phases (same as `--window-days=N`) |
+| `depth` | `"auto"` | Depth floor — `"auto"`, `"quick"`, `"standard"`, `"deep"` (a `quick`/`deep` arg overrides it) |
+| `verifyFindings` | `true` | Run the evidence-grounding gate over judgment findings; `false` emits them unverified (debug) |
+| `skipPhases` | `[]` | Phase numbers to skip (Phase 5, the deterministic spine, never skips) |
+| `compressBodies` | `false` | Persistent equivalent of `--compress-bodies` |
+| `severityFloor` | `"polish"` | Lowest chip to report — `"should"` hides `[polish]`; `"must-fix"` hides `[polish]` + `[should]` |
+| `maxFindingsPerDomain` | `0` | Per-domain finding cap (`0` = unlimited); excess is summarised, never silently dropped |
+| `guidanceCacheTtlDays` | `7` | TTL before the threshold cache re-fetches the Anthropic docs |
+
+```json
+{ "windowDays": 14, "severityFloor": "should", "skipPhases": [23] }
+```
+
+Full per-key rationale: [`references/config-keys.md`](commands/claude-markdown-health-check/references/config-keys.md).
+
 ## How it works — phases
 
 The phase sequence runs flat from 1 to 25, renumbered from the previous 5a / 5b / 5.5 / 7a scheme — see the [Migration note](#migration-note) below.
 
 | Phase | What it does | Depth |
 |---|---|---|
-| 1 — Load Thresholds | Fetches skill / memory / settings / hooks limits from the Anthropic docs; caches at `~/.claude/.cache/claude-markdown-health-check-guidance.json` | All |
+| 1 — Load Config + Thresholds | Reads optional `markdown-health-check.json`, then fetches skill / memory / settings / hooks limits from the Anthropic docs; caches at `~/.claude/.cache/claude-markdown-health-check-guidance.json` | All |
 | 2 — Plugin Install Integrity | `installed_plugins.json` vs on-disk cache: broken refs, missing manifests, version drift | Standard + Deep |
 | 3 — Select Depth | Picks Quick / Standard / Deep from the argument and the size of your ecosystem | All |
 | 4 — Focus + History | Reads the focus message (if any) and mines the current session for recurring bugs, corrections, uncovered patterns | Standard + Deep |
@@ -137,7 +160,7 @@ The phase sequence runs flat from 1 to 25, renumbered from the previous 5a / 5b 
 | 21 — Name Collisions | Same basename in `commands/` and `skills/` (runs inside Phase 5) | All |
 | 22 — Agents Never-Spawned | Agents on disk never invoked in window | Standard + Deep |
 | 23 — Token Trend | Per-session input/output/cache tokens — low cache-hit, output bloat | Deep |
-| 24 — Report | Scorecard + findings grouped by area, each a plain-language line with a must-fix / should / polish chip and a trailing tag code; optional summary blocks per active phase | All |
+| 24 — Report | A mandatory pre-print pass first **grounds every judgment finding** (drop / downgrade / keep-with-`Evidence:`), then renders a scorecard + findings grouped by area, each a plain-language line with a must-fix / should / polish chip and a trailing tag code; optional summary blocks per active phase | All |
 | 25 — Post-Report Menu | Pick a fix scope, apply, re-validate, loop until done | All |
 
 ## Migration note
@@ -166,16 +189,17 @@ Two layers, following Anthropic's [develop-tests](https://platform.claude.com/do
 
 - **Deterministic (code-graded, CI-safe, no API key).** Synthetic `.claude/` fixture trees under `tests/fixtures/<case>/` each plant one defect; the suite runs `validate-skills.sh` / `scan-graph.sh` against them and asserts the exact `[TAG]` set. A `clean/` fixture asserts **zero** findings — the false-positive guard.
   ```bash
-  make test              # bash tests/run.sh — 32 code-graded cases, 97 assertions
-  bash tests/run.sh 02   # run one case / id-prefix
+  make test              # bash tests/run.sh — anonymization + eval-schema gates, then 32 code-graded cases (97 assertions)
+  bash tests/run.sh 02   # run one case / id-prefix (deterministic suite only)
   ```
-- **Behavioural (LLM-graded, opt-in, costs tokens).** Runs the full `/claude-markdown-health-check` headless against a fixture to exercise the judgment phases (weak descriptions, thin CLAUDE.md, autonomy-gate compliance), graded by an LLM rubric and scored by majority over N runs.
+  `tests/run.sh` also runs two release gates first: an **anonymization** check (no real scanned-project names in the published `commands/`, `tests/fixtures/`, `README.md` — the real blocklist is gitignored, a placeholder ships) and **eval-schema validation** (`validate-evals.sh` asserts every case matches the contract before an expensive run is wasted on a malformed one).
+- **Behavioural (LLM-graded, opt-in, costs tokens).** Runs the full `/claude-markdown-health-check` headless against a fixture to exercise the judgment phases (weak descriptions, thin CLAUDE.md, autonomy-gate compliance) and the evidence-grounding gate — including paired guards (cases 36–41: a referenced guide and a live CLAUDE.md command must _not_ be flagged, while a genuinely-orphaned guide and a missing-script command must _still_ be), graded by an LLM rubric and scored by majority over N runs.
   ```bash
   make evals                            # needs the authenticated `claude` CLI
   HEALTH_CHECK_EVAL_RUNS=3 make evals   # majority vote to smooth LLM noise
   ```
 
-Cases live in `commands/claude-markdown-health-check/evals/*.json` (`grader.method` = `code` or `llm-rubric`); fixtures in `tests/fixtures/`. Tags are the stable machine contract, so the code-graded cases are immune to report-format changes. CI (`.github/workflows/ci.yml`) runs shellcheck + `bash -n` + JSON validation + the deterministic suite on every push; it does **not** run the token-spending LLM evals. Every real-world miss or false positive should become a new case.
+Cases live in `commands/claude-markdown-health-check/evals/*.json` (41 cases: 32 `grader.method: code` + 9 `llm-rubric`); fixtures in `tests/fixtures/`. Tags are the stable machine contract, so the code-graded cases are immune to report-format changes. CI (`.github/workflows/ci.yml`) runs shellcheck + `bash -n` + the anonymization gate + eval-schema validation + the deterministic suite on every push; it does **not** run the token-spending LLM evals. Every real-world miss or false positive should become a new case.
 
 ## Requirements
 
@@ -189,9 +213,10 @@ Cases live in `commands/claude-markdown-health-check/evals/*.json` (`grader.meth
 
 ```
 commands/
-├── claude-markdown-health-check.md          # the slash command (~400 lines, orchestrator)
+├── claude-markdown-health-check.md          # the slash command (~440 lines, orchestrator)
 ├── claude-markdown-health-check/
 │   ├── references/
+│   │   ├── config-keys.md                   # Phase 1 config schema (markdown-health-check.json)
 │   │   ├── skill-listing-budget.md          # Phase 6 audit logic
 │   │   ├── skill-usage-metrics.md           # Phase 7
 │   │   ├── skill-tool-contract.md           # Phase 9
@@ -205,25 +230,29 @@ commands/
 │   │   ├── memory-hygiene.md                # Phase 20
 │   │   ├── plugin-integrity.md              # Phase 2
 │   │   ├── token-trend.md                   # Phase 23
+│   │   ├── finding-verification.md          # Pre-print evidence-grounding gate (judgment findings)
 │   │   ├── report-format.md                 # Phase 24 report rendering — domain map + scorecard
 │   │   └── post-report-menu.md              # Phase 25 menu
 │   └── evals/                               # data-driven eval cases
-│       ├── 01-clean-zero-findings.json … 35-secret-word-boundary.json  (32 code + 3 LLM)
+│       ├── 01-clean-zero-findings.json … 41-stale-claudemd-missing-cmd.json  (32 code + 9 LLM)
 │       └── README.md                        # eval schema + how to run
 └── scripts/
     ├── validate-skills.sh                   # deterministic compliance validator (Phase 5)
     ├── scan-graph.sh                        # static graph scanner (Phases 2, 11, 20)
     ├── scan-history.sh                      # session-log miner (Phases 7, 9, 15, 16, 19, 22, 23)
+    ├── validate-evals.sh                    # eval-case schema/contract gate (CI)
     ├── run-evals-headless.sh                # opt-in LLM-graded eval runner
     └── run-evals.sh                         # manual eval runner
 
 tests/                                       # deterministic test suite (dev-only, CI)
-├── run.sh                                   # entrypoint → test_scripts.sh
+├── run.sh                                   # entrypoint → anonymization + eval-schema + scanners
+├── check-anonymization.sh                   # release gate: no real names in published artifacts
+├── anonymization-blocklist.example.txt      # placeholder blocklist (real one is gitignored)
 ├── lib.sh                                   # assert helpers + tag extractors
 ├── test_scripts.sh                          # data-driven runner over evals/*.json
 └── fixtures/<case>/.claude/…                # synthetic trees, one planted defect each
 
-.github/workflows/ci.yml                     # shellcheck + bash -n + JSON + tests/run.sh
+.github/workflows/ci.yml                     # shellcheck + bash -n + tests/run.sh (anon + eval-schema + scanners)
 ```
 
 All plain Markdown and shell — read, fork, extend.

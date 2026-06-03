@@ -27,7 +27,28 @@ if [[ -d "$PWD/.claude" ]]; then PROJECT_DIR="$PWD/.claude"; fi
 - For `REPURPOSE` items: the destination `references/*.md` MUST be written and the SKILL.md References section MUST be updated BEFORE the source orphan is deleted.
 - Done when: report printed in chat AND user has either named fixes OR explicitly declined further action.
 
-## Phase 1 — Load Thresholds
+## Phase 1 — Load Config + Thresholds
+
+### Config (optional)
+
+Load `.claude/markdown-health-check.json` if present — user defaults merged with project overrides, CLI args winning. See `config-keys.md` for every key, default, and the precedence rule (**CLI > project > user > default**).
+
+```bash
+CFG="$(jq -s '.[0] * .[1]' \
+        <(jq '.' "$HOME/.claude/markdown-health-check.json" 2>/dev/null || echo '{}') \
+        <(jq '.' "$PWD/.claude/markdown-health-check.json"  2>/dev/null || echo '{}') \
+        2>/dev/null || echo '{}')"
+WINDOW="${WINDOW:-$(jq -rn --argjson c "$CFG" '$c.windowDays // 30')}"   # --window-days wins
+VERIFY_FINDINGS="$(jq -rn --argjson c "$CFG" '$c.verifyFindings // true')"
+SEVERITY_FLOOR="$(jq -rn  --argjson c "$CFG" '$c.severityFloor // "polish"')"
+MAX_PER_DOMAIN="$(jq -rn  --argjson c "$CFG" '$c.maxFindingsPerDomain // 0')"
+SKIP_PHASES="$(jq -rn     --argjson c "$CFG" '($c.skipPhases // []) | join(" ")')"
+TTL_DAYS="$(jq -rn        --argjson c "$CFG" '$c.guidanceCacheTtlDays // 7')"
+```
+
+Apply them: `depth`/`quick`/`deep` CLI args override `CFG.depth` in Phase 3; `WINDOW` feeds the telemetry phases; `VERIFY_FINDINGS` gates the Pre-print grounding step (off ⇒ judgment findings emitted unverified); `SKIP_PHASES` removes phases (**Phase 5 is never skippable** — it is the deterministic spine); `SEVERITY_FLOOR`/`MAX_PER_DOMAIN` shape the report (Phase 24); `compressBodies` mirrors `--compress-bodies` (Phase 13). If the config file is present but invalid JSON, emit `[OBSERVATION] config: markdown-health-check.json is not valid JSON — using defaults` and proceed with defaults.
+
+### Thresholds (fetch + cache)
 
 Source of truth is the official Anthropic docs. Cache the fetch to avoid 5 round-trips per invocation.
 
@@ -35,9 +56,10 @@ Source of truth is the official Anthropic docs. Cache the fetch to avoid 5 round
 CACHE="${CLAUDE_PLUGIN_DATA:-$HOME/.claude/.cache}/claude-markdown-health-check-guidance.json"
 mkdir -p "$(dirname "$CACHE")"
 AGE_SEC=$(( $(date +%s) - $(stat -c %Y "$CACHE" 2>/dev/null || echo 0) ))
+TTL_SEC=$(( ${TTL_DAYS:-7} * 86400 ))
 ```
 
-Use the cache when `[[ -s "$CACHE" && $AGE_SEC -lt 604800 ]]` AND the user did NOT pass `--refresh`. Otherwise WebFetch in parallel:
+Use the cache when `[[ -s "$CACHE" && $AGE_SEC -lt $TTL_SEC ]]` AND the user did NOT pass `--refresh`. Otherwise WebFetch in parallel:
 
 - https://code.claude.com/docs/en/skills
 - https://platform.claude.com/docs/en/agents-and-tools/agent-skills/best-practices
@@ -96,7 +118,7 @@ HOOKS=$(ls "$USER_DIR"/hooks/*.sh ${PROJECT_DIR:+"$PROJECT_DIR"/hooks/*.sh} 2>/d
 | Standard | default | 1–18, 20, 24, 25 |
 | Deep | user said `deep` / `comprehensive`, OR `$SKILLS>20` | 1–25 (full) |
 
-`--window-days=N` overrides the 30-day default used by Phases 7, 9, 15, 16, 19, 22, 23.
+`--window-days=N` overrides the 30-day default used by Phases 7, 9, 15, 16, 19, 22, 23. When no `quick`/`deep` arg is given, the `depth` config key (`config-keys.md`) sets the floor; `SKIP_PHASES` (config) then removes any listed phases from the selected set — except Phase 5, which always runs.
 
 ## Phase 4 — Read Focus + History
 
@@ -195,7 +217,7 @@ Skip at Quick depth. A short but accurate CLAUDE.md is not a finding.
 
 ## Phase 13 — Body Compression (detection + opt-in rewrite)
 
-Detects prose drift in skill bodies, rule bodies, and reference files. Detection always runs at Standard + Deep depth and emits `BODY-FILLER-HIGH` (Hygiene). Rewrite sub-phase is opt-in only — triggered by `--compress-bodies`.
+Detects prose drift in skill bodies, rule bodies, and reference files. Detection always runs at Standard + Deep depth and emits `BODY-FILLER-HIGH` (Hygiene). Rewrite sub-phase is opt-in only — triggered by `--compress-bodies` or the `compressBodies` config key.
 
 See `body-compression.md` for the filler-density formula, candidate selection rules, the constrained cavecrew-builder prompt template, post-rewrite validation gates, and the idempotency marker convention.
 
@@ -395,17 +417,18 @@ issues: Skills 3 · Hooks 1 · Settings & Permissions 1
 - Number findings 1…N globally in reading order (domain order, then chip severity within a domain) so the Phase 25 menu can reference "finding N" and "all must-fix".
 - Empty domains and empty summary blocks MUST be omitted
 - Output MUST NOT contain XML tags
-- Every tag shown MUST be drawn from the canonical Tag Set; the tag is the trailing machine code and MUST NOT be dropped
+- Every tag shown MUST be drawn from the canonical Tag Set; the tag is the trailing machine code and MUST NOT be dropped. The one exception: `[OBSERVATION]` lines carry no tag by definition (`OBSERVATION` is a free-text bucket, not a tag), so a judgment finding the grounding gate downgrades to an observation is correctly tag-less — this is not a dropped tag.
 - Summary blocks (Plugin Integrity, Skill Usage, Reference Graph, Permission Hygiene, Hook Health, Auto-memory, Cross-session patterns, Context Trend) MUST be omitted when their phase produced no signal
 
-## Pre-print pass (MANDATORY before printing the report)
+## Pre-print pass — Verify, Ground & Self-check (MANDATORY before printing the report)
 
-1. **Tag canon enforcement** — every `[TAG]` in the draft MUST appear in the Tag Set above. For any tag that does not:
+1. **Evidence-grounding gate (verify judgment findings).** Run every JUDGMENT finding through `finding-verification.md` BEFORE the checks below — it can drop or downgrade findings, so the later checks must operate on the final set. Deterministic / script-relayed findings (the `validate-skills.sh`, `scan-graph.sh`, and `scan-history.sh` tags listed in that doc) take the skip-verification fast path — they are already proof-backed and are NOT re-verified. For each surviving judgment finding, either attach an `Evidence:` locator (grounded), downgrade it to `[OBSERVATION]` (plausible but ungrounded), or drop it (disproven). Honour the `verifyFindings` config (default on); skip only when explicitly disabled. Resolve the spec the same way as `post-report-menu.md`: first that exists of `${CLAUDE_PLUGIN_ROOT}/commands/claude-markdown-health-check/references/finding-verification.md`, `~/.claude/claude-markdown-health-check/references/finding-verification.md`, or the repo copy.
+2. **Tag canon enforcement** — every `[TAG]` in the draft MUST appear in the Tag Set above. For any tag that does not:
    - Relabel to the closest canonical tag
    - If no canonical tag fits, drop the finding rather than invent a new tag
-2. **Scope enforcement** — every finding belongs to exactly one scope block, whose header states the scope (`## .claude health (user|project)`). No finding may appear outside a scope block.
-3. **Single output channel** — confirm no Write/Edit tool calls were made to disk during this run. If one slipped through, list it under `[OBSERVATION] self-violation: wrote <path> against autonomy-gate rule` at the top.
-4. **Privacy** — confirm no raw `cwd` paths or full session UUIDs from `history-scan.json` leaked into findings. Session IDs may appear as 8-char prefixes only.
+3. **Scope enforcement** — every finding belongs to exactly one scope block, whose header states the scope (`## .claude health (user|project)`). No finding may appear outside a scope block.
+4. **Single output channel** — confirm no Write/Edit tool calls were made to disk during this run. If one slipped through, list it under `[OBSERVATION] self-violation: wrote <path> against autonomy-gate rule` at the top.
+5. **Privacy** — confirm no raw `cwd` paths or full session UUIDs from `history-scan.json` leaked into findings. Session IDs may appear as 8-char prefixes only.
 
 Only after this self-check passes, print the report to chat.
 

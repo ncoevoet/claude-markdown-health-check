@@ -57,6 +57,21 @@ HEALTH_CHECK_EVAL_RUNS=3 make evals    # majority vote over 3 runs to smooth LLM
 Every real-world miss or false positive should become a new case. Add a fixture
 tree under `tests/fixtures/<name>/.claude/...`, then a `NN-name.json` here.
 
+**Evidence-grounding gate (cases 36–41).** The judgment phases run through the
+Pre-print evidence-grounding gate (`references/finding-verification.md`) before the
+report prints. These `llm-rubric` cases cover it from both directions:
+
+- **False-positive guards** — `36` (a guide referenced from CLAUDE.md) and `37` (a
+  CLAUDE.md command whose script exists) must NOT be flagged orphaned/stale, because
+  the artifact resolves on disk.
+- **False-negative guards** — `40` (a genuinely unreferenced guide) and `41` (a
+  CLAUDE.md command whose script is missing) MUST still be flagged. The gate drops
+  false positives without silencing true positives; `40`/`41` are the exact
+  counterparts of `36`/`37`.
+- **Render + downgrade** — `38` asserts a kept `WEAK-DESC` carries an `Evidence:`
+  locator quoting the description; `39` asserts an ungrounded-but-plausible trigger
+  concern is downgraded to `[OBSERVATION]` rather than emitted as a tagged finding.
+
 **Future work — history phases.** Phases that read session telemetry via
 `scan-history.sh` (SKILL-DORMANT, SKILL-NEVER-FIRED, HOOK-FAILING, token trend)
 are not yet covered: they need synthetic `~/.claude/projects/*/*.jsonl`

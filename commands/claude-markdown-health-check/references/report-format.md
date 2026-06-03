@@ -83,6 +83,43 @@ indented, with the tag trailing after ` · `:
 - Within a domain, order findings `[must-fix]` → `[should]` → `[polish]`.
 - Keep the tag — it is the stable machine code (and what the eval harness checks).
 
+For `[must-fix]` and `[should]` findings, the indented second line is an
+**`Evidence:`** locator — the concrete artifact the Pre-print grounding gate
+verified the finding against (`finding-verification.md`), then the path + trailing
+tag. A kept top-tier finding shows what proved it; the locator is the evidence, not
+a restatement of the problem. `[polish]` findings keep the plain one-line locator —
+they are cosmetic and do not warrant the extra grounding.
+
+```
+ [must-fix] <plain sentence describing the problem in human terms>
+            Evidence: <quoted token | resolved/missing path | metric> — <path>  · TAG
+```
+
+Evidence locator forms (pick the one the tag was grounded on):
+- quoted token — `"write clean code"` (boilerplate), `Bash(cat:*)` (broad pattern)
+- resolved/missing path — `→ references/api.md (missing)`, `← 0 inbound refs`
+- metric — `0 invocations / 30d · 4.2k chars/session`, `284/304 runs failed (93%)`
+
+Deterministic fast-path findings still show an Evidence locator, but it cites the
+script signal (the missing path the validator resolved, the metric from a scan
+cache) — no re-verification, just surfacing the proof the tool already produced.
+
+## Config-driven filtering
+
+Two optional config keys (`config-keys.md`) shape what the report shows — apply them
+AFTER numbering is computed so hidden items don't leave gaps:
+
+- `severityFloor` (default `"polish"`) — drop chips below the floor. `"should"` hides
+  `[polish]`; `"must-fix"` hides `[polish]` and `[should]`. Discovery `[idea]` items
+  are never filtered.
+- `maxFindingsPerDomain` (default `0` = unlimited) — within a domain, show the N
+  highest-severity findings and collapse the rest into a trailing
+  `… + K more [polish] in <Domain> (raise maxFindingsPerDomain to see all)` line, so
+  truncation is never silent.
+
+Both default to showing everything; a scope with nothing left after filtering prints
+its normal clean-tree line.
+
 ## Finding numbering
 
 Number findings **1..N globally**, in reading order (domains in the fixed order
@@ -98,15 +135,15 @@ issues: Skills 3 · Hooks 1 · Settings & Permissions 1
 
 ## Skills
  1. [must-fix] atlassian links to a missing file (references/api.md)
-               skills/atlassian/SKILL.md                          · DEAD-REF
+               Evidence: → references/api.md (missing) — skills/atlassian/SKILL.md   · DEAD-REF
  2. [should]   atlassian body is 412 lines with no references/ split
-               skills/atlassian/SKILL.md                   · NEEDS-REFERENCES
+               Evidence: 412 lines · no references/ dir — skills/atlassian/SKILL.md   · NEEDS-REFERENCES
  3. [should]   atlassian is unused in the last 30 days but loads 4.2k chars each session
-               skills/atlassian                               · SKILL-DORMANT
+               Evidence: 0 invocations / 30d · 4.2k chars/session — skills/atlassian   · SKILL-DORMANT
 
 ## Hooks
  4. [must-fix] the Edit hook fails on almost every run (284/304, 93%)
-               PreToolUse:Edit                                  · HOOK-FAILING
+               Evidence: 284/304 runs failed (93%) — PreToolUse:Edit   · HOOK-FAILING
 
 ## Settings & Permissions
  5. [polish]   Bash(cat:*) lets any file be read — scope it to ~/.claude

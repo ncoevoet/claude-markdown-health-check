@@ -19,13 +19,10 @@ jobs:
         run: |
           for f in commands/scripts/*.sh tests/*.sh; do bash -n "$f"; done
 
-      - name: Validate eval JSON parses
-        run: |
-          for f in commands/claude-markdown-health-check/evals/*.json; do
-            jq empty "$f" || { echo "INVALID JSON: $f"; exit 1; }
-          done
-
-      - name: Deterministic test suite
+      # Eval JSON parse + full schema/contract validation, the anonymization
+      # gate, and the deterministic scanner suite all run inside tests/run.sh
+      # (the standalone `jq empty` loop is subsumed by validate-evals.sh).
+      - name: Deterministic test suite (anonymization + eval-schema + scanners)
         run: bash tests/run.sh
 
       # NOTE: the LLM-graded behavioural evals (make evals) are intentionally NOT
