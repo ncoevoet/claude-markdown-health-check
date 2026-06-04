@@ -85,7 +85,13 @@ scan_plugins() {
         local pj
         pj=$(find "$ip" -maxdepth 3 -name 'plugin.json' 2>/dev/null | head -1)
         if [ -z "$pj" ]; then
-            emit_finding 2 "PLUGIN-MISSING-MANIFEST" "$key" "no plugin.json under $ip"
+            # Modern marketplaces keep plugin.json in the catalog, not the version dir.
+            # Accept .mcp.json / skills/ / commands/ / agents/ as manifest-equivalent
+            # evidence the plugin defines capabilities; only flag a truly empty install.
+            if [ -f "$ip/.mcp.json" ] || [ -d "$ip/skills" ] || [ -d "$ip/commands" ] || [ -d "$ip/agents" ]; then
+                continue
+            fi
+            emit_finding 2 "PLUGIN-MISSING-MANIFEST" "$key" "no plugin.json or capability dir under $ip"
             continue
         fi
         local disk_ver

@@ -255,7 +255,21 @@ collect_telemetry() {
 
 collect_skill_usage_ledger() {
     [ -f "$SKILLUSAGE_FILE" ] || { echo '{}'; return 0; }
-    jq -c '.skillUsage // {}' "$SKILLUSAGE_FILE" 2>/dev/null || echo '{}'
+    # Raw per-machine cumulative ledger, plus a normalization pass: a skill invoked
+    # as a subagent is recorded under "agents:<name>" (e.g. "agents:code-review-agent"),
+    # which Phase 7's exact-name lookup would otherwise miss and mis-flag as never-fired.
+    # Fold each "agents:<name>" entry into a bare "<name>" alias (summing usageCount,
+    # keeping the latest lastUsedAt) while preserving the original keys.
+    jq -c '
+      (.skillUsage // {}) as $raw
+      | reduce ($raw | to_entries[]) as $e ($raw;
+          if ($e.key | startswith("agents:")) then
+            ($e.key | ltrimstr("agents:")) as $base
+            | .[$base] = ((.[$base] // {usageCount:0, lastUsedAt:0})
+                | .usageCount += ($e.value.usageCount // 0)
+                | .lastUsedAt = ([.lastUsedAt, ($e.value.lastUsedAt // 0)] | max))
+          else . end)
+    ' "$SKILLUSAGE_FILE" 2>/dev/null || echo '{}'
 }
 
 main() {
@@ -287,24 +301,33 @@ main() {
           files_scanned:$files, elapsed_seconds:$elapsed,
           partial:($partial==1), partial_reason:$reason}')
 
+    # Route the large aggregates through files (--slurpfile), not argv (--argjson):
+    # on installs with thousands of transcripts these blobs exceed ARG_MAX and jq
+    # aborts with "Argument list too long", leaving an empty history-scan.json.
     local out_tmp="$CACHE_FILE.tmp"
+    local jsonl_tmp="$CACHE_FILE.jsonl.tmp" tel_tmp="$CACHE_FILE.tel.tmp" ledger_tmp="$CACHE_FILE.ledger.tmp"
+    printf '%s' "$jsonl_agg"     > "$jsonl_tmp"
+    printf '%s' "$telemetry_agg" > "$tel_tmp"
+    printf '%s' "$ledger"        > "$ledger_tmp"
     jq -n \
         --argjson meta "$meta" \
-        --argjson jsonl "$jsonl_agg" \
-        --argjson tel "$telemetry_agg" \
-        --argjson ledger "$ledger" \
-        '{
+        --slurpfile jsonl "$jsonl_tmp" \
+        --slurpfile tel "$tel_tmp" \
+        --slurpfile ledger "$ledger_tmp" \
+        '($jsonl[0] // {}) as $j | ($tel[0] // {}) as $t | ($ledger[0] // {}) as $l |
+         {
             meta:$meta,
-            skills:($jsonl.skills // {}),
-            skillLedger:$ledger,
-            denials:{count:($jsonl.denialCount // 0)},
-            apiEvents:$tel,
-            hookEvents:($jsonl.hookEvents // {}),
-            agentSpawns:($jsonl.agentSpawns // {}),
-            corrections:($jsonl.corrections // []),
-            tokenUsage:($jsonl.tokenUsage // {})
+            skills:($j.skills // {}),
+            skillLedger:$l,
+            denials:{count:($j.denialCount // 0)},
+            apiEvents:$t,
+            hookEvents:($j.hookEvents // {}),
+            agentSpawns:($j.agentSpawns // {}),
+            corrections:($j.corrections // []),
+            tokenUsage:($j.tokenUsage // {})
          }' > "$out_tmp"
 
+    rm -f "$jsonl_tmp" "$tel_tmp" "$ledger_tmp"
     mv -f "$out_tmp" "$CACHE_FILE"
     cat "$CACHE_FILE"
 }
