@@ -1,6 +1,8 @@
 # /claude-markdown-health-check
 
-A `.claude/` ecosystem auditor for [Claude Code](https://docs.claude.com/en/docs/claude-code/overview). One slash command scans your skills, commands, hooks, agents, settings, plugins, and auto-memory — across both the user tree (`~/.claude`) and the project tree (`./.claude`) — and prints one flat, prioritized health report. It finds dead references, weak or mismatched triggers, token bloat, skill-listing-budget overflow, frontmatter violations, dormant skills, failing hooks, drifted permissions, dead memory links, and per-session context bloat.
+A `.claude/` ecosystem auditor for [Claude Code](https://docs.claude.com/en/docs/claude-code/overview). One slash command scans your skills, commands, hooks, agents, settings, plugins, and auto-memory — across both the user tree (`~/.claude`) and the project tree (`./.claude`) — and prints one flat, prioritized health report. 
+
+It finds dead references, weak or mismatched triggers, token bloat, skill-listing-budget overflow, frontmatter violations, dormant skills, failing hooks, drifted permissions, dead memory links, and per-session context bloat.
 
 It reports first and waits. Nothing is edited, moved, or deleted until you reply naming which findings to fix — that autonomy gate is built into the command.
 
@@ -37,7 +39,13 @@ Thresholds — line counts, description caps, budget fractions, hook timeouts �
 
 The chat report groups findings by **area** (Skills, Hooks, Settings & Permissions, Memory, References, Plugins, CLAUDE.md, …) under a scorecard, each rendered as a plain-language line with a `[must-fix]` / `[should]` / `[polish]` chip; the canonical tag stays as a trailing machine code (e.g. ` · DEAD-REF`). See [`references/report-format.md`](commands/claude-markdown-health-check/references/report-format.md).
 
-Before the report prints, every **judgment** finding (the heuristic calls — weak descriptions, orphaned guides, stale CLAUDE.md commands, …) passes an **evidence-grounding gate**: it survives only if it can be grounded in a quoted artifact on disk (a line, a resolved-or-missing path, a metric), and `[must-fix]` / `[should]` findings then carry that proof as an `Evidence:` locator. A finding that can't be grounded is downgraded to a non-actionable `[OBSERVATION]` or dropped — so a naive false positive (flagging a guide that _is_ referenced, or a command that _does_ exist) never reaches the report. Deterministic scanner findings skip the gate — the script is already the proof. See [`references/finding-verification.md`](commands/claude-markdown-health-check/references/finding-verification.md).
+Before the report prints, every **judgment** finding (the heuristic calls — weak descriptions, orphaned guides, stale CLAUDE.md commands, …) passes an **evidence-grounding gate**: 
+
+it survives only if it can be grounded in a quoted artifact on disk (a line, a resolved-or-missing path, a metric), and `[must-fix]` / `[should]` findings then carry that proof as an `Evidence:` locator. 
+
+A finding that can't be grounded is downgraded to a non-actionable `[OBSERVATION]` or dropped — so a naive false positive (flagging a guide that _is_ referenced, or a command that _does_ exist) never reaches the report. 
+
+Deterministic scanner findings skip the gate — the script is already the proof. See [`references/finding-verification.md`](commands/claude-markdown-health-check/references/finding-verification.md).
 
 ## Install
 
@@ -50,7 +58,13 @@ In Claude Code, add the marketplace and install:
 /plugin install claude-markdown-health-check@ncoevoet-health-check
 ```
 
-`/claude-markdown-health-check` is available right away. Update with `/plugin update claude-markdown-health-check@ncoevoet-health-check`, remove with `/plugin uninstall claude-markdown-health-check@ncoevoet-health-check`. CLI equivalents: `claude plugin marketplace add ncoevoet/claude-markdown-health-check` then `claude plugin install claude-markdown-health-check@ncoevoet-health-check`. The plugin is self-contained — the command resolves its scripts and reference docs from `${CLAUDE_PLUGIN_ROOT}`, so `make install` is **not** needed.
+`/claude-markdown-health-check` is available right away. 
+
+Update with `/plugin update claude-markdown-health-check@ncoevoet-health-check`, remove with `/plugin uninstall claude-markdown-health-check@ncoevoet-health-check`. 
+
+CLI equivalents: `claude plugin marketplace add ncoevoet/claude-markdown-health-check` then `claude plugin install claude-markdown-health-check@ncoevoet-health-check`. 
+
+The plugin is self-contained — the command resolves its scripts and reference docs from `${CLAUDE_PLUGIN_ROOT}`, so `make install` is **not** needed.
 
 ### Manual (`make install`)
 
@@ -199,7 +213,9 @@ Two layers, following Anthropic's [develop-tests](https://platform.claude.com/do
   HEALTH_CHECK_EVAL_RUNS=3 make evals   # majority vote to smooth LLM noise
   ```
 
-Cases live in `commands/claude-markdown-health-check/evals/*.json` (41 cases: 32 `grader.method: code` + 9 `llm-rubric`); fixtures in `tests/fixtures/`. Tags are the stable machine contract, so the code-graded cases are immune to report-format changes. CI (`.github/workflows/ci.yml`) runs shellcheck + `bash -n` + the anonymization gate + eval-schema validation + the deterministic suite on every push; it does **not** run the token-spending LLM evals. Every real-world miss or false positive should become a new case.
+Cases live in `commands/claude-markdown-health-check/evals/*.json` (41 cases: 32 `grader.method: code` + 9 `llm-rubric`); fixtures in `tests/fixtures/`. 
+
+Tags are the stable machine contract, so the code-graded cases are immune to report-format changes. CI (`.github/workflows/ci.yml`) runs shellcheck + `bash -n` + the anonymization gate + eval-schema validation + the deterministic suite on every push; it does **not** run the token-spending LLM evals. Every real-world miss or false positive should become a new case.
 
 ## Requirements
 
