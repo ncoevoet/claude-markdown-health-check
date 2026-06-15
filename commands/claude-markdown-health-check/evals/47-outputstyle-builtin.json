@@ -1,0 +1,19 @@
+{
+  "id": "47-outputstyle-builtin",
+  "command": "claude-markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/outputstyle-builtin",
+    "needs_home_override": false,
+    "scanners": ["scan-graph"]
+  },
+  "grader": { "method": "code" },
+  "success_criteria": {
+    "must_detect": [],
+    "must_not_flag": ["OUTPUTSTYLE-MISSING"],
+    "expect_clean": true
+  },
+  "expected_behavior": [
+    "scan-graph.sh treats the capitalized built-in style 'Explanatory' as valid (case-insensitive) and emits no OUTPUTSTYLE-MISSING"
+  ]
+}

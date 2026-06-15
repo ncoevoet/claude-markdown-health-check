@@ -1,0 +1,19 @@
+{
+  "id": "45-settings-bypass-mode",
+  "command": "claude-markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/settings-bypass-mode",
+    "needs_home_override": false,
+    "scanners": ["validate-skills"]
+  },
+  "grader": { "method": "code" },
+  "success_criteria": {
+    "must_detect": [ { "tag": "SETTINGS-BYPASS-MODE", "path_substring": "settings" } ],
+    "must_not_flag": ["SETTINGS-MCP-AUTOAPPROVE"],
+    "expect_clean": false
+  },
+  "expected_behavior": [
+    "validate-skills.sh emits [SETTINGS-BYPASS-MODE] because permissions.defaultMode is bypassPermissions, which auto-approves every tool call"
+  ]
+}

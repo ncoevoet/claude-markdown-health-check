@@ -14,13 +14,14 @@ It reports first and waits. Nothing is edited, moved, or deleted until you reply
 | **Skill-listing budget** | cumulative `description` + `when_to_use` block exceeding Claude Code's 1%-of-context budget; low-relevance and duplicate-domain skills |
 | **Skill usage** | dormant skills (no fires in 30d), never-fired skills, misfiring skills (loaded but no follow-through), orphan ledger entries |
 | **Skill–tool contract** | tools declared in `allowed-tools` but never called, tools called but not declared |
-| **Frontmatter schema** | `description` too short, `model` not in whitelist, `allowed-tools` malformed, unknown fields |
+| **Frontmatter schema** | `description` too short, `model` not in whitelist (`opus`/`sonnet`/`haiku`/`fable` families), `allowed-tools` malformed, unknown fields |
 | **Hooks** | files on disk not registered in `settings.json`, duplicate logic, suspicious timeouts, matchers that match no real tool |
 | **Hook reliability** | high failure-rate hooks, hooks registered but never fired, event-type mismatches |
 | **Agents** | triggers unreachable from `CLAUDE.md`, overlapping agents, agents on disk never spawned in 30d |
-| **Settings** | malformed JSON, duplicate JSON keys, duplicate array entries, MCP servers missing from `preApprovedTools`, over-broad Bash patterns, stale reminders |
+| **Settings** | malformed JSON, duplicate JSON keys, duplicate array entries, MCP servers missing from `preApprovedTools`, over-broad Bash patterns, stale reminders, risky security keys (`defaultMode: bypassPermissions`, `enableAllProjectMcpServers: true`) |
 | **Permission hygiene** | dead allowlist entries (zero grants), over-broad `:*` patterns, name collisions between `commands/` and `skills/` |
-| **Plugins** | `installed_plugins.json` entries with missing `installPath`, missing `plugin.json` manifest, version drift between manifest and on-disk |
+| **Plugins & MCP** | `installed_plugins.json` entries with missing `installPath`, missing `plugin.json` manifest, version drift between manifest and on-disk, deprecated `sse` MCP transport in `.mcp.json` |
+| **Output styles** | `outputStyle` setting naming a non-existent (and non-built-in) style |
 | **Cross-references** | dead paths in `settings.json` / `CLAUDE.md` / skill `references/`, orphaned guides and patterns, missing triggers |
 | **Reference graph** | cycles in `references/*.md`, depth exceeding `MAX_REF_DEPTH`, orphan reference files (in-degree 0) |
 | **Memory** | `MEMORY.md` over the loaded-slice line/byte budget |
@@ -147,12 +148,12 @@ Full per-key rationale: [`references/config-keys.md`](commands/claude-markdown-h
 
 ## How it works — phases
 
-The phase sequence runs flat from 1 to 25, renumbered from the previous 5a / 5b / 5.5 / 7a scheme — see the [Migration note](#migration-note) below.
+The phase sequence runs flat from 1 to 25, renumbered from the previous 5a / 5b / 5.5 / 7a scheme — see the [Migration note](#migration-note) below. Phase 26 (Output Styles) was added later; it runs in the scan band and feeds the Phase 24 report like the other scanners.
 
 | Phase | What it does | Depth |
 |---|---|---|
 | 1 — Load Config + Thresholds | Reads optional `markdown-health-check.json`, then fetches skill / memory / settings / hooks limits from the Anthropic docs; caches at `~/.claude/.cache/claude-markdown-health-check-guidance.json` | All |
-| 2 — Plugin Install Integrity | `installed_plugins.json` vs on-disk cache: broken refs, missing manifests, version drift | Standard + Deep |
+| 2 — Plugin + MCP Integrity | `installed_plugins.json` vs on-disk cache: broken refs, missing manifests, version drift; deprecated `sse` MCP transport in `.mcp.json` | Standard + Deep |
 | 3 — Select Depth | Picks Quick / Standard / Deep from the argument and the size of your ecosystem | All |
 | 4 — Focus + History | Reads the focus message (if any) and mines the current session for recurring bugs, corrections, uncovered patterns | Standard + Deep |
 | 5 — Run validate-skills.sh | Deterministic layer: name regex, line counts, voice, TOC, description sizes, frontmatter schema, name collisions | All |
@@ -164,7 +165,7 @@ The phase sequence runs flat from 1 to 25, renumbered from the previous 5a / 5b 
 | 11 — Reference Graph Health | Cycles, depth violations, orphan ref files | Standard + Deep |
 | 12 — CLAUDE.md Content Quality | Whether each CLAUDE.md actually helps — stale commands, generic boilerplate, thin coverage | Standard + Deep |
 | 13 — Body Compression | Detects high-filler bodies; `--compress-bodies` opens the opt-in caveman:lite rewrite path | Standard + Deep |
-| 14 — Hooks, Agents, Settings | Registration, duplication, timeouts, broad patterns, stale reminders | Standard + Deep |
+| 14 — Hooks, Agents, Settings | Registration, duplication, timeouts, broad patterns, stale reminders, risky security keys (`bypassPermissions`, `enableAllProjectMcpServers`) | Standard + Deep |
 | 15 — Permission Allowlist Hygiene | Dead entries, over-broad `:*` patterns | Standard + Deep |
 | 16 — Hook Latency + Reliability | Per-hook failure-rate, never-fired hooks, event-type mismatches | Standard + Deep |
 | 17 — Cross-references + Orphans | Dead paths, orphaned guides/patterns, missing triggers, memory-index overflow | Standard + Deep |
@@ -176,6 +177,7 @@ The phase sequence runs flat from 1 to 25, renumbered from the previous 5a / 5b 
 | 23 — Token Trend | Per-session input/output/cache tokens — low cache-hit, output bloat | Deep |
 | 24 — Report | A mandatory pre-print pass first **grounds every judgment finding** (drop / downgrade / keep-with-`Evidence:`), then renders a scorecard + findings grouped by area, each a plain-language line with a must-fix / should / polish chip and a trailing tag code; optional summary blocks per active phase | All |
 | 25 — Post-Report Menu | Pick a fix scope, apply, re-validate, loop until done | All |
+| 26 — Output Styles | `.claude/output-styles/*.md` vs the selected `outputStyle`: flags a selection with no matching style file (runs in the scan band, feeds the Phase 24 report) | Standard + Deep |
 
 ## Migration note
 
@@ -246,6 +248,7 @@ commands/
 │   │   ├── memory-hygiene.md                # Phase 20
 │   │   ├── plugin-integrity.md              # Phase 2
 │   │   ├── token-trend.md                   # Phase 23
+│   │   ├── output-styles.md                 # Phase 26
 │   │   ├── finding-verification.md          # Pre-print evidence-grounding gate (judgment findings)
 │   │   ├── report-format.md                 # Phase 24 report rendering — domain map + scorecard
 │   │   └── post-report-menu.md              # Phase 25 menu
@@ -254,7 +257,7 @@ commands/
 │       └── README.md                        # eval schema + how to run
 └── scripts/
     ├── validate-skills.sh                   # deterministic compliance validator (Phase 5)
-    ├── scan-graph.sh                        # static graph scanner (Phases 2, 11, 20)
+    ├── scan-graph.sh                        # static graph scanner (Phases 2, 11, 20, 26)
     ├── scan-history.sh                      # session-log miner (Phases 7, 9, 15, 16, 19, 22, 23)
     ├── validate-evals.sh                    # eval-case schema/contract gate (CI)
     ├── run-evals-headless.sh                # opt-in LLM-graded eval runner

@@ -1,0 +1,19 @@
+{
+  "id": "46-settings-mcp-autoapprove",
+  "command": "claude-markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/settings-mcp-autoapprove",
+    "needs_home_override": false,
+    "scanners": ["validate-skills"]
+  },
+  "grader": { "method": "code" },
+  "success_criteria": {
+    "must_detect": [ { "tag": "SETTINGS-MCP-AUTOAPPROVE", "path_substring": "settings" } ],
+    "must_not_flag": ["SETTINGS-BYPASS-MODE"],
+    "expect_clean": false
+  },
+  "expected_behavior": [
+    "validate-skills.sh emits [SETTINGS-MCP-AUTOAPPROVE] because enableAllProjectMcpServers is true, trusting every project MCP server without review"
+  ]
+}

@@ -287,10 +287,52 @@ scan_memory() {
     done < <(find "$mem_root" -mindepth 3 -maxdepth 3 -name 'MEMORY.md' -type f 2>/dev/null)
 }
 
+# Output-style hygiene: a settings `outputStyle` naming a style with no file
+# (and not a built-in) is a dead selection. Built-in styles ship with Claude
+# Code and have no file; documented values are capitalized (e.g. "Explanatory"),
+# so the match is case-insensitive. Runs on any tree.
+OUTPUT_STYLE_BUILTINS="default proactive explanatory learning"
+scan_output_styles() {
+    local styles_dir="$CLAUDE_DIR/output-styles"
+    local selected="" sf v sel_lc
+    for sf in "$CLAUDE_DIR/settings.json" "$CLAUDE_DIR/settings.local.json"; do
+        [ -f "$sf" ] || continue
+        v=$(jq -r '.outputStyle // empty' "$sf" 2>/dev/null)
+        [ -n "$v" ] && selected="$v"
+    done
+    [ -n "$selected" ] || return 0
+    sel_lc=$(printf '%s' "$selected" | tr '[:upper:]' '[:lower:]')
+    case " $OUTPUT_STYLE_BUILTINS " in
+        *" $sel_lc "*) return 0 ;;
+    esac
+    if [ ! -f "$styles_dir/$selected.md" ]; then
+        emit_finding 26 "OUTPUTSTYLE-MISSING" "settings.json" "outputStyle '$selected' has no file at output-styles/$selected.md and is not a built-in style"
+    fi
+}
+
+# MCP transport hygiene: the `sse` transport is deprecated in favour of
+# `http`/`streamable-http`. Flag any mcpServers entry of type "sse" across the
+# project/user MCP config files. Runs on any tree.
+scan_mcp() {
+    local f rel srv
+    for f in "$CLAUDE_DIR/.mcp.json" "$CLAUDE_DIR/../.mcp.json" "$CLAUDE_DIR/../.claude.json" \
+             "$CLAUDE_DIR/settings.json" "$CLAUDE_DIR/settings.local.json"; do
+        [ -f "$f" ] || continue
+        rel="${f#$CLAUDE_DIR/}"
+        case "$f" in "$CLAUDE_DIR/../"*) rel="${f##*/}" ;; esac
+        while IFS= read -r srv; do
+            [ -z "$srv" ] && continue
+            emit_finding 2 "MCP-DEPRECATED-TRANSPORT" "$rel" "MCP server '$srv' uses deprecated sse transport — migrate to http/streamable-http"
+        done < <(jq -r '(.mcpServers // {}) | to_entries[] | select((.value.type // "") == "sse") | .key' "$f" 2>/dev/null || true)
+    done
+}
+
 GEN_AT=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 scan_plugins
 scan_ref_graph
 scan_memory
+scan_output_styles
+scan_mcp
 
 NUM_FINDINGS=$(wc -l <"$TMP_FINDINGS" | tr -d ' ')
 META=$(jq -n --arg gen "$GEN_AT" --arg s "$SCOPE" --arg cd "$CLAUDE_DIR" --argjson n "${NUM_FINDINGS:-0}" \

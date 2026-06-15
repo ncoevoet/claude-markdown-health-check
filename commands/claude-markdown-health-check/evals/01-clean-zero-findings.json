@@ -22,7 +22,11 @@
       "UNFLAGGED-DESTRUCTIVE",
       "BAD-RULE-FRONTMATTER",
       "REF-ORPHAN",
-      "REF-CIRCULAR"
+      "REF-CIRCULAR",
+      "OUTPUTSTYLE-MISSING",
+      "MCP-DEPRECATED-TRANSPORT",
+      "SETTINGS-BYPASS-MODE",
+      "SETTINGS-MCP-AUTOAPPROVE"
     ],
     "expect_clean": true
   },

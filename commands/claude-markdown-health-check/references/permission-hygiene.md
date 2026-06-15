@@ -16,6 +16,8 @@ Because the per-tool denial breakdown is unavailable, Phase 15 only emits the co
 | `PERM-DEAD-ENTRY` | best-effort: allowlist entry whose tool name does not appear in any `tool_use` invocation in the window | Hygiene |
 | `PERM-OVERBROAD` | entry uses `:*` AND its prefix matches fewer than 3 distinct in-window tool-use names | Hygiene |
 | `PERM-MISSING-ENTRY` | parked until per-tool denial data is reachable | — |
+| `SETTINGS-BYPASS-MODE` | `defaultMode` (or `permissions.defaultMode`) == `"bypassPermissions"` — every tool call is auto-approved with no prompt (relayed from `validate-skills.sh`) | Critical |
+| `SETTINGS-MCP-AUTOAPPROVE` | `enableAllProjectMcpServers` == `true` — every project `.mcp.json` server is trusted without review (relayed from `validate-skills.sh`) | Hygiene |
 
 To compute `PERM-DEAD-ENTRY`: extract each entry's tool name (prefix before `(`), and check it against `history-scan.json` → `.toolCalls` keys. Entries with no matching key are dead.
 
@@ -28,6 +30,8 @@ Allow: N entries · Dead: X · Overbroad: Y · Total denials: Z
 
 ## Remediation order
 
-1. `PERM-OVERBROAD` → tighten the matcher pattern (e.g., `Bash(cat:*)` → `Bash(cat ~/.claude/*)`).
-2. `PERM-DEAD-ENTRY` → delete entries whose tool was never invoked in 30 days.
-3. Review the raw `Total denials` count via the user's session log if it seems high — may indicate a missing allowlist entry.
+1. `SETTINGS-BYPASS-MODE` → drop `bypassPermissions`; use `acceptEdits` or default mode, or set `disableBypassPermissionsMode` in managed settings.
+2. `SETTINGS-MCP-AUTOAPPROVE` → set `enableAllProjectMcpServers` to false and allow-list specific servers via `enabledMcpjsonServers`.
+3. `PERM-OVERBROAD` → tighten the matcher pattern (e.g., `Bash(cat:*)` → `Bash(cat ~/.claude/*)`).
+4. `PERM-DEAD-ENTRY` → delete entries whose tool was never invoked in 30 days.
+5. Review the raw `Total denials` count via the user's session log if it seems high — may indicate a missing allowlist entry.

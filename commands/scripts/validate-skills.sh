@@ -57,7 +57,7 @@ REF_TOC_THRESHOLD=100
 CLAUDE_MD_MAX_LINES=200
 RESERVED_NAMES=("anthropic" "claude")
 KNOWN_FRONTMATTER_FIELDS=("name" "description" "when_to_use" "allowed-tools" "disallowed-tools" "argument-hint" "arguments" "model" "color" "user-invocable" "disable-model-invocation" "effort" "context" "agent" "hooks" "paths" "shell")
-MODEL_WHITELIST_RE='^(opus|sonnet|haiku|inherit|claude-(opus|sonnet|haiku)-[0-9])'
+MODEL_WHITELIST_RE='^(opus|sonnet|haiku|fable|inherit|claude-(opus|sonnet|haiku|fable)-[0-9])'
 # Support/utility directories under skills/ that are not themselves skills.
 SKILLS_DIR_EXCLUDES=("bootstrap" "commands")
 # Auto-memory index budget (loaded slice) and hook-timeout defaults (seconds).
@@ -161,7 +161,7 @@ validate_skill_md() {
     local model_field
     model_field=$(extract_field "$skill_file" "model")
     if [ -n "$model_field" ] && ! echo "$model_field" | grep -qE "$MODEL_WHITELIST_RE"; then
-        error "[BAD-FRONTMATTER-SCHEMA] $skill_name: model '$model_field' not in {opus|sonnet|haiku|inherit|claude-(opus|sonnet|haiku)-N}"
+        error "[BAD-FRONTMATTER-SCHEMA] $skill_name: model '$model_field' not in {opus|sonnet|haiku|fable|inherit|claude-(opus|sonnet|haiku|fable)-N}"
     fi
 
     # Check: allowed-tools syntax. Tokens look like `Read`, `WebFetch`, or
@@ -447,6 +447,23 @@ check_hook_timeouts() {
             warning "[SUSPICIOUS-TIMEOUT] $display: a $typ hook ($ev) has timeout ${t}s (>2x the ${def}s default)"
         fi
     done < <(jq -r '.hooks // {} | to_entries[] | .key as $ev | .value[]? | .hooks[]? | select(has("type") and has("timeout")) | "\($ev)\t\(.type)\t\(.timeout)"' "$json_file" 2>/dev/null || true)
+}
+
+# Flag settings keys that broadly loosen the permission sandbox. bypassPermissions
+# auto-approves every tool call; enableAllProjectMcpServers trusts any project
+# .mcp.json without review. Both are valid keys — the finding is the risk, not a
+# schema error.
+check_settings_security() {
+    local json_file="$1" display="$2" mode
+    [ -f "$json_file" ] || return 0
+    command -v jq >/dev/null 2>&1 || return 0
+    mode=$(jq -r '(.permissions.defaultMode // .defaultMode) // empty' "$json_file" 2>/dev/null)
+    if [ "$mode" = "bypassPermissions" ]; then
+        error "[SETTINGS-BYPASS-MODE] $display: defaultMode is \"bypassPermissions\" — every tool call is auto-approved with no prompt"
+    fi
+    if [ "$(jq -r '.enableAllProjectMcpServers // false' "$json_file" 2>/dev/null)" = "true" ]; then
+        warning "[SETTINGS-MCP-AUTOAPPROVE] $display: enableAllProjectMcpServers is true — every project MCP server is trusted without review"
+    fi
 }
 
 # Audit .claude/rules/ path-scoped rule files. A rule with a `paths:` key that
@@ -776,6 +793,7 @@ for settings_file in "$CLAUDE_DIR/settings.json" "$CLAUDE_DIR/settings.local.jso
         check_settings_guide_refs    "$settings_file" "$sdisp"
         check_mcp_preapproved        "$settings_file" "$sdisp"
         check_hook_timeouts          "$settings_file" "$sdisp"
+        check_settings_security      "$settings_file" "$sdisp"
     fi
 done
 if [ "$settings_checked" -eq 0 ]; then

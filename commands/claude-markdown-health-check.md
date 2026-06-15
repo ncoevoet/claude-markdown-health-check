@@ -103,7 +103,7 @@ bash "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}/commands/scripts/scan-graph.sh" "$USE
 jq -r '.findings[] | select(.phase == 2)' "$GRAPH"
 ```
 
-See `plugin-integrity.md` for tag definitions (`PLUGIN-BROKEN-REF`, `PLUGIN-MISSING-MANIFEST`, `PLUGIN-VERSION-DRIFT`) and remediation order.
+See `plugin-integrity.md` for tag definitions (`PLUGIN-BROKEN-REF`, `PLUGIN-MISSING-MANIFEST`, `PLUGIN-VERSION-DRIFT`) and remediation order. The same phase-2 pass also flags deprecated MCP transport (`MCP-DEPRECATED-TRANSPORT`): an `mcpServers` entry of `"type":"sse"` in `.mcp.json`, `~/.claude.json`, or a settings file.
 
 ## Phase 3 — Select Depth
 
@@ -249,10 +249,10 @@ Rewrite mode (when `--compress-bodies`):
 - Two agents covering the same problem space with no differentiation → `OVERLAPPING-AGENT`
 
 **Settings (`settings.json`)**
-- `validate-skills.sh` flags malformed JSON → `INVALID-JSON`, duplicate keys → `DUPLICATE-KEY`, duplicate array entries → `DUPLICATE-ENTRY`, MCP servers absent from `preApprovedTools`/`permissions.allow` → `MISSING-PRE-APPROVED` — relay.
+- `validate-skills.sh` flags malformed JSON → `INVALID-JSON`, duplicate keys → `DUPLICATE-KEY`, duplicate array entries → `DUPLICATE-ENTRY`, MCP servers absent from `preApprovedTools`/`permissions.allow` → `MISSING-PRE-APPROVED`, `defaultMode: bypassPermissions` → `SETTINGS-BYPASS-MODE`, `enableAllProjectMcpServers: true` → `SETTINGS-MCP-AUTOAPPROVE` — relay.
 - Bash pattern broader than necessary (e.g., `Bash(cat:*)`) → `BROAD-PATTERN`
 - `reminders` entry contradicts current skill instructions, or references removed/renamed file → `STALE-REMINDER`
-- Current settings keys are valid — do not flag `permissions`, `skillOverrides`, `maxSkillDescriptionChars`, `claudeMdExcludes`, `autoMemoryDirectory`, `autoMemoryEnabled`, `enabledPlugins`.
+- Current settings keys are valid — do not flag `permissions`, `skillOverrides`, `maxSkillDescriptionChars`, `claudeMdExcludes`, `autoMemoryDirectory`, `autoMemoryEnabled`, `enabledPlugins`, `outputStyle`, `defaultMode`, `enableAllProjectMcpServers`, `disableBypassPermissionsMode`, `enabledMcpjsonServers`, `disabledMcpjsonServers`.
 
 ## Phase 15 — Permission Allowlist Hygiene
 
@@ -312,6 +312,16 @@ For each agent file under `~/.claude/agents/`, check `history-scan.json` → `.a
 ## Phase 23 — Token Trend (Deep only)
 
 Per-session `message.usage` aggregates from `history-scan.json` → `.tokenUsage`. See `token-trend.md`. Tags: `LOW-CACHE-HIT` (Hygiene), `CONTEXT-BLOAT` (Structural).
+
+## Phase 26 — Output Styles
+
+Static check of `.claude/output-styles/*.md` against the selected `outputStyle` setting (any tree; runs in the scan band — its findings feed the Phase 24 report like every other scanner). Read from the same `graph-scan.json`:
+
+```bash
+jq -r '.findings[] | select(.phase == 26)' "$GRAPH"
+```
+
+See `output-styles.md` for the tag definition: `OUTPUTSTYLE-MISSING` (Critical — `outputStyle` names a non-existent, non-built-in style). Built-in styles (`Default`, `Proactive`, `Explanatory`, `Learning`) have no file and are never flagged (matched case-insensitively). There is no "orphan style" tag — unselected style files are a legitimate palette, not a defect.
 
 ## Phase 24 — Report
 
@@ -397,13 +407,13 @@ issues: Skills 3 · Hooks 1 · Settings & Permissions 1
 ## Tag Set (canonical — MUST be drawn from this list)
 
 **Critical** (broken; blocks correct behaviour)
-`DEAD-REF`, `DUPLICATE-KEY`, `INVALID-JSON`, `MISSING-DESC`, `DEAD-MATCHER`, `UNREGISTERED-HOOK`, `MISSING-PRE-APPROVED`, `MEMORY-OVERFLOW`, `SKILL-BUDGET-OVERFLOW`, `STALE-THRESHOLD`, `GUIDANCE-FETCH-FAILED`, `BAD-FRONTMATTER-SCHEMA`, `NAME-COLLISION`, `SKILL-ORPHAN`, `MISSING-SKILL-GAP`, `PLUGIN-BROKEN-REF`, `PLUGIN-MISSING-MANIFEST`, `MEMORY-DEAD-LINK`, `REF-CIRCULAR`, `HOOK-FAILING`, `EMBEDDED-SECRET`, `BAD-NAME`, `RESERVED-NAME`
+`DEAD-REF`, `DUPLICATE-KEY`, `INVALID-JSON`, `MISSING-DESC`, `DEAD-MATCHER`, `UNREGISTERED-HOOK`, `MISSING-PRE-APPROVED`, `MEMORY-OVERFLOW`, `SKILL-BUDGET-OVERFLOW`, `STALE-THRESHOLD`, `GUIDANCE-FETCH-FAILED`, `BAD-FRONTMATTER-SCHEMA`, `NAME-COLLISION`, `SKILL-ORPHAN`, `MISSING-SKILL-GAP`, `PLUGIN-BROKEN-REF`, `PLUGIN-MISSING-MANIFEST`, `MEMORY-DEAD-LINK`, `REF-CIRCULAR`, `HOOK-FAILING`, `EMBEDDED-SECRET`, `BAD-NAME`, `RESERVED-NAME`, `OUTPUTSTYLE-MISSING`, `SETTINGS-BYPASS-MODE`
 
 **Structural** (works but should be reorganised)
 `UNDER-TRIGGER`, `OVER-TRIGGER`, `MISSING-TRIGGER`, `MISSING-AGENT-TRIGGER`, `OVERLAPPING-AGENT`, `DUPLICATE-LOGIC`, `MISSING-ENFORCEMENT`, `NEEDS-REFERENCES`, `NO-EXAMPLES`, `NO-TROUBLESHOOTING`, `BURIED-CRITICAL`, `WEAK-DESC`, `NAME-MISMATCH`, `BAD-RULE-FRONTMATTER`, `ORPHAN-GUIDE`, `ORPHAN-PATTERN`, `REPURPOSE`, `SKILL-LOW-RELEVANCE`, `SKILL-DUPLICATE-DOMAIN`, `CLAUDEMD-STALE`, `CLAUDEMD-GENERIC`, `CLAUDEMD-THIN`, `SKILL-NEVER-FIRED`, `SKILL-DORMANT`, `SKILL-MISFIRING`, `RECURRING-DENIAL`, `SKILL-TOOL-UNDECLARED`, `HOOK-EVENT-MISMATCH`, `AGENT-NEVER-SPAWNED`, `REF-TOO-DEEP`, `CONTEXT-BLOAT`, `PLUGIN-VERSION-DRIFT`, `DESCRIPTION-TOO-LONG`, `OVER-500-LINES`, `CHAINED-REF`, `NO-PROGRESSIVE-DISCLOSURE`, `DESCRIPTION-TRUNCATED`
 
 **Hygiene** (cosmetic / token efficiency)
-`BROAD-PATTERN`, `SUSPICIOUS-TIMEOUT`, `STALE-REMINDER`, `DUPLICATE-ENTRY`, `RULE-OVERSIZED`, `BODY-FILLER-HIGH`, `BODY-COMPRESSED`, `BODY-COMPRESSION-REJECTED`, `UNKNOWN-FRONTMATTER-FIELD`, `RECURRING-CORRECTION`, `SKILL-TOOL-UNUSED`, `PERM-DEAD-ENTRY`, `PERM-OVERBROAD`, `HOOK-NEVER-FIRED`, `REF-ORPHAN`, `MEMORY-ORPHAN-FILE`, `MEMORY-DUP-ENTRY`, `MEMORY-STALE-DATE`, `LOW-CACHE-HIT`, `UNFLAGGED-DESTRUCTIVE`, `THIRD-PERSON`, `MISSING-TOC`
+`BROAD-PATTERN`, `SUSPICIOUS-TIMEOUT`, `STALE-REMINDER`, `DUPLICATE-ENTRY`, `RULE-OVERSIZED`, `BODY-FILLER-HIGH`, `BODY-COMPRESSED`, `BODY-COMPRESSION-REJECTED`, `UNKNOWN-FRONTMATTER-FIELD`, `RECURRING-CORRECTION`, `SKILL-TOOL-UNUSED`, `PERM-DEAD-ENTRY`, `PERM-OVERBROAD`, `HOOK-NEVER-FIRED`, `REF-ORPHAN`, `MEMORY-ORPHAN-FILE`, `MEMORY-DUP-ENTRY`, `MEMORY-STALE-DATE`, `LOW-CACHE-HIT`, `UNFLAGGED-DESTRUCTIVE`, `THIRD-PERSON`, `MISSING-TOC`, `MCP-DEPRECATED-TRANSPORT`, `SETTINGS-MCP-AUTOAPPROVE`
 
 **Discovery** (from Phase 4, additive only)
 `NEW-RULE`, `NEW-PATTERN`, `NEW-TRIGGER`, `NEW-REFERENCE`, `SKILL-UPDATE`

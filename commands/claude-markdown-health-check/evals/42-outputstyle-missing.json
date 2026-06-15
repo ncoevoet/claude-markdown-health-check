@@ -1,0 +1,19 @@
+{
+  "id": "42-outputstyle-missing",
+  "command": "claude-markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/outputstyle-missing",
+    "needs_home_override": false,
+    "scanners": ["scan-graph"]
+  },
+  "grader": { "method": "code" },
+  "success_criteria": {
+    "must_detect": [ { "tag": "OUTPUTSTYLE-MISSING", "path_substring": "settings" } ],
+    "must_not_flag": [],
+    "expect_clean": false
+  },
+  "expected_behavior": [
+    "scan-graph.sh emits [OUTPUTSTYLE-MISSING] because settings.json outputStyle 'nonexistent' has no output-styles/nonexistent.md file and is not a built-in style"
+  ]
+}
