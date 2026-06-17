@@ -15,9 +15,9 @@ It reports first and waits. Nothing is edited, moved, or deleted until you reply
 
 ## Demo
 
-> _Demo coming soon._ Run `/claude-markdown-health-check` to see the scorecard and area-grouped findings render in your own terminal.
+![/claude-markdown-health-check report](docs/demo.png)
 
-<!-- TODO(demo): capture a screenshot/GIF of a real report (scorecard + grouped findings) into docs/demo.png and replace the note above with: ![report](docs/demo.png) -->
+A scorecard with a letter grade, findings grouped by area, each a plain-language line with a `[must-fix]`/`[polish]` chip and the trailing machine tag. It reports first and waits — nothing is touched until you reply.
 
 ## What it checks
 
