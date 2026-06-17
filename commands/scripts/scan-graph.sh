@@ -184,10 +184,28 @@ scan_ref_graph() {
         ADJ["$s"]="${ADJ["$s"]:-} $t"
     done < "$EDGES_FILE"
 
+    # Bare sibling references: a reference doc that cites another reference by bare
+    # filename (`state-file.md`, "sibling of this file") DOES reference it. Counted
+    # for REF-ORPHAN only — NOT added to ADJ — so a prose name-drop cannot fabricate
+    # a false REF-CIRCULAR/REF-TOO-DEEP through the cycle/depth walk.
+    declare -A SIBREF
+    local sdir sib b
+    while IFS=$'\t' read -r src kind; do
+        [ -f "$src" ] || continue
+        case "$src" in */references/*) : ;; *) continue ;; esac
+        sdir=$(dirname "$src")
+        while IFS= read -r b; do
+            [ -z "$b" ] && continue
+            sib="$sdir/$b"
+            [ "$sib" = "$src" ] && continue
+            [ -f "$sib" ] && SIBREF["$sib"]=1
+        done < <(grep -oE '[A-Za-z0-9._-]+\.md' "$src" 2>/dev/null | sort -u)
+    done < <(sort -u "$NODES_FILE")
+
     local ref
     while IFS= read -r ref; do
         [ -z "$ref" ] && continue
-        if [ -z "${INDEG["$ref"]:-}" ] || [ "${INDEG["$ref"]:-0}" = 0 ]; then
+        if { [ -z "${INDEG["$ref"]:-}" ] || [ "${INDEG["$ref"]:-0}" = 0 ]; } && [ -z "${SIBREF["$ref"]:-}" ]; then
             emit_finding 11 "REF-ORPHAN" "${ref#$CLAUDE_DIR/}" "no skill or command references this file"
         fi
     done < <(sort -u "$REFS_FILE")
@@ -327,8 +345,62 @@ scan_mcp() {
     done
 }
 
+# Validate a plugin repo's OWN manifest + structure when CLAUDE_DIR is a plugin
+# root (contains .claude-plugin/plugin.json). Phase 2 band; independent of scope —
+# lets the tool dogfood on any plugin tree, not just installed user-tree plugins.
+scan_plugin_self() {
+    local pdir="$CLAUDE_DIR/.claude-plugin" pj comp ver mp src resolved p proot rel
+    pj="$pdir/plugin.json"
+    [ -f "$pj" ] || return 0
+
+    # Component dirs must sit at the plugin root, never inside .claude-plugin/.
+    for comp in skills agents commands hooks output-styles monitors; do
+        [ -d "$pdir/$comp" ] \
+            && emit_finding 2 "PLUGIN-MISPLACED-DIR" ".claude-plugin/$comp" "component dir '$comp' is inside .claude-plugin/ — it must sit at the plugin root"
+    done
+
+    # version must be present and semantic, else Claude Code falls back to the git
+    # SHA and treats every commit as a new version.
+    ver=$(jq -r '.version // empty' "$pj" 2>/dev/null)
+    if [ -z "$ver" ]; then
+        emit_finding 2 "PLUGIN-BAD-VERSION" ".claude-plugin/plugin.json" "no 'version' field — Claude Code falls back to the git SHA, so every commit reads as a new version"
+    elif ! printf '%s' "$ver" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+([-+.][0-9A-Za-z.-]+)?$'; then
+        emit_finding 2 "PLUGIN-BAD-VERSION" ".claude-plugin/plugin.json" "version '$ver' is not semantic (expected MAJOR.MINOR.PATCH)"
+    fi
+
+    # Declared component paths must be relative and start with ./.
+    while IFS= read -r p; do
+        [ -z "$p" ] && continue
+        case "$p" in
+            ./*) : ;;
+            *) emit_finding 2 "PLUGIN-ABS-PATH" ".claude-plugin/plugin.json" "path '$p' must be relative and start with ./" ;;
+        esac
+    done < <(jq -r '[ .skills, .commands, .agents, .outputStyles, .lspServers ]
+                    | map(if type=="array" then .[] elif type=="string" then . else empty end) | .[]?
+                    | select(type=="string")' "$pj" 2>/dev/null || true)
+
+    # marketplace.json string sources are LOCAL paths (object sources are remote — skipped
+    # by jq). A string resolves relative to the marketplace root, optionally under
+    # metadata.pluginRoot (which lets an entry omit the ./ prefix). Only flag a local path
+    # that resolves to no directory.
+    mp="$pdir/marketplace.json"
+    if [ -f "$mp" ]; then
+        proot=$(jq -r '.metadata.pluginRoot // empty' "$mp" 2>/dev/null)
+        while IFS= read -r src; do
+            [ -z "$src" ] && continue
+            case "$src" in http*|git@*) continue ;; esac
+            rel="$src"
+            [ -n "$proot" ] && case "$src" in ./*|/*) : ;; *) rel="$proot/$src" ;; esac
+            case "$rel" in /*) resolved="$rel" ;; *) resolved="$CLAUDE_DIR/$rel" ;; esac
+            [ -d "$resolved" ] \
+                || emit_finding 2 "MARKETPLACE-DEAD-SOURCE" ".claude-plugin/marketplace.json" "plugin source '$src' does not resolve to a directory"
+        done < <(jq -r '.plugins[]? | (.source // empty) | if type=="string" then . else empty end' "$mp" 2>/dev/null || true)
+    fi
+}
+
 GEN_AT=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 scan_plugins
+scan_plugin_self
 scan_ref_graph
 scan_memory
 scan_output_styles

@@ -1,10 +1,23 @@
 # /claude-markdown-health-check
 
-A `.claude/` ecosystem auditor for [Claude Code](https://docs.claude.com/en/docs/claude-code/overview). One slash command scans your skills, commands, hooks, agents, settings, plugins, and auto-memory — across both the user tree (`~/.claude`) and the project tree (`./.claude`) — and prints one flat, prioritized health report. 
+[![CI](https://github.com/ncoevoet/claude-markdown-health-check/actions/workflows/ci.yml/badge.svg)](https://github.com/ncoevoet/claude-markdown-health-check/actions/workflows/ci.yml)
+[![version](https://img.shields.io/badge/version-0.8.0-blue)](.claude-plugin/plugin.json)
+[![license](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+[![Claude Code plugin](https://img.shields.io/badge/Claude%20Code-plugin-8A2BE2)](https://code.claude.com/docs/en/plugins)
+
+**Tracks the live Claude Code spec** — thresholds are fetched from the official docs and cached weekly, so the audit never drifts from the product.
+
+A `.claude/` ecosystem auditor for [Claude Code](https://code.claude.com/docs/en/overview). One slash command scans your skills, commands, hooks, agents, settings, plugins, and auto-memory — across both the user tree (`~/.claude`) and the project tree (`./.claude`) — and prints one flat, prioritized health report. 
 
 It finds dead references, weak or mismatched triggers, token bloat, skill-listing-budget overflow, frontmatter violations, dormant skills, failing hooks, drifted permissions, dead memory links, and per-session context bloat.
 
 It reports first and waits. Nothing is edited, moved, or deleted until you reply naming which findings to fix — that autonomy gate is built into the command.
+
+## Demo
+
+> _Demo coming soon._ Run `/claude-markdown-health-check` to see the scorecard and area-grouped findings render in your own terminal.
+
+<!-- TODO(demo): capture a screenshot/GIF of a real report (scorecard + grouped findings) into docs/demo.png and replace the note above with: ![report](docs/demo.png) -->
 
 ## What it checks
 
@@ -17,15 +30,19 @@ It reports first and waits. Nothing is edited, moved, or deleted until you reply
 | **Frontmatter schema** | `description` too short, `model` not in whitelist (`opus`/`sonnet`/`haiku`/`fable` families), `allowed-tools` malformed, unknown fields |
 | **Hooks** | files on disk not registered in `settings.json`, duplicate logic, suspicious timeouts, matchers that match no real tool |
 | **Hook reliability** | high failure-rate hooks, hooks registered but never fired, event-type mismatches |
+| **Hook safety** | hook script with no `#!` shebang, a script that emits a block/deny decision but exits 1 (non-blocking) instead of 2, `eval` of dynamic input, an http hook leaking the whole environment (auth header, no `allowedEnvVars`) |
 | **Agents** | triggers unreachable from `CLAUDE.md`, overlapping agents, agents on disk never spawned in 30d |
+| **Agent frontmatter** | subagent schema violations — bad `model`/`color`/`permissionMode`/`tools` value, missing `description`, duplicate agent `name`, `permissionMode: bypassPermissions`, plugin agents declaring silently-ignored `hooks`/`mcpServers`/`permissionMode` |
 | **Settings** | malformed JSON, duplicate JSON keys, duplicate array entries, MCP servers missing from `preApprovedTools`, over-broad Bash patterns, stale reminders, risky security keys (`defaultMode: bypassPermissions`, `enableAllProjectMcpServers: true`) |
 | **Permission hygiene** | dead allowlist entries (zero grants), over-broad `:*` patterns, name collisions between `commands/` and `skills/` |
 | **Plugins & MCP** | `installed_plugins.json` entries with missing `installPath`, missing `plugin.json` manifest, version drift between manifest and on-disk, deprecated `sse` MCP transport in `.mcp.json` |
+| **Plugin structure** | (when auditing a plugin root) component dir misplaced inside `.claude-plugin/`, missing or non-semver `version`, component path not relative-with-`./`, dangling `marketplace.json` `source` |
 | **Output styles** | `outputStyle` setting naming a non-existent (and non-built-in) style |
 | **Cross-references** | dead paths in `settings.json` / `CLAUDE.md` / skill `references/`, orphaned guides and patterns, missing triggers |
 | **Reference graph** | cycles in `references/*.md`, depth exceeding `MAX_REF_DEPTH`, orphan reference files (in-degree 0) |
 | **Memory** | `MEMORY.md` over the loaded-slice line/byte budget |
 | **Memory hygiene** | dead `- [Title](file.md)` links, orphan files in memory dir, duplicate entries, stale dates (>365d) |
+| **CLAUDE.md imports** | dead `@path` imports, `@import` chains past the 4-hop limit, a `CLAUDE.local.md` not covered by `.gitignore` |
 | **Context trend** (Deep depth) | low cache-hit sessions, output bloat per session |
 | **Cross-session patterns** (Deep depth) | recurring tool denials, recurring user corrections, missing skill gaps (subagents repeatedly spawned with no matching skill) |
 
@@ -205,7 +222,7 @@ Two layers, following Anthropic's [develop-tests](https://platform.claude.com/do
 
 - **Deterministic (code-graded, CI-safe, no API key).** Synthetic `.claude/` fixture trees under `tests/fixtures/<case>/` each plant one defect; the suite runs `validate-skills.sh` / `scan-graph.sh` against them and asserts the exact `[TAG]` set. A `clean/` fixture asserts **zero** findings — the false-positive guard.
   ```bash
-  make test              # bash tests/run.sh — anonymization + eval-schema gates, then 32 code-graded cases (97 assertions)
+  make test              # bash tests/run.sh — anonymization + eval-schema gates, then 54 code-graded cases (177 assertions)
   bash tests/run.sh 02   # run one case / id-prefix (deterministic suite only)
   ```
   `tests/run.sh` also runs two release gates first: an **anonymization** check (no real scanned-project names in the published `commands/`, `tests/fixtures/`, `README.md` — the real blocklist is gitignored, a placeholder ships) and **eval-schema validation** (`validate-evals.sh` asserts every case matches the contract before an expensive run is wasted on a malformed one).
@@ -215,13 +232,13 @@ Two layers, following Anthropic's [develop-tests](https://platform.claude.com/do
   HEALTH_CHECK_EVAL_RUNS=3 make evals   # majority vote to smooth LLM noise
   ```
 
-Cases live in `commands/claude-markdown-health-check/evals/*.json` (41 cases: 32 `grader.method: code` + 9 `llm-rubric`); fixtures in `tests/fixtures/`. 
+Cases live in `commands/claude-markdown-health-check/evals/*.json` (63 cases: 54 `grader.method: code` + 9 `llm-rubric`); fixtures in `tests/fixtures/`. 
 
 Tags are the stable machine contract, so the code-graded cases are immune to report-format changes. CI (`.github/workflows/ci.yml`) runs shellcheck + `bash -n` + the anonymization gate + eval-schema validation + the deterministic suite on every push; it does **not** run the token-spending LLM evals. Every real-world miss or false positive should become a new case.
 
 ## Requirements
 
-- [Claude Code CLI](https://docs.claude.com/en/docs/claude-code/overview)
+- [Claude Code CLI](https://code.claude.com/docs/en/overview)
 - `bash`, `awk`, `grep`, `find`, `date` (defaults on macOS/Linux)
 - `jq` — required for the history-aware and graph phases (plugin integrity, skill usage, hook reliability, etc.); strongly recommended for the existing skill-listing-budget check
 - Optional: `nproc` for parallel JSONL scanning (falls back to 4 workers if absent)
@@ -239,6 +256,8 @@ commands/
 │   │   ├── skill-usage-metrics.md           # Phase 7
 │   │   ├── skill-tool-contract.md           # Phase 9
 │   │   ├── frontmatter-schema.md            # Phase 10
+│   │   ├── agent-frontmatter.md             # Phase 14 — subagent schema
+│   │   ├── hook-safety.md                   # Phase 14 — hook script safety
 │   │   ├── reference-graph.md               # Phase 11
 │   │   ├── claude-md-quality.md             # Phase 12 rubric
 │   │   ├── body-compression.md              # Phase 13 logic
@@ -253,7 +272,7 @@ commands/
 │   │   ├── report-format.md                 # Phase 24 report rendering — domain map + scorecard
 │   │   └── post-report-menu.md              # Phase 25 menu
 │   └── evals/                               # data-driven eval cases
-│       ├── 01-clean-zero-findings.json … 41-stale-claudemd-missing-cmd.json  (32 code + 9 LLM)
+│       ├── 01-clean-zero-findings.json … 65-ref-bare-sibling.json  (54 code + 9 LLM)
 │       └── README.md                        # eval schema + how to run
 └── scripts/
     ├── validate-skills.sh                   # deterministic compliance validator (Phase 5)

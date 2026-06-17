@@ -1,0 +1,7 @@
+{
+  "name": "mp",
+  "owner": { "name": "Example" },
+  "plugins": [
+    { "name": "demo", "source": "./does-not-exist" }
+  ]
+}

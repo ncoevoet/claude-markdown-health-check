@@ -105,6 +105,8 @@ jq -r '.findings[] | select(.phase == 2)' "$GRAPH"
 
 See `plugin-integrity.md` for tag definitions (`PLUGIN-BROKEN-REF`, `PLUGIN-MISSING-MANIFEST`, `PLUGIN-VERSION-DRIFT`) and remediation order. The same phase-2 pass also flags deprecated MCP transport (`MCP-DEPRECATED-TRANSPORT`): an `mcpServers` entry of `"type":"sse"` in `.mcp.json`, `~/.claude.json`, or a settings file.
 
+When the scanned tree is a **plugin root** (a `.claude-plugin/plugin.json` is present), the phase-2 pass also validates the plugin's own structure (any scope, so the tool dogfoods on plugin repos): a component dir (`skills`/`agents`/`commands`/`hooks`/`output-styles`/`monitors`) nested inside `.claude-plugin/` → `PLUGIN-MISPLACED-DIR`; a missing or non-semver `version` → `PLUGIN-BAD-VERSION`; a declared component path that isn't relative-with-`./` → `PLUGIN-ABS-PATH`; a `marketplace.json` plugin `source` that resolves to no directory → `MARKETPLACE-DEAD-SOURCE`.
+
 ## Phase 3 — Select Depth
 
 ```bash
@@ -215,6 +217,8 @@ This phase judges whether each CLAUDE.md / `CLAUDE.local.md` in scope is actuall
 
 Skip at Quick depth. A short but accurate CLAUDE.md is not a finding.
 
+Deterministic CLAUDE.md checks run inside `validate-skills.sh` (Phase 5) and relay here: an `@path` import that does not resolve → `CLAUDEMD-DEAD-IMPORT`; an `@import` chain deeper than the 4-hop limit → `IMPORT-TOO-DEEP`; a `CLAUDE.local.md` inside a git repo with no covering `.gitignore` entry → `LOCAL-MD-TRACKED`. See `claude-md-quality.md`.
+
 ## Phase 13 — Body Compression (detection + opt-in rewrite)
 
 Detects prose drift in skill bodies, rule bodies, and reference files. Detection always runs at Standard + Deep depth and emits `BODY-FILLER-HIGH` (Hygiene). Rewrite sub-phase is opt-in only — triggered by `--compress-bodies` or the `compressBodies` config key.
@@ -240,11 +244,13 @@ Rewrite mode (when `--compress-bodies`):
 
 **Hooks**
 - `validate-skills.sh` flags hook scripts on disk that no settings file references → `UNREGISTERED-HOOK`, and hook timeouts above 2× the documented per-type default → `SUSPICIOUS-TIMEOUT` — relay.
+- `validate-skills.sh` statically scans hook scripts and http hook config (see `references/hook-safety.md`) → hook script with no `#!` shebang → `HOOK-NO-SHEBANG`; a script that emits a block/deny decision but exits 1 instead of 2 (exit 1 is non-blocking) → `HOOK-EXIT-NONBLOCKING`; `eval` of a dynamic value → `HOOK-UNSAFE-SHELL`; an http hook with an auth header but no `allowedEnvVars`/`httpHookAllowedEnvVars` → `HOOK-ENV-LEAK` — relay.
 - Two hooks doing the same check → `DUPLICATE-LOGIC`
 - Critical rule with no hook enforcement and a deterministic check exists → `MISSING-ENFORCEMENT`
 - Matcher pattern doesn't match any real tool name → `DEAD-MATCHER`. ONLY for tool-events (`PreToolUse`, `PostToolUse`, `PostToolUseFailure`, `PermissionRequest`, `PermissionDenied`) whose matcher IS a tool name. For event-typed matchers the matcher is an event-specific string, NOT a tool — never flag those: `SessionStart` (`startup|resume|clear|compact`), `PreCompact`/`PostCompact` (`manual|auto`), `SessionEnd`, `Notification`, `SubagentStart`/`SubagentStop`, `ConfigChange`, etc. See `references/hook-reliability.md` for the event→matcher table
 
 **Agents** (`.claude/agents/*.md`)
+- `validate-skills.sh` validates every subagent file against the subagent schema (distinct from the skill schema — see `references/agent-frontmatter.md`) and relays: bad `model`/`color`/`permissionMode` value, malformed `tools`/`disallowedTools`, missing `description`, or bad `name` charset → `AGENT-BAD-SCHEMA`; `permissionMode: bypassPermissions` → `AGENT-BYPASS-PERMS`; two agent files sharing a `name` → `AGENT-DUP-NAME`; a plugin-tree agent declaring `hooks`/`mcpServers`/`permissionMode` (silently ignored) → `AGENT-PLUGIN-FORBIDDEN-FIELD` — relay.
 - Agent description triggers MUST be reachable from CLAUDE.md → `MISSING-AGENT-TRIGGER`
 - Two agents covering the same problem space with no differentiation → `OVERLAPPING-AGENT`
 
@@ -407,13 +413,13 @@ issues: Skills 3 · Hooks 1 · Settings & Permissions 1
 ## Tag Set (canonical — MUST be drawn from this list)
 
 **Critical** (broken; blocks correct behaviour)
-`DEAD-REF`, `DUPLICATE-KEY`, `INVALID-JSON`, `MISSING-DESC`, `DEAD-MATCHER`, `UNREGISTERED-HOOK`, `MISSING-PRE-APPROVED`, `MEMORY-OVERFLOW`, `SKILL-BUDGET-OVERFLOW`, `STALE-THRESHOLD`, `GUIDANCE-FETCH-FAILED`, `BAD-FRONTMATTER-SCHEMA`, `NAME-COLLISION`, `SKILL-ORPHAN`, `MISSING-SKILL-GAP`, `PLUGIN-BROKEN-REF`, `PLUGIN-MISSING-MANIFEST`, `MEMORY-DEAD-LINK`, `REF-CIRCULAR`, `HOOK-FAILING`, `EMBEDDED-SECRET`, `BAD-NAME`, `RESERVED-NAME`, `OUTPUTSTYLE-MISSING`, `SETTINGS-BYPASS-MODE`
+`DEAD-REF`, `DUPLICATE-KEY`, `INVALID-JSON`, `MISSING-DESC`, `DEAD-MATCHER`, `UNREGISTERED-HOOK`, `MISSING-PRE-APPROVED`, `MEMORY-OVERFLOW`, `SKILL-BUDGET-OVERFLOW`, `STALE-THRESHOLD`, `GUIDANCE-FETCH-FAILED`, `BAD-FRONTMATTER-SCHEMA`, `NAME-COLLISION`, `SKILL-ORPHAN`, `MISSING-SKILL-GAP`, `PLUGIN-BROKEN-REF`, `PLUGIN-MISSING-MANIFEST`, `MEMORY-DEAD-LINK`, `REF-CIRCULAR`, `HOOK-FAILING`, `EMBEDDED-SECRET`, `BAD-NAME`, `RESERVED-NAME`, `OUTPUTSTYLE-MISSING`, `SETTINGS-BYPASS-MODE`, `AGENT-BAD-SCHEMA`, `AGENT-BYPASS-PERMS`, `PLUGIN-MISPLACED-DIR`, `MARKETPLACE-DEAD-SOURCE`, `CLAUDEMD-DEAD-IMPORT`
 
 **Structural** (works but should be reorganised)
-`UNDER-TRIGGER`, `OVER-TRIGGER`, `MISSING-TRIGGER`, `MISSING-AGENT-TRIGGER`, `OVERLAPPING-AGENT`, `DUPLICATE-LOGIC`, `MISSING-ENFORCEMENT`, `NEEDS-REFERENCES`, `NO-EXAMPLES`, `NO-TROUBLESHOOTING`, `BURIED-CRITICAL`, `WEAK-DESC`, `NAME-MISMATCH`, `BAD-RULE-FRONTMATTER`, `ORPHAN-GUIDE`, `ORPHAN-PATTERN`, `REPURPOSE`, `SKILL-LOW-RELEVANCE`, `SKILL-DUPLICATE-DOMAIN`, `CLAUDEMD-STALE`, `CLAUDEMD-GENERIC`, `CLAUDEMD-THIN`, `SKILL-NEVER-FIRED`, `SKILL-DORMANT`, `SKILL-MISFIRING`, `RECURRING-DENIAL`, `SKILL-TOOL-UNDECLARED`, `HOOK-EVENT-MISMATCH`, `AGENT-NEVER-SPAWNED`, `REF-TOO-DEEP`, `CONTEXT-BLOAT`, `PLUGIN-VERSION-DRIFT`, `DESCRIPTION-TOO-LONG`, `OVER-500-LINES`, `CHAINED-REF`, `NO-PROGRESSIVE-DISCLOSURE`, `DESCRIPTION-TRUNCATED`
+`UNDER-TRIGGER`, `OVER-TRIGGER`, `MISSING-TRIGGER`, `MISSING-AGENT-TRIGGER`, `OVERLAPPING-AGENT`, `DUPLICATE-LOGIC`, `MISSING-ENFORCEMENT`, `NEEDS-REFERENCES`, `NO-EXAMPLES`, `NO-TROUBLESHOOTING`, `BURIED-CRITICAL`, `WEAK-DESC`, `NAME-MISMATCH`, `BAD-RULE-FRONTMATTER`, `ORPHAN-GUIDE`, `ORPHAN-PATTERN`, `REPURPOSE`, `SKILL-LOW-RELEVANCE`, `SKILL-DUPLICATE-DOMAIN`, `CLAUDEMD-STALE`, `CLAUDEMD-GENERIC`, `CLAUDEMD-THIN`, `SKILL-NEVER-FIRED`, `SKILL-DORMANT`, `SKILL-MISFIRING`, `RECURRING-DENIAL`, `SKILL-TOOL-UNDECLARED`, `HOOK-EVENT-MISMATCH`, `AGENT-NEVER-SPAWNED`, `AGENT-DUP-NAME`, `AGENT-PLUGIN-FORBIDDEN-FIELD`, `HOOK-EXIT-NONBLOCKING`, `HOOK-UNSAFE-SHELL`, `HOOK-ENV-LEAK`, `REF-TOO-DEEP`, `CONTEXT-BLOAT`, `PLUGIN-VERSION-DRIFT`, `PLUGIN-BAD-VERSION`, `PLUGIN-ABS-PATH`, `IMPORT-TOO-DEEP`, `DESCRIPTION-TOO-LONG`, `OVER-500-LINES`, `CHAINED-REF`, `NO-PROGRESSIVE-DISCLOSURE`, `DESCRIPTION-TRUNCATED`
 
 **Hygiene** (cosmetic / token efficiency)
-`BROAD-PATTERN`, `SUSPICIOUS-TIMEOUT`, `STALE-REMINDER`, `DUPLICATE-ENTRY`, `RULE-OVERSIZED`, `BODY-FILLER-HIGH`, `BODY-COMPRESSED`, `BODY-COMPRESSION-REJECTED`, `UNKNOWN-FRONTMATTER-FIELD`, `RECURRING-CORRECTION`, `SKILL-TOOL-UNUSED`, `PERM-DEAD-ENTRY`, `PERM-OVERBROAD`, `HOOK-NEVER-FIRED`, `REF-ORPHAN`, `MEMORY-ORPHAN-FILE`, `MEMORY-DUP-ENTRY`, `MEMORY-STALE-DATE`, `LOW-CACHE-HIT`, `UNFLAGGED-DESTRUCTIVE`, `THIRD-PERSON`, `MISSING-TOC`, `MCP-DEPRECATED-TRANSPORT`, `SETTINGS-MCP-AUTOAPPROVE`
+`BROAD-PATTERN`, `SUSPICIOUS-TIMEOUT`, `STALE-REMINDER`, `DUPLICATE-ENTRY`, `RULE-OVERSIZED`, `BODY-FILLER-HIGH`, `BODY-COMPRESSED`, `BODY-COMPRESSION-REJECTED`, `UNKNOWN-FRONTMATTER-FIELD`, `RECURRING-CORRECTION`, `SKILL-TOOL-UNUSED`, `PERM-DEAD-ENTRY`, `PERM-OVERBROAD`, `HOOK-NEVER-FIRED`, `REF-ORPHAN`, `MEMORY-ORPHAN-FILE`, `MEMORY-DUP-ENTRY`, `MEMORY-STALE-DATE`, `LOW-CACHE-HIT`, `UNFLAGGED-DESTRUCTIVE`, `THIRD-PERSON`, `MISSING-TOC`, `MCP-DEPRECATED-TRANSPORT`, `SETTINGS-MCP-AUTOAPPROVE`, `HOOK-NO-SHEBANG`, `LOCAL-MD-TRACKED`
 
 **Discovery** (from Phase 4, additive only)
 `NEW-RULE`, `NEW-PATTERN`, `NEW-TRIGGER`, `NEW-REFERENCE`, `SKILL-UPDATE`

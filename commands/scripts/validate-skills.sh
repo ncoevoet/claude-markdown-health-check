@@ -31,6 +31,7 @@ done
 CLAUDE_DIR="${POS_ARGS[0]:-${CLAUDE_DIR:-$HOME/.claude}}"
 SKILLS_DIR="$CLAUDE_DIR/skills"
 COMMANDS_DIR="$CLAUDE_DIR/commands"
+AGENTS_DIR="$CLAUDE_DIR/agents"
 # CLAUDE.md is at $CLAUDE_DIR/CLAUDE.md for the user tree (~/.claude/CLAUDE.md),
 # but at the project ROOT for a project tree (<proj>/CLAUDE.md — the parent of
 # <proj>/.claude). Resolve both so a project CLAUDE.md is not silently skipped.
@@ -55,11 +56,19 @@ SKILL_MAX_LINES=500
 SKILL_REF_DIR_THRESHOLD=300
 REF_TOC_THRESHOLD=100
 CLAUDE_MD_MAX_LINES=200
+IMPORT_MAX_DEPTH=4
 RESERVED_NAMES=("anthropic" "claude")
 KNOWN_FRONTMATTER_FIELDS=("name" "description" "when_to_use" "allowed-tools" "disallowed-tools" "argument-hint" "arguments" "model" "color" "user-invocable" "disable-model-invocation" "effort" "context" "agent" "hooks" "paths" "shell")
 MODEL_WHITELIST_RE='^(opus|sonnet|haiku|fable|inherit|claude-(opus|sonnet|haiku|fable)-[0-9])'
 # Support/utility directories under skills/ that are not themselves skills.
 SKILLS_DIR_EXCLUDES=("bootstrap" "commands")
+# Subagent frontmatter enums — the subagent schema (.claude/agents/<name>.md) differs
+# from the skill schema: tools/disallowedTools (not allowed-tools), permissionMode,
+# color, maxTurns, etc. See https://code.claude.com/docs/en/sub-agents
+AGENT_COLOR_RE='^(red|blue|green|yellow|purple|orange|pink|cyan)$'
+AGENT_PERMMODE_RE='^(default|acceptEdits|auto|dontAsk|bypassPermissions|plan)$'
+# Fields a PLUGIN-provided subagent declares in vain — Claude Code silently ignores them.
+AGENT_PLUGIN_FORBIDDEN=("hooks" "mcpServers" "permissionMode")
 # Auto-memory index budget (loaded slice) and hook-timeout defaults (seconds).
 MEMORY_MAX_LINES=200
 MEMORY_MAX_BYTES=25600
@@ -262,6 +271,70 @@ validate_skill_md() {
     check_unflagged_destructive "$skill_file" "$skill_name"
 }
 
+validate_agent_md() {
+    # Validates a subagent definition (.claude/agents/<name>.md). Distinct from
+    # validate_skill_md: the subagent schema uses tools/disallowedTools/permissionMode/
+    # color/maxTurns, so reusing the skill validator would mis-flag valid agent fields.
+    # Args: <file> <display-name> <is-plugin-tree:0|1>
+    local agent_file="$1" display="$2" is_plugin="$3"
+    local desc model_field color_field permmode_field name_field tf tools_field at_remainder ff
+
+    # description is required — without it the agent cannot be delegation-routed.
+    desc=$(extract_field "$agent_file" "description")
+    [ -z "$desc" ] && error "[AGENT-BAD-SCHEMA] $display: no 'description' in frontmatter (required for delegation routing)"
+
+    # model whitelist (shared with skills).
+    model_field=$(extract_field "$agent_file" "model")
+    if [ -n "$model_field" ] && ! echo "$model_field" | grep -qE "$MODEL_WHITELIST_RE"; then
+        error "[AGENT-BAD-SCHEMA] $display: model '$model_field' not in {opus|sonnet|haiku|fable|inherit|claude-(opus|sonnet|haiku|fable)-N}"
+    fi
+
+    # color enum.
+    color_field=$(extract_field "$agent_file" "color")
+    if [ -n "$color_field" ] && ! echo "$color_field" | grep -qE "$AGENT_COLOR_RE"; then
+        error "[AGENT-BAD-SCHEMA] $display: color '$color_field' not in {red|blue|green|yellow|purple|orange|pink|cyan}"
+    fi
+
+    # permissionMode enum, then the bypassPermissions security flag.
+    permmode_field=$(extract_field "$agent_file" "permissionMode")
+    if [ -n "$permmode_field" ]; then
+        if ! echo "$permmode_field" | grep -qE "$AGENT_PERMMODE_RE"; then
+            error "[AGENT-BAD-SCHEMA] $display: permissionMode '$permmode_field' not in {default|acceptEdits|auto|dontAsk|bypassPermissions|plan}"
+        elif [ "$permmode_field" = "bypassPermissions" ]; then
+            error "[AGENT-BYPASS-PERMS] $display: permissionMode 'bypassPermissions' disables every permission prompt for this agent"
+        fi
+    fi
+
+    # tools / disallowedTools token shape — Name, Name(args), or mcp__server__tool.
+    for tf in tools disallowedTools; do
+        tools_field=$(extract_field "$agent_file" "$tf")
+        [ -z "$tools_field" ] && continue
+        at_remainder=$(printf '%s' "$tools_field" | sed -E 's/(mcp__[A-Za-z0-9_]+|[A-Z][A-Za-z_]+(\([^()]*\))?)//g' | tr -d ' \t\n,-')
+        if [ -n "$at_remainder" ]; then
+            error "[AGENT-BAD-SCHEMA] $display: $tf has unparseable residue '$at_remainder' — token shape is Name, Name(args), or mcp__server__tool"
+        fi
+    done
+
+    # name charset — lowercase letters, numbers, hyphens. The filename need NOT match
+    # the name: per the sub-agents spec the `name` field is the identifier, the filename
+    # is free (e.g. agents/01-injection.md with name 'security-finder-injection').
+    name_field=$(extract_field "$agent_file" "name")
+    if [ -n "$name_field" ] && ! echo "$name_field" | grep -Eq '^[a-z0-9-]+$'; then
+        error "[AGENT-BAD-SCHEMA] $display: name '$name_field' must be lowercase letters, numbers, and hyphens only"
+    fi
+
+    # Plugin-provided agents silently ignore hooks/mcpServers/permissionMode.
+    if [ "$is_plugin" = 1 ]; then
+        for ff in "${AGENT_PLUGIN_FORBIDDEN[@]}"; do
+            [ -n "$(extract_field "$agent_file" "$ff")" ] \
+                && warning "[AGENT-PLUGIN-FORBIDDEN-FIELD] $display: plugin agents ignore '$ff' frontmatter (declare it at plugin level instead)"
+        done
+    fi
+
+    check_embedded_secrets      "$agent_file" "$display"
+    check_unflagged_destructive "$agent_file" "$display"
+}
+
 # Detect duplicate keys inside a single JSON object. jq silently keeps only the
 # last value of a duplicated key, so a char-level scan is required: track brace
 # depth (ignoring braces inside strings) and flag any key seen twice within the
@@ -363,6 +436,82 @@ check_dead_refs_in_file() {
     done < <(grep -oE '(~/)?\.claude/[A-Za-z0-9._/-]+\.(md|sh|json)' "$src" 2>/dev/null | sort -u || true)
 }
 
+# Print the @import tokens of a markdown file. An import is `@<path>` at line start
+# or after whitespace, where the path either ends in an extension or starts with
+# ./ ../ ~/ or / — this avoids matching @mentions, emails, and npm scopes. Fenced
+# code blocks are skipped.
+_extract_imports() {
+    awk '
+        /^[[:space:]]*```/ { infence = !infence; next }
+        infence { next }
+        {
+            n = length($0)
+            for (i = 1; i <= n; i++) {
+                if (substr($0, i, 1) == "@" && (i == 1 || substr($0, i-1, 1) ~ /[[:space:]]/)) {
+                    rest = substr($0, i+1)
+                    if (match(rest, /^[A-Za-z0-9._~\/-]+/)) {
+                        tok = substr(rest, 1, RLENGTH)
+                        if (tok ~ /\.[A-Za-z0-9]{1,5}$/ || tok ~ /^(\.\/|\.\.\/|~\/|\/)/) print tok
+                    }
+                }
+            }
+        }
+    ' "$1" 2>/dev/null
+}
+
+# Recursively follow @imports from a CLAUDE.md / CLAUDE.local.md. Flags imports
+# that do not resolve (CLAUDEMD-DEAD-IMPORT) and chains deeper than the documented
+# 4-hop limit (IMPORT-TOO-DEEP). Cycle-safe via a visited set.
+_imports_visited=""
+_too_deep_flagged=0
+walk_imports() {
+    local file="$1" display="$2" depth="$3" base_dir tok resolved
+    [ -f "$file" ] || return 0
+    base_dir=$(dirname "$file")
+    while IFS= read -r tok; do
+        [ -z "$tok" ] && continue
+        # shellcheck disable=SC2088  # the "~/" pattern is a literal tilde from the @import token text, matched not expanded
+        case "$tok" in
+            '~/'*) resolved="$HOME/${tok#\~/}" ;;
+            /*)    resolved="$tok" ;;
+            ./*)   resolved="$base_dir/${tok#./}" ;;
+            *)     resolved="$base_dir/$tok" ;;
+        esac
+        if [ ! -e "$resolved" ]; then
+            error "[CLAUDEMD-DEAD-IMPORT] $display: import @$tok does not resolve (looked at $resolved)"
+            continue
+        fi
+        if [ "$depth" -ge "$IMPORT_MAX_DEPTH" ] && [ "$_too_deep_flagged" = 0 ]; then
+            warning "[IMPORT-TOO-DEEP] $display: @import chain exceeds $IMPORT_MAX_DEPTH hops (at @$tok)"
+            _too_deep_flagged=1
+        fi
+        case "$_imports_visited" in *"|$resolved|"*) continue ;; esac
+        _imports_visited="$_imports_visited|$resolved|"
+        walk_imports "$resolved" "@$tok" $((depth + 1))
+    done < <(_extract_imports "$file")
+}
+
+# A CLAUDE.local.md holds personal overrides and should be gitignored. Deterministic
+# (no git binary): walk up to the repo root looking for a .gitignore that covers it.
+# Fires only inside a git working tree — a non-repo ~/.claude has nothing to ignore.
+check_local_md_tracked() {
+    local cl dir found in_repo
+    for cl in "$CLAUDE_DIR/CLAUDE.local.md" "$CLAUDE_DIR/../CLAUDE.local.md"; do
+        [ -f "$cl" ] || continue
+        dir=$(cd "$(dirname "$cl")" 2>/dev/null && pwd) || continue
+        found=0; in_repo=0
+        while [ -n "$dir" ] && [ "$dir" != "/" ]; do
+            if [ -f "$dir/.gitignore" ] && grep -qE '(^|/)(CLAUDE\.local\.md|\*\.local\.md|CLAUDE\.\*)' "$dir/.gitignore" 2>/dev/null; then
+                found=1; break
+            fi
+            if [ -d "$dir/.git" ]; then in_repo=1; break; fi
+            dir=$(dirname "$dir")
+        done
+        [ "$in_repo" = 1 ] && [ "$found" = 0 ] \
+            && warning "[LOCAL-MD-TRACKED] $(basename "$cl"): inside a git repo but not covered by a .gitignore — personal overrides should be gitignored"
+    done
+}
+
 # Flag settings.json `guides` paths that do not resolve on disk.
 check_settings_guide_refs() {
     local json_file="$1" display="$2" p
@@ -413,6 +562,38 @@ check_unregistered_hooks() {
     done
 }
 
+# Static safety scan of hook scripts in hooks/. High-precision heuristics only:
+#   - HOOK-NO-SHEBANG: first line is not a #! shebang (content-based; the
+#     executable bit is deliberately NOT checked — git/CI does not preserve it).
+#   - HOOK-EXIT-NONBLOCKING: emits a block/deny decision yet exits 1 with no
+#     exit 2 anywhere — exit 1 is non-blocking, only exit 2 blocks the action.
+#   - HOOK-UNSAFE-SHELL: eval of a dynamic value (`eval ...$...`) — never eval
+#     tool-supplied stdin.
+check_hook_scripts() {
+    local hooks_dir="$CLAUDE_DIR/hooks" h base first code
+    [ -d "$hooks_dir" ] || return 0
+    for h in "$hooks_dir"/*.sh; do
+        [ -f "$h" ] || continue
+        base=$(basename "$h")
+        first=$(head -1 "$h" 2>/dev/null || true)
+        case "$first" in
+            '#!'*) : ;;
+            *) warning "[HOOK-NO-SHEBANG] $base: first line is not a #! shebang (e.g. #!/usr/bin/env bash)" ;;
+        esac
+        # Strip full-line comments (and the shebang) so documented/example code — a
+        # commented-out eval, a sample block decision — does not trip the heuristics.
+        code=$(grep -vE '^[[:space:]]*#' "$h" 2>/dev/null || true)
+        if printf '%s\n' "$code" | grep -qE '"?decision"?[[:space:]]*:[[:space:]]*"?block|"?permissionDecision"?[[:space:]]*:[[:space:]]*"?deny' \
+           && printf '%s\n' "$code" | grep -qE '(^|[^0-9])exit[[:space:]]+1([^0-9]|$)' \
+           && ! printf '%s\n' "$code" | grep -qE '(^|[^0-9])exit[[:space:]]+2([^0-9]|$)'; then
+            warning "[HOOK-EXIT-NONBLOCKING] $base: emits a block/deny decision but exits 1 — only exit 2 blocks the action (exit 1 is non-blocking)"
+        fi
+        if printf '%s\n' "$code" | grep -qE '(^|[^A-Za-z0-9_])eval[[:space:]]+[^#]*\$'; then
+            warning "[HOOK-UNSAFE-SHELL] $base: eval of a dynamic value (\$...) — never eval tool-supplied input"
+        fi
+    done
+}
+
 # Flag auto-memory MEMORY.md index files over the loaded-slice budget.
 check_memory_overflow() {
     local mem ls bs
@@ -447,6 +628,28 @@ check_hook_timeouts() {
             warning "[SUSPICIOUS-TIMEOUT] $display: a $typ hook ($ev) has timeout ${t}s (>2x the ${def}s default)"
         fi
     done < <(jq -r '.hooks // {} | to_entries[] | .key as $ev | .value[]? | .hooks[]? | select(has("type") and has("timeout")) | "\($ev)\t\(.type)\t\(.timeout)"' "$json_file" 2>/dev/null || true)
+}
+
+# Flag http hooks that carry an auth-bearing header but scope no env vars. Without
+# allowedEnvVars (per-hook) or httpHookAllowedEnvVars (top-level), Claude Code sends
+# the entire environment to the hook URL — leaking unrelated secrets.
+check_http_hook_env() {
+    local json_file="$1" display="$2" leak
+    [ -f "$json_file" ] || return 0
+    command -v jq >/dev/null 2>&1 || return 0
+    leak=$(jq -r '
+        (.httpHookAllowedEnvVars // null) as $top
+        | (.hooks // {}) | to_entries[] | .value[]? | .hooks[]?
+        | select(.type == "http")
+        | select(.allowedEnvVars == null and $top == null)
+        | select(.headers != null)
+        | select([ .headers | to_entries[] | ((.key) + " " + (.value | tostring)) | ascii_downcase ]
+                 | any(test("authorization|api.?key|token|secret|bearer|\\$\\{")))
+        | (.url // "http hook")
+    ' "$json_file" 2>/dev/null | head -1 || true)
+    if [ -n "$leak" ]; then
+        warning "[HOOK-ENV-LEAK] $display: http hook ($leak) sends an auth header with no allowedEnvVars/httpHookAllowedEnvVars — the whole environment is forwarded"
+    fi
 }
 
 # Flag settings keys that broadly loosen the permission sandbox. bypassPermissions
@@ -668,14 +871,17 @@ if [ -f "$CLAUDE_MD" ]; then
         ok "CLAUDE.md: $lines lines (under $CLAUDE_MD_MAX_LINES)"
     fi
     check_dead_refs_in_file "$CLAUDE_MD" "CLAUDE.md"
+    walk_imports "$CLAUDE_MD" "CLAUDE.md" 0
 else
     warning "No CLAUDE.md found"
 fi
-# CLAUDE.local.md — personal, gitignored overrides; dead-ref check too.
+# CLAUDE.local.md — personal, gitignored overrides; dead-ref + import checks too.
 for cl in "$CLAUDE_DIR/CLAUDE.local.md" "$CLAUDE_DIR/../CLAUDE.local.md"; do
     [ -f "$cl" ] || continue
     check_dead_refs_in_file "$cl" "$(basename "$cl")"
+    walk_imports "$cl" "$(basename "$cl")" 0
 done
+check_local_md_tracked
 echo ""
 
 # --- Check 2: Skills (SKILL.md files) ---
@@ -710,6 +916,32 @@ if [ -d "$COMMANDS_DIR" ]; then
     done
 else
     ok "No $COMMANDS_DIR directory (skipped)"
+fi
+echo ""
+
+# --- Check 3b: Agents (subagent .md files) ---
+bold "--- Agents ---"
+if [ -d "$AGENTS_DIR" ]; then
+    is_plugin_tree=0
+    [ -f "$CLAUDE_DIR/.claude-plugin/plugin.json" ] && is_plugin_tree=1
+    agent_names=""
+    for agent_file in "$AGENTS_DIR"/*.md; do
+        [ -f "$agent_file" ] || continue
+        a_display="agents/$(basename "$agent_file")"
+        validate_agent_md "$agent_file" "$a_display" "$is_plugin_tree"
+        a_name=$(extract_field "$agent_file" "name")
+        [ -z "$a_name" ] && a_name=$(basename "$agent_file" .md)
+        agent_names="${agent_names}${a_name}"$'\n'
+    done
+    dup_names=$(printf '%s' "$agent_names" | grep -v '^$' | sort | uniq -d || true)
+    if [ -n "$dup_names" ]; then
+        while IFS= read -r dn; do
+            [ -z "$dn" ] && continue
+            warning "[AGENT-DUP-NAME] agents/: name '$dn' is shared by more than one agent file (one is silently discarded)"
+        done <<< "$dup_names"
+    fi
+else
+    ok "No $AGENTS_DIR directory (skipped)"
 fi
 echo ""
 
@@ -793,6 +1025,7 @@ for settings_file in "$CLAUDE_DIR/settings.json" "$CLAUDE_DIR/settings.local.jso
         check_settings_guide_refs    "$settings_file" "$sdisp"
         check_mcp_preapproved        "$settings_file" "$sdisp"
         check_hook_timeouts          "$settings_file" "$sdisp"
+        check_http_hook_env          "$settings_file" "$sdisp"
         check_settings_security      "$settings_file" "$sdisp"
     fi
 done
@@ -801,9 +1034,10 @@ if [ "$settings_checked" -eq 0 ]; then
 fi
 echo ""
 
-# --- Check 6: Hooks (registration) ---
+# --- Check 6: Hooks (registration + script safety) ---
 bold "--- Hooks ---"
 check_unregistered_hooks
+check_hook_scripts
 echo ""
 
 # --- Check 7: Auto-memory index size ---

@@ -1,6 +1,17 @@
 # CLAUDE.md Content Quality
 
-Loaded by `/claude-markdown-health-check` Phase 12. Phase 1 already checks CLAUDE.md *size* and `validate-skills.sh` checks its *dead links*; this rubric judges whether the file is actually *useful* to a fresh Claude session.
+Loaded by `/claude-markdown-health-check` Phase 12. Phase 1 already checks CLAUDE.md *size* and `validate-skills.sh` checks its *dead links*, *imports*, and *local-file hygiene*; this rubric judges whether the file is actually *useful* to a fresh Claude session.
+
+## Deterministic CLAUDE.md checks (validate-skills.sh, relayed here)
+
+| Tag | Condition | Tier |
+|---|---|---|
+| `CLAUDEMD-DEAD-IMPORT` | an `@path` import in CLAUDE.md / CLAUDE.local.md does not resolve (relative to the importing file; `@~/…` resolves against `$HOME`) | Critical |
+| `IMPORT-TOO-DEEP` | an `@import` chain exceeds the documented 4-hop maximum | Structural |
+| `LOCAL-MD-TRACKED` | a `CLAUDE.local.md` sits inside a git working tree with no `.gitignore` entry covering it — personal overrides should be gitignored | Hygiene |
+
+Import detection only treats `@token` as an import when the token ends in an extension or starts with `./`, `../`, `~/`, or `/` — so `@mentions`, emails, and npm scopes are not flagged, and tokens inside fenced code blocks are ignored.
+
 
 ## What a good CLAUDE.md contains
 

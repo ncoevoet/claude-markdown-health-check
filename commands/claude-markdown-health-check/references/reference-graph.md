@@ -14,6 +14,7 @@ Builds the `references/*.md` link graph rooted in every SKILL.md and command `.m
   the cap is a backstop, not a target.
 - Graph nodes: every SKILL.md, every command `.md` (the "roots"), and every file under a sibling `references/` directory (the "ref leaves").
 - Graph edges: any `references/foo.md` substring inside a node's body, resolved against the node's reference base. A reference file's own citations resolve against the OWNING skill/command root (the dir containing `references/`), so a ref citing a sibling ref builds a real edge instead of doubling the path — this is what makes `REF-CIRCULAR`/`REF-TOO-DEEP` reachable and stops a cited sibling being mislabelled `REF-ORPHAN`.
+- Bare sibling citations: a reference doc that cites another reference by **bare filename** (`` `state-file.md` ``, "sibling of this file") counts toward that file's in-degree for `REF-ORPHAN` only. These bare edges are deliberately NOT added to the cycle/depth walk, so a prose name-drop can never fabricate a false `REF-CIRCULAR`/`REF-TOO-DEEP`.
 
 > Follow-up (not yet implemented): CLAUDE.md `@path` imports have a separate hard limit of **4 hops** per the [memory doc](https://code.claude.com/docs/en/memory); a dedicated `@import`-depth check could live here.
 

@@ -1,0 +1,19 @@
+{
+  "id": "64-marketplace-pluginroot-ok",
+  "command": "claude-markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/marketplace-pluginroot-ok",
+    "needs_home_override": false,
+    "scanners": ["scan-graph"]
+  },
+  "grader": { "method": "code" },
+  "success_criteria": {
+    "must_detect": [],
+    "must_not_flag": ["MARKETPLACE-DEAD-SOURCE", "PLUGIN-BAD-VERSION", "PLUGIN-ABS-PATH"],
+    "expect_clean": true
+  },
+  "expected_behavior": [
+    "scan-graph.sh does NOT emit MARKETPLACE-DEAD-SOURCE: the bare source 'formatter' resolves under metadata.pluginRoot './plugins' to plugins/formatter/, which exists"
+  ]
+}

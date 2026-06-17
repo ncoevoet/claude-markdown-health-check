@@ -1,0 +1,19 @@
+{
+  "id": "54-hook-exit-nonblocking",
+  "command": "claude-markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/hook-exit-nonblocking",
+    "needs_home_override": false,
+    "scanners": ["validate-skills"]
+  },
+  "grader": { "method": "code" },
+  "success_criteria": {
+    "must_detect": [ { "tag": "HOOK-EXIT-NONBLOCKING", "path_substring": "blocker" } ],
+    "must_not_flag": ["HOOK-NO-SHEBANG", "HOOK-UNSAFE-SHELL"],
+    "expect_clean": false
+  },
+  "expected_behavior": [
+    "validate-skills.sh emits [HOOK-EXIT-NONBLOCKING] because blocker.sh emits a block decision then exits 1 (non-blocking) instead of exit 2"
+  ]
+}

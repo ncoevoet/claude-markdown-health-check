@@ -1,0 +1,19 @@
+{
+  "id": "51-agent-dup-name",
+  "command": "claude-markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/agent-dup-name",
+    "needs_home_override": false,
+    "scanners": ["validate-skills"]
+  },
+  "grader": { "method": "code" },
+  "success_criteria": {
+    "must_detect": [ { "tag": "AGENT-DUP-NAME", "path_substring": "agents" } ],
+    "must_not_flag": ["AGENT-BAD-SCHEMA", "AGENT-BYPASS-PERMS"],
+    "expect_clean": false
+  },
+  "expected_behavior": [
+    "validate-skills.sh emits [AGENT-DUP-NAME] because two agent files declare name 'shared' and one would be silently discarded"
+  ]
+}

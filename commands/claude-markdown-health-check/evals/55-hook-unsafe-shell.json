@@ -1,0 +1,19 @@
+{
+  "id": "55-hook-unsafe-shell",
+  "command": "claude-markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/hook-unsafe-shell",
+    "needs_home_override": false,
+    "scanners": ["validate-skills"]
+  },
+  "grader": { "method": "code" },
+  "success_criteria": {
+    "must_detect": [ { "tag": "HOOK-UNSAFE-SHELL", "path_substring": "danger" } ],
+    "must_not_flag": ["HOOK-NO-SHEBANG", "HOOK-EXIT-NONBLOCKING"],
+    "expect_clean": false
+  },
+  "expected_behavior": [
+    "validate-skills.sh emits [HOOK-UNSAFE-SHELL] because danger.sh runs eval on stdin-derived input (eval \"$input\")"
+  ]
+}

@@ -1,0 +1,5 @@
+{
+  "name": "clean-demo",
+  "version": "1.0.0",
+  "description": "A well-formed plugin manifest used as the false-positive guard for plugin-structure checks."
+}

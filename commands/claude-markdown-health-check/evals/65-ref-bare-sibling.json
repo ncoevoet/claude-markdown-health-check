@@ -1,0 +1,19 @@
+{
+  "id": "65-ref-bare-sibling",
+  "command": "claude-markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/ref-bare-sibling",
+    "needs_home_override": false,
+    "scanners": ["scan-graph"]
+  },
+  "grader": { "method": "code" },
+  "success_criteria": {
+    "must_detect": [],
+    "must_not_flag": ["REF-ORPHAN"],
+    "expect_clean": true
+  },
+  "expected_behavior": [
+    "scan-graph.sh does NOT emit REF-ORPHAN for b.md: its sibling a.md cites it by bare filename ('b.md'), which counts as a reference for orphan purposes"
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "id": "63-local-md-tracked",
+  "command": "claude-markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/local-md-tracked",
+    "needs_home_override": false,
+    "scanners": ["validate-skills"]
+  },
+  "grader": { "method": "code" },
+  "success_criteria": {
+    "must_detect": [ { "tag": "LOCAL-MD-TRACKED", "path_substring": "CLAUDE.local.md" } ],
+    "must_not_flag": ["CLAUDEMD-DEAD-IMPORT", "IMPORT-TOO-DEEP"],
+    "expect_clean": false
+  },
+  "expected_behavior": [
+    "validate-skills.sh emits [LOCAL-MD-TRACKED] because CLAUDE.local.md sits inside a git repo with no .gitignore entry covering it"
+  ]
+}

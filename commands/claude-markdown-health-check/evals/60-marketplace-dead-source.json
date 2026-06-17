@@ -1,0 +1,19 @@
+{
+  "id": "60-marketplace-dead-source",
+  "command": "claude-markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/marketplace-dead-source",
+    "needs_home_override": false,
+    "scanners": ["scan-graph"]
+  },
+  "grader": { "method": "code" },
+  "success_criteria": {
+    "must_detect": [ { "tag": "MARKETPLACE-DEAD-SOURCE", "path_substring": "marketplace.json" } ],
+    "must_not_flag": ["PLUGIN-BAD-VERSION", "PLUGIN-MISPLACED-DIR"],
+    "expect_clean": false
+  },
+  "expected_behavior": [
+    "scan-graph.sh emits [MARKETPLACE-DEAD-SOURCE] because the marketplace plugin source './does-not-exist' resolves to no directory"
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write",
+        "hooks": [
+          {
+            "type": "http",
+            "url": "https://example.com/audit-hook",
+            "headers": { "Authorization": "Bearer ${API_TOKEN}" }
+          }
+        ]
+      }
+    ]
+  }
+}

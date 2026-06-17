@@ -1,0 +1,8 @@
+{
+  "name": "mp",
+  "owner": { "name": "Example" },
+  "metadata": { "pluginRoot": "./plugins" },
+  "plugins": [
+    { "name": "formatter", "source": "formatter" }
+  ]
+}

@@ -1,6 +1,8 @@
 # Frontmatter Strict Schema — Phase 10
 
-Validates the YAML frontmatter of every SKILL.md, agent `.md`, and command `.md` against a documented field set. Runs at every depth — cheap deterministic check inside `validate-skills.sh`.
+Validates the YAML frontmatter of every SKILL.md and command `.md` against a documented field set. Runs at every depth — cheap deterministic check inside `validate-skills.sh`.
+
+Subagent files (`.claude/agents/*.md`) use a **distinct schema** (`tools`/`disallowedTools` instead of `allowed-tools`, plus `permissionMode`, `color`, `maxTurns`, …) and are validated by a separate pass — see [`agent-frontmatter.md`](agent-frontmatter.md). The agent pass emits its own tags (`AGENT-BAD-SCHEMA`, `AGENT-BYPASS-PERMS`, `AGENT-DUP-NAME`, `AGENT-PLUGIN-FORBIDDEN-FIELD`).
 
 ## Source
 

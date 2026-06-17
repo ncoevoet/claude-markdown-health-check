@@ -1,0 +1,7 @@
+{
+  "name": "clean-mp",
+  "owner": { "name": "Example" },
+  "plugins": [
+    { "name": "clean-demo", "source": "./" }
+  ]
+}

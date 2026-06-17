@@ -1,0 +1,19 @@
+{
+  "id": "58-plugin-misplaced-dir",
+  "command": "claude-markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/plugin-misplaced-dir",
+    "needs_home_override": false,
+    "scanners": ["scan-graph"]
+  },
+  "grader": { "method": "code" },
+  "success_criteria": {
+    "must_detect": [ { "tag": "PLUGIN-MISPLACED-DIR", "path_substring": "skills" } ],
+    "must_not_flag": ["PLUGIN-BAD-VERSION", "MARKETPLACE-DEAD-SOURCE"],
+    "expect_clean": false
+  },
+  "expected_behavior": [
+    "scan-graph.sh emits [PLUGIN-MISPLACED-DIR] because a skills/ component dir is nested inside .claude-plugin/ instead of at the plugin root"
+  ]
+}

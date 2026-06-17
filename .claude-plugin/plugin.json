@@ -1,7 +1,7 @@
 {
   "name": "claude-markdown-health-check",
   "displayName": ".claude/ Health Check",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "Audits the .claude/ ecosystem — skills, commands, hooks, agents, settings, plugins, memory — for dead references, weak triggers, token bloat, dormant skills, permission drift, hook reliability, memory hygiene, and context bloat. Evidence-grounds every judgment finding before reporting.",
   "author": {
     "name": "Nicolas Coevoet"

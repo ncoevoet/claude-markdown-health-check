@@ -1,0 +1,19 @@
+{
+  "id": "59-plugin-abs-path",
+  "command": "claude-markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/plugin-abs-path",
+    "needs_home_override": false,
+    "scanners": ["scan-graph"]
+  },
+  "grader": { "method": "code" },
+  "success_criteria": {
+    "must_detect": [ { "tag": "PLUGIN-ABS-PATH", "path_substring": "plugin.json" } ],
+    "must_not_flag": ["PLUGIN-BAD-VERSION", "PLUGIN-MISPLACED-DIR"],
+    "expect_clean": false
+  },
+  "expected_behavior": [
+    "scan-graph.sh emits [PLUGIN-ABS-PATH] because the commands path 'cmds' is not relative starting with ./"
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "id": "61-claudemd-dead-import",
+  "command": "claude-markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/claudemd-dead-import",
+    "needs_home_override": false,
+    "scanners": ["validate-skills"]
+  },
+  "grader": { "method": "code" },
+  "success_criteria": {
+    "must_detect": [ { "tag": "CLAUDEMD-DEAD-IMPORT", "path_substring": "CLAUDE.md" } ],
+    "must_not_flag": ["IMPORT-TOO-DEEP", "DEAD-REF"],
+    "expect_clean": false
+  },
+  "expected_behavior": [
+    "validate-skills.sh emits [CLAUDEMD-DEAD-IMPORT] because CLAUDE.md imports @missing.md which does not resolve"
+  ]
+}

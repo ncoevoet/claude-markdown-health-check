@@ -1,0 +1,19 @@
+{
+  "id": "62-import-too-deep",
+  "command": "claude-markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/import-too-deep",
+    "needs_home_override": false,
+    "scanners": ["validate-skills"]
+  },
+  "grader": { "method": "code" },
+  "success_criteria": {
+    "must_detect": [ { "tag": "IMPORT-TOO-DEEP", "path_substring": "l4" } ],
+    "must_not_flag": ["CLAUDEMD-DEAD-IMPORT"],
+    "expect_clean": false
+  },
+  "expected_behavior": [
+    "validate-skills.sh emits [IMPORT-TOO-DEEP] because CLAUDE.md -> l1 -> l2 -> l3 -> l4 -> l5 is a 5-hop @import chain, past the 4-hop limit"
+  ]
+}
