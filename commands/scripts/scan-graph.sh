@@ -169,10 +169,16 @@ scan_ref_graph() {
         local base
         base=$(_ref_base "$src" "$cmds_dir")
         local refs
-        refs=$(grep -oE 'references/[A-Za-z0-9._/-]+\.md' "$src" 2>/dev/null | sort -u)
+        # Anchor the match to a path boundary: a bare `references/X.md` is a real
+        # citation, but the `references/X.md` tail of a cross-skill path mentioned
+        # in prose (e.g. `other-skill/references/X.md`) must NOT resolve against
+        # THIS skill's dir — that fabricated a self-edge and a false REF-CIRCULAR.
+        refs=$(grep -oE '(^|[^A-Za-z0-9._/-])references/[A-Za-z0-9._/-]+\.md' "$src" 2>/dev/null \
+               | grep -oE 'references/[A-Za-z0-9._/-]+\.md' | sort -u)
         while IFS= read -r r; do
             [ -z "$r" ] && continue
             local tgt="$base/$r"
+            [ "$tgt" = "$src" ] && continue
             [ -f "$tgt" ] && printf '%s\t%s\n' "$src" "$tgt" >>"$EDGES_FILE"
         done <<< "$refs"
     done < <(sort -u "$NODES_FILE")
@@ -359,12 +365,11 @@ scan_plugin_self() {
             && emit_finding 2 "PLUGIN-MISPLACED-DIR" ".claude-plugin/$comp" "component dir '$comp' is inside .claude-plugin/ — it must sit at the plugin root"
     done
 
-    # version must be present and semantic, else Claude Code falls back to the git
-    # SHA and treats every commit as a new version.
+    # version is OPTIONAL (docs: omitting it makes Claude Code fall back to the
+    # git SHA, which is normal — e.g. marketplace-cataloged plugins carry the
+    # version in the catalog). Only flag a version that IS present but not semver.
     ver=$(jq -r '.version // empty' "$pj" 2>/dev/null)
-    if [ -z "$ver" ]; then
-        emit_finding 2 "PLUGIN-BAD-VERSION" ".claude-plugin/plugin.json" "no 'version' field — Claude Code falls back to the git SHA, so every commit reads as a new version"
-    elif ! printf '%s' "$ver" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+([-+.][0-9A-Za-z.-]+)?$'; then
+    if [ -n "$ver" ] && ! printf '%s' "$ver" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+([-+.][0-9A-Za-z.-]+)?$'; then
         emit_finding 2 "PLUGIN-BAD-VERSION" ".claude-plugin/plugin.json" "version '$ver' is not semantic (expected MAJOR.MINOR.PATCH)"
     fi
 

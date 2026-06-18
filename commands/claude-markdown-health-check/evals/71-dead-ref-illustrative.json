@@ -1,0 +1,19 @@
+{
+  "id": "71-dead-ref-illustrative",
+  "command": "claude-markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/dead-ref-illustrative",
+    "needs_home_override": false,
+    "scanners": ["validate-skills"]
+  },
+  "grader": { "method": "code" },
+  "success_criteria": {
+    "must_detect": [],
+    "must_not_flag": ["DEAD-REF"],
+    "expect_clean": false
+  },
+  "expected_behavior": [
+    "no DEAD-REF: `references/finance.md` and `references/mnda.md` are backtick-wrapped inline-code illustrations (stripped before citation extraction); the real markdown-link reference [setup](references/setup.md) resolves on disk. A bare-prose missing citation would still flag (case 02)."
+  ]
+}

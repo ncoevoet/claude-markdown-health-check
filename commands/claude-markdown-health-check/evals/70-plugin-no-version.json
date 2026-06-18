@@ -1,0 +1,19 @@
+{
+  "id": "70-plugin-no-version",
+  "command": "claude-markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/plugin-no-version",
+    "needs_home_override": false,
+    "scanners": ["scan-graph"]
+  },
+  "grader": { "method": "code" },
+  "success_criteria": {
+    "must_detect": [],
+    "must_not_flag": ["PLUGIN-BAD-VERSION"],
+    "expect_clean": false
+  },
+  "expected_behavior": [
+    "a plugin.json with no 'version' field is NOT flagged PLUGIN-BAD-VERSION (docs: version is optional; omission falls back to the git SHA, which is normal). A non-semver version would still flag (case 57)."
+  ]
+}
