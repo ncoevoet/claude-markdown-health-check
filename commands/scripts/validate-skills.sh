@@ -58,7 +58,7 @@ REF_TOC_THRESHOLD=100
 CLAUDE_MD_MAX_LINES=200
 IMPORT_MAX_DEPTH=4
 RESERVED_NAMES=("anthropic" "claude")
-KNOWN_FRONTMATTER_FIELDS=("name" "description" "when_to_use" "allowed-tools" "disallowed-tools" "argument-hint" "arguments" "model" "color" "user-invocable" "disable-model-invocation" "effort" "context" "agent" "hooks" "paths" "shell")
+KNOWN_FRONTMATTER_FIELDS=("name" "description" "when_to_use" "allowed-tools" "disallowed-tools" "argument-hint" "arguments" "model" "color" "user-invocable" "disable-model-invocation" "effort" "context" "agent" "hooks" "paths" "shell" "hide-from-slash-command-tool")
 MODEL_WHITELIST_RE='^(opus|sonnet|haiku|fable|inherit|claude-(opus|sonnet|haiku|fable)-[0-9])'
 # Support/utility directories under skills/ that are not themselves skills.
 SKILLS_DIR_EXCLUDES=("bootstrap" "commands")
@@ -145,7 +145,10 @@ validate_skill_md() {
     when_to_use=$(extract_field "$skill_file" "when_to_use")
     if [ -n "$desc" ]; then
         local desc_len=${#desc}
-        if [ "$desc_len" -lt "$DESC_MIN" ]; then
+        # The min-length floor exists so a model-invoked SKILL has enough text to
+        # trigger reliably. Slash-command files are user-invoked (typed as /name),
+        # so a terse description is valid — docs require only a non-empty string.
+        if [ "$is_skill_md" = 1 ] && [ "$desc_len" -lt "$DESC_MIN" ]; then
             error "[BAD-FRONTMATTER-SCHEMA] $skill_name: description is $desc_len chars (min: $DESC_MIN — too short to trigger reliably)"
         fi
         if [ "$desc_len" -gt "$DESC_HARD_MAX" ]; then
@@ -175,13 +178,15 @@ validate_skill_md() {
 
     # Check: allowed-tools syntax. Tokens look like `Read`, `WebFetch`, or
     # `Bash(...)` / `Bash(jq:*)` / `Bash(bash path:*)`. The documented forms are a
-    # space- or comma-separated string OR a YAML block list (`- Read`), so after
-    # stripping valid tokens the residue may legitimately contain separators
-    # (spaces, commas) and YAML list dashes; anything ELSE means the field is malformed.
+    # space- or comma-separated string OR a YAML list (block `- Read` or flow
+    # `[Read, "Bash(x)"]`), so after stripping valid tokens the residue may
+    # legitimately contain separators (spaces, commas), YAML list dashes, flow-list
+    # brackets and element quotes; anything ELSE means the field is malformed.
+    # NB: keep the hyphen LAST in the tr set so it stays literal, not a range.
     local allowed_tools_field at_remainder
     allowed_tools_field=$(extract_field "$skill_file" "allowed-tools")
     if [ -n "$allowed_tools_field" ]; then
-        at_remainder=$(printf '%s' "$allowed_tools_field" | sed -E 's/[A-Z][A-Za-z_]+(\([^()]*\))?//g' | tr -d ' \t\n,-')
+        at_remainder=$(printf '%s' "$allowed_tools_field" | sed -E 's/[A-Z][A-Za-z_]+(\([^()]*\))?//g' | tr -d ' \t\n,[]"'\''-')
         if [ -n "$at_remainder" ]; then
             error "[BAD-FRONTMATTER-SCHEMA] $skill_name: allowed-tools has unparseable residue '$at_remainder' — token shape is Name or Name(args)"
         fi
@@ -261,7 +266,8 @@ validate_skill_md() {
                 error "[DEAD-REF] $skill_name: cites $ref — missing at $ref_base/$ref"
             fi
         done < <(awk '{
-            s = $0; gsub(/[^A-Za-z0-9._\/-]/, " ", s); n = split(s, a, " ")
+            s = $0; gsub(/`[^`]*`/, " ", s)
+            gsub(/[^A-Za-z0-9._\/-]/, " ", s); n = split(s, a, " ")
             for (i = 1; i <= n; i++)
                 if (a[i] ~ /^references\/[A-Za-z0-9._\/-]+\.md$/) print a[i]
         }' "$skill_file" 2>/dev/null | sort -u || true)
@@ -309,6 +315,15 @@ validate_agent_md() {
     for tf in tools disallowedTools; do
         tools_field=$(extract_field "$agent_file" "$tf")
         [ -z "$tools_field" ] && continue
+        # Subagent docs document `tools` only as a comma-separated string (and the
+        # CLI as a JSON array) — never an inline YAML flow-list in file frontmatter.
+        # Flag the flow-list with a clear message instead of "unparseable residue '[]'".
+        case "$tools_field" in
+            \[*)
+                error "[AGENT-BAD-SCHEMA] $display: $tf uses an inline YAML flow-list ('[...]'); the documented form is a comma-separated string (e.g. 'Read, Grep') or a YAML block list"
+                continue
+                ;;
+        esac
         at_remainder=$(printf '%s' "$tools_field" | sed -E 's/(mcp__[A-Za-z0-9_]+|[A-Z][A-Za-z_]+(\([^()]*\))?)//g' | tr -d ' \t\n,-')
         if [ -n "$at_remainder" ]; then
             error "[AGENT-BAD-SCHEMA] $display: $tf has unparseable residue '$at_remainder' — token shape is Name, Name(args), or mcp__server__tool"
@@ -721,14 +736,14 @@ check_unflagged_destructive() {
         function has_warn(s,    t) {
             if (s ~ /⚠/) return 1
             t = tolower(s)
-            return t ~ /warning|danger|destructive|confirm|--dry-run|do not run|never run|caution|do not modify/
+            return t ~ /warning|danger|destructive|confirm|--dry-run|do not run|never run|caution|do not modify|block|prevent|deny|disallow|forbid|pattern|regex|example|e\.g\./
         }
         function is_dest(s,    t) {
             t = tolower(s)
             return t ~ /rm[[:space:]]+-rf/ \
                 || t ~ /git[[:space:]]+push[[:space:]]+(--force|-f([[:space:]]|$))/ \
                 || t ~ /git[[:space:]]+reset[[:space:]]+--hard/ \
-                || t ~ /drop[[:space:]]+(table|database|schema)/ \
+                || t ~ /(^|[^a-z])drop[[:space:]]+(table|database|schema)/ \
                 || t ~ /truncate[[:space:]]+table/ \
                 || t ~ /mkfs\./ \
                 || t ~ /chmod[[:space:]]+-r[[:space:]]+777/ \
@@ -737,6 +752,8 @@ check_unflagged_destructive() {
         { lines[NR] = $0 }
         END {
             for (i = 1; i <= NR; i++) {
+                if (lines[i] ~ /^[[:space:]]*(disallowedTools|disallowed-tools)[[:space:]]*:/) continue
+                if (lines[i] ~ /\\s/) continue
                 if (is_dest(lines[i])) {
                     warned = 0
                     s = (i - 5 < 1 ? 1 : i - 5)
@@ -912,6 +929,11 @@ bold "--- Commands ---"
 if [ -d "$COMMANDS_DIR" ]; then
     for cmd_file in "$COMMANDS_DIR"/*.md; do
         [ -f "$cmd_file" ] || continue
+        # Conventional repo docs that live in commands/ are not slash commands —
+        # don't validate their filename as a command name (e.g. README → BAD-NAME).
+        case "$(basename "$cmd_file" | tr '[:upper:]' '[:lower:]')" in
+            readme.md|changelog.md|license.md|contributing.md) continue ;;
+        esac
         validate_skill_md "$cmd_file" "commands/$(basename "$cmd_file")"
     done
 else
@@ -965,7 +987,8 @@ for ref_file in "$SKILLS_DIR"/*/references/*.md; do
     # consumer-project paths the skill creates/owns, not foreign cross-refs.
     chained=$(grep -n '\.claude/' "$ref_file" 2>/dev/null \
               | grep -Ev "$CLAUDE_RUNTIME_PATHS_RE" \
-              | grep -Ev "\.claude/(${skill_name}(/|\.[a-zA-Z0-9]+)|reports[/'\"\` ]?)" | head -3 || true)
+              | grep -Ev "\.claude/(${skill_name}(/|\.[a-zA-Z0-9]+)|reports[/'\"\` ]?)" \
+              | grep -E '\.claude/[A-Za-z0-9._-]+/' | head -3 || true)
     if [ -n "$chained" ]; then
         error "[CHAINED-REF] $ref_name links to external .claude/ path (allowed: .claude/$skill_name/ or .claude/$skill_name.*)"
         echo "    $chained" | head -2
@@ -1000,7 +1023,8 @@ for sub_refs in "$CLAUDE_DIR"/*/references; do
         # sibling config files (`.claude/<sub>.json`, `.claude/<sub>.md`, etc.).
         chained=$(grep -n '\.claude/' "$ref_file" 2>/dev/null \
                   | grep -Ev "$CLAUDE_RUNTIME_PATHS_RE" \
-                  | grep -Ev "\.claude/${sub}(/|\.[a-zA-Z0-9]+)" | head -3 || true)
+                  | grep -Ev "\.claude/${sub}(/|\.[a-zA-Z0-9]+)" \
+                  | grep -E '\.claude/[A-Za-z0-9._-]+/' | head -3 || true)
         if [ -n "$chained" ]; then
             error "[CHAINED-REF] $ref_name links to external .claude/ path (allowed: .claude/$sub/ or .claude/$sub.*)"
             echo "    $chained" | head -2

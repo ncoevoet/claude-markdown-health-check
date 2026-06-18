@@ -1,7 +1,7 @@
 # /claude-markdown-health-check
 
 [![CI](https://github.com/ncoevoet/claude-markdown-health-check/actions/workflows/ci.yml/badge.svg)](https://github.com/ncoevoet/claude-markdown-health-check/actions/workflows/ci.yml)
-[![version](https://img.shields.io/badge/version-0.8.0-blue)](.claude-plugin/plugin.json)
+[![version](https://img.shields.io/badge/version-0.8.1-blue)](.claude-plugin/plugin.json)
 [![license](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Claude Code plugin](https://img.shields.io/badge/Claude%20Code-plugin-8A2BE2)](https://code.claude.com/docs/en/plugins)
 
@@ -222,7 +222,7 @@ Two layers, following Anthropic's [develop-tests](https://platform.claude.com/do
 
 - **Deterministic (code-graded, CI-safe, no API key).** Synthetic `.claude/` fixture trees under `tests/fixtures/<case>/` each plant one defect; the suite runs `validate-skills.sh` / `scan-graph.sh` against them and asserts the exact `[TAG]` set. A `clean/` fixture asserts **zero** findings — the false-positive guard.
   ```bash
-  make test              # bash tests/run.sh — anonymization + eval-schema gates, then 54 code-graded cases (177 assertions)
+  make test              # bash tests/run.sh — anonymization + eval-schema gates, then 61 code-graded cases (189 assertions)
   bash tests/run.sh 02   # run one case / id-prefix (deterministic suite only)
   ```
   `tests/run.sh` also runs two release gates first: an **anonymization** check (no real scanned-project names in the published `commands/`, `tests/fixtures/`, `README.md` — the real blocklist is gitignored, a placeholder ships) and **eval-schema validation** (`validate-evals.sh` asserts every case matches the contract before an expensive run is wasted on a malformed one).
@@ -232,7 +232,7 @@ Two layers, following Anthropic's [develop-tests](https://platform.claude.com/do
   HEALTH_CHECK_EVAL_RUNS=3 make evals   # majority vote to smooth LLM noise
   ```
 
-Cases live in `commands/claude-markdown-health-check/evals/*.json` (63 cases: 54 `grader.method: code` + 9 `llm-rubric`); fixtures in `tests/fixtures/`. 
+Cases live in `commands/claude-markdown-health-check/evals/*.json` (70 cases: 61 `grader.method: code` + 9 `llm-rubric`); fixtures in `tests/fixtures/`. 
 
 Tags are the stable machine contract, so the code-graded cases are immune to report-format changes. CI (`.github/workflows/ci.yml`) runs shellcheck + `bash -n` + the anonymization gate + eval-schema validation + the deterministic suite on every push; it does **not** run the token-spending LLM evals. Every real-world miss or false positive should become a new case.
 
@@ -272,7 +272,7 @@ commands/
 │   │   ├── report-format.md                 # Phase 24 report rendering — domain map + scorecard
 │   │   └── post-report-menu.md              # Phase 25 menu
 │   └── evals/                               # data-driven eval cases
-│       ├── 01-clean-zero-findings.json … 65-ref-bare-sibling.json  (54 code + 9 LLM)
+│       ├── 01-clean-zero-findings.json … 72-chained-ref-artifact.json  (61 code + 9 LLM)
 │       └── README.md                        # eval schema + how to run
 └── scripts/
     ├── validate-skills.sh                   # deterministic compliance validator (Phase 5)

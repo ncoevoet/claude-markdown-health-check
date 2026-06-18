@@ -1,0 +1,19 @@
+{
+  "id": "67-destructive-context",
+  "command": "claude-markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/destructive-context",
+    "needs_home_override": false,
+    "scanners": ["validate-skills"]
+  },
+  "grader": { "method": "code" },
+  "success_criteria": {
+    "must_detect": [],
+    "must_not_flag": ["UNFLAGGED-DESTRUCTIVE"],
+    "expect_clean": false
+  },
+  "expected_behavior": [
+    "no UNFLAGGED-DESTRUCTIVE: the rm/push tokens sit on a disallowed-tools denylist line (being denied, not run), 'block `rm -rf`' and the 'rm\\s+-rf' regex are documentation, and 'undrop table' is not 'drop table'"
+  ]
+}

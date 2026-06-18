@@ -1,0 +1,19 @@
+{
+  "id": "69-commands-docs",
+  "command": "claude-markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/commands-docs",
+    "needs_home_override": false,
+    "scanners": ["validate-skills"]
+  },
+  "grader": { "method": "code" },
+  "success_criteria": {
+    "must_detect": [],
+    "must_not_flag": ["BAD-NAME", "BAD-FRONTMATTER-SCHEMA", "UNKNOWN-FRONTMATTER-FIELD"],
+    "expect_clean": false
+  },
+  "expected_behavior": [
+    "commands/README.md is skipped (conventional doc filename) so no BAD-NAME; the slash command's short description ('Deploy the app.') is not flagged BAD-FRONTMATTER-SCHEMA (the min-length floor is skill-only); and hide-from-slash-command-tool is a known field so no UNKNOWN-FRONTMATTER-FIELD"
+  ]
+}
