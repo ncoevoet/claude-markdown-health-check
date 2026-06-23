@@ -6,23 +6,27 @@ human projection. Every finding still carries its tag — as a trailing code, no
 the lead.
 
 ## Contents
-- Severity chips
+- Severity badges
 - Domain grouping + tag→domain map
 - Scorecard
 - Per-finding rendering
 - Finding numbering
 - Worked example
 
-## Severity chips
+## Severity badges
 
-The four severity tiers map to plain-language chips:
+The four severity tiers map to a colored badge — a dot + the tier word — that leads each
+finding line (replacing the old bracketed text chip):
 
-| Tier (internal) | Chip | Meaning |
-|-----------------|------|---------|
-| Critical | `[must-fix]` | broken; blocks correct behaviour |
-| Structural | `[should]` | works but should be reorganised |
-| Hygiene | `[polish]` | cosmetic / token efficiency |
-| Discovery | `[idea]` | additive suggestion from this session |
+| Tier (internal) | Badge | Meaning |
+|-----------------|-------|---------|
+| Critical | 🔴 must-fix | broken; blocks correct behaviour |
+| Structural | 🟠 should | works but should be reorganised |
+| Hygiene | 🟡 polish | cosmetic / token efficiency |
+| Discovery | 🔵 idea | additive suggestion from this session |
+
+The colored dot is the badge; the word after it is the selector name the Phase 25 menu and the
+`severityFloor` config use ("fix all must-fix", `severityFloor: "should"`).
 
 ## Domain grouping
 
@@ -32,7 +36,7 @@ domain with zero findings):
 `Skills` · `Hooks` · `Agents` · `Settings & Permissions` · `Memory` ·
 `References` · `Plugins` · `Output Styles` · `CLAUDE.md` · `Rules` · `Context` · `Cross-session`
 
-Discovery findings (`[idea]`) go in a trailing **Suggestions** section, not a domain.
+Discovery findings (`🔵 idea`) go in a trailing **Suggestions** section, not a domain.
 
 ### Tag → domain map
 
@@ -40,11 +44,11 @@ Discovery findings (`[idea]`) go in a trailing **Suggestions** section, not a do
 - **Hooks** — `UNREGISTERED-HOOK` `SUSPICIOUS-TIMEOUT` `DUPLICATE-LOGIC` `MISSING-ENFORCEMENT` `DEAD-MATCHER` `HOOK-FAILING` `HOOK-NEVER-FIRED` `HOOK-EVENT-MISMATCH` `HOOK-EXIT-NONBLOCKING` `HOOK-UNSAFE-SHELL` `HOOK-ENV-LEAK` `HOOK-NO-SHEBANG`
 - **Agents** — `MISSING-AGENT-TRIGGER` `OVERLAPPING-AGENT` `AGENT-NEVER-SPAWNED` `AGENT-BAD-SCHEMA` `AGENT-BYPASS-PERMS` `AGENT-DUP-NAME` `AGENT-PLUGIN-FORBIDDEN-FIELD`
 - **Settings & Permissions** — `INVALID-JSON` `DUPLICATE-KEY` `DUPLICATE-ENTRY` `MISSING-PRE-APPROVED` `BROAD-PATTERN` `STALE-REMINDER` `PERM-DEAD-ENTRY` `PERM-OVERBROAD` `SETTINGS-BYPASS-MODE` `SETTINGS-MCP-AUTOAPPROVE`
-- **Memory** — `MEMORY-OVERFLOW` `MEMORY-DEAD-LINK` `MEMORY-ORPHAN-FILE` `MEMORY-DUP-ENTRY` `MEMORY-STALE-DATE`
+- **Memory** — `MEMORY-OVERFLOW` `MEMORY-DEAD-LINK` `MEMORY-ORPHAN-FILE` `MEMORY-DUP-ENTRY` `MEMORY-STALE-DATE` `MEMORY-STALE-CONTENT`
 - **References** — `REF-CIRCULAR` `REF-TOO-DEEP` `REF-ORPHAN` `CHAINED-REF` `MISSING-TOC` `ORPHAN-GUIDE` `ORPHAN-PATTERN` `REPURPOSE` `MISSING-TRIGGER` + a `DEAD-REF` to a guide/settings path
 - **Plugins** — `PLUGIN-BROKEN-REF` `PLUGIN-MISSING-MANIFEST` `PLUGIN-VERSION-DRIFT` `MCP-DEPRECATED-TRANSPORT` `PLUGIN-MISPLACED-DIR` `PLUGIN-BAD-VERSION` `PLUGIN-ABS-PATH` `MARKETPLACE-DEAD-SOURCE`
 - **Output Styles** — `OUTPUTSTYLE-MISSING`
-- **CLAUDE.md** — `CLAUDEMD-STALE` `CLAUDEMD-GENERIC` `CLAUDEMD-THIN` `CLAUDEMD-DEAD-IMPORT` `IMPORT-TOO-DEEP` `LOCAL-MD-TRACKED`
+- **CLAUDE.md** — `CLAUDEMD-STALE` `CLAUDEMD-GENERIC` `CLAUDEMD-THIN` `CLAUDEMD-DEAD-IMPORT` `CLAUDEMD-DEAD-SCRIPT` `IMPORT-TOO-DEEP` `LOCAL-MD-TRACKED`
 - **Rules** — `BAD-RULE-FRONTMATTER` `RULE-OVERSIZED`
 - **Context** — `LOW-CACHE-HIT` `CONTEXT-BLOAT`
 - **Cross-session** — `RECURRING-DENIAL` `RECURRING-CORRECTION` `MISSING-SKILL-GAP`
@@ -69,30 +73,47 @@ domains with ≥1 finding). Grade from the must-fix (M) and should (S) counts:
 issues: Skills 3 · Hooks 1 · Settings 1 · Memory 0 · Plugins 0
 ```
 
+## Per-file CLAUDE.md score (always-on)
+
+Whenever a CLAUDE.md is in scope, render a one-line per-file scorecard directly under the
+`## CLAUDE.md` domain header (before its findings) — the 0–100 score + grade from
+`claude-md-quality.md`, with the per-criterion breakdown. It is a summary of that file's surviving
+findings, not a finding itself. With two scopes, print one per CLAUDE.md, attributed by scope.
+
+```
+## CLAUDE.md
+score: 72/100 (B) — Commands 12/20 · Architecture 20/20 · Patterns 15/15 · Conciseness 15/15 · Currency 5/15 · Actionability 15/15
+ 7. 🔴 must-fix CLAUDE.md tells users to run `npm run zod:install`, which no package.json defines
+               Evidence: `npm run zod:install` ∉ package.json scripts — CLAUDE.md   · CLAUDEMD-DEAD-SCRIPT
+```
+
+A CLAUDE.md with zero findings still prints its scorecard (`score: 96/100 (A) — …`) so the user sees
+the file was assessed and is healthy. Omit only when no CLAUDE.md exists in that scope.
+
 ## Per-finding rendering
 
 Two lines per finding: a plain-language sentence (chip first), then the locator
 indented, with the tag trailing after ` · `:
 
 ```
- [must-fix] <plain sentence describing the problem in human terms>
+ 🔴 must-fix <plain sentence describing the problem in human terms>
             <path/locator>                                    · TAG
 ```
 
 - Lead with what's wrong in plain words; the reader should understand without
   knowing the tag vocabulary.
-- Within a domain, order findings `[must-fix]` → `[should]` → `[polish]`.
+- Within a domain, order findings `🔴 must-fix` → `🟠 should` → `🟡 polish`.
 - Keep the tag — it is the stable machine code (and what the eval harness checks).
 
-For `[must-fix]` and `[should]` findings, the indented second line is an
+For `🔴 must-fix` and `🟠 should` findings, the indented second line is an
 **`Evidence:`** locator — the concrete artifact the Pre-print grounding gate
 verified the finding against (`finding-verification.md`), then the path + trailing
 tag. A kept top-tier finding shows what proved it; the locator is the evidence, not
-a restatement of the problem. `[polish]` findings keep the plain one-line locator —
+a restatement of the problem. `🟡 polish` findings keep the plain one-line locator —
 they are cosmetic and do not warrant the extra grounding.
 
 ```
- [must-fix] <plain sentence describing the problem in human terms>
+ 🔴 must-fix <plain sentence describing the problem in human terms>
             Evidence: <quoted token | resolved/missing path | metric> — <path>  · TAG
 ```
 
@@ -111,11 +132,11 @@ Two optional config keys (`config-keys.md`) shape what the report shows — appl
 AFTER numbering is computed so hidden items don't leave gaps:
 
 - `severityFloor` (default `"polish"`) — drop chips below the floor. `"should"` hides
-  `[polish]`; `"must-fix"` hides `[polish]` and `[should]`. Discovery `[idea]` items
+  `🟡 polish`; `"must-fix"` hides `🟡 polish` and `🟠 should`. Discovery `🔵 idea` items
   are never filtered.
 - `maxFindingsPerDomain` (default `0` = unlimited) — within a domain, show the N
   highest-severity findings and collapse the rest into a trailing
-  `… + K more [polish] in <Domain> (raise maxFindingsPerDomain to see all)` line, so
+  `… + K more 🟡 polish in <Domain> (raise maxFindingsPerDomain to see all)` line, so
   truncation is never silent.
 
 Both default to showing everything; a scope with nothing left after filtering prints
@@ -135,19 +156,19 @@ continuous across the whole report, not per-domain.
 issues: Skills 3 · Hooks 1 · Settings & Permissions 1
 
 ## Skills
- 1. [must-fix] atlassian links to a missing file (references/api.md)
+ 1. 🔴 must-fix atlassian links to a missing file (references/api.md)
                Evidence: → references/api.md (missing) — skills/atlassian/SKILL.md   · DEAD-REF
- 2. [should]   atlassian body is 412 lines with no references/ split
+ 2. 🟠 should   atlassian body is 412 lines with no references/ split
                Evidence: 412 lines · no references/ dir — skills/atlassian/SKILL.md   · NEEDS-REFERENCES
- 3. [should]   atlassian is unused in the last 30 days but loads 4.2k chars each session
+ 3. 🟠 should   atlassian is unused in the last 30 days but loads 4.2k chars each session
                Evidence: 0 invocations / 30d · 4.2k chars/session — skills/atlassian   · SKILL-DORMANT
 
 ## Hooks
- 4. [must-fix] the Edit hook fails on almost every run (284/304, 93%)
+ 4. 🔴 must-fix the Edit hook fails on almost every run (284/304, 93%)
                Evidence: 284/304 runs failed (93%) — PreToolUse:Edit   · HOOK-FAILING
 
 ## Settings & Permissions
- 5. [polish]   Bash(cat:*) lets any file be read — scope it to ~/.claude
+ 5. 🟡 polish   Bash(cat:*) lets any file be read — scope it to ~/.claude
                settings.json                                   · BROAD-PATTERN
 ```
 

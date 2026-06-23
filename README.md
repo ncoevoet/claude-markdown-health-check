@@ -1,7 +1,7 @@
 # /claude-markdown-health-check
 
 [![CI](https://github.com/ncoevoet/claude-markdown-health-check/actions/workflows/ci.yml/badge.svg)](https://github.com/ncoevoet/claude-markdown-health-check/actions/workflows/ci.yml)
-[![version](https://img.shields.io/badge/version-0.8.1-blue)](.claude-plugin/plugin.json)
+[![version](https://img.shields.io/badge/version-0.9.0-blue)](.claude-plugin/plugin.json)
 [![license](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Claude Code plugin](https://img.shields.io/badge/Claude%20Code-plugin-8A2BE2)](https://code.claude.com/docs/en/plugins)
 
@@ -17,7 +17,7 @@ It reports first and waits. Nothing is edited, moved, or deleted until you reply
 
 ![/claude-markdown-health-check report](docs/demo.png)
 
-A scorecard with a letter grade, findings grouped by area, each a plain-language line with a `[must-fix]`/`[polish]` chip and the trailing machine tag. It reports first and waits — nothing is touched until you reply.
+A scorecard with a letter grade, an always-on per-file CLAUDE.md score, and findings grouped by area — each a plain-language line led by a colored 🔴 / 🟠 / 🟡 / 🔵 badge with the trailing machine tag. It reports first and waits — nothing is touched until you reply.
 
 ## What it checks
 
@@ -41,25 +41,26 @@ A scorecard with a letter grade, findings grouped by area, each a plain-language
 | **Cross-references** | dead paths in `settings.json` / `CLAUDE.md` / skill `references/`, orphaned guides and patterns, missing triggers |
 | **Reference graph** | cycles in `references/*.md`, depth exceeding `MAX_REF_DEPTH`, orphan reference files (in-degree 0) |
 | **Memory** | `MEMORY.md` over the loaded-slice line/byte budget |
-| **Memory hygiene** | dead `- [Title](file.md)` links, orphan files in memory dir, duplicate entries, stale dates (>365d) |
+| **Memory hygiene** | dead `- [Title](file.md)` links, orphan files in memory dir, duplicate entries, stale dates (>365d), **stale body content** — a memory citing a path/script/behaviour the current tree contradicts |
+| **CLAUDE.md content** | dead `npm run <script>` (not in any `package.json` from the file up to the repo root), **self-referential count drift** ("all 36 rules" when the file holds 41), stale commands/paths/versions, generic boilerplate, missing build/test/run commands — plus an always-on **per-file 0–100 score** with a criteria breakdown |
 | **CLAUDE.md imports** | dead `@path` imports, `@import` chains past the 4-hop limit, a `CLAUDE.local.md` not covered by `.gitignore` |
 | **Context trend** (Deep depth) | low cache-hit sessions, output bloat per session |
 | **Cross-session patterns** (Deep depth) | recurring tool denials, recurring user corrections, missing skill gaps (subagents repeatedly spawned with no matching skill) |
 
 Thresholds — line counts, description caps, budget fractions, hook timeouts — are pulled live from the official Anthropic docs and cached for a week, so the audit tracks the spec instead of hardcoding it.
 
-## Severity tiers
+## Severity badges
 
-- **Critical** — broken; blocks correct behavior (dead refs, unregistered hooks, budget overflow, dormant-and-expensive skills, broken plugin refs, dead memory links)
-- **Structural** — works but should be reorganized (weak descriptions, orphans, trigger mismatches, never-fired skills, failing hooks, recurring denials)
-- **Hygiene** — cosmetic / token efficiency (over-broad patterns, stale reminders, low cache-hit, unused declared tools)
-- **Discovery** — additive suggestions surfaced from the current session (new rules, patterns, triggers)
+- 🔴 **must-fix** (Critical) — broken; blocks correct behavior (dead refs, unregistered hooks, budget overflow, dormant-and-expensive skills, broken plugin refs, dead memory links, dead `npm run` scripts)
+- 🟠 **should** (Structural) — works but should be reorganized (weak descriptions, orphans, trigger mismatches, never-fired skills, failing hooks, recurring denials, stale memory content)
+- 🟡 **polish** (Hygiene) — cosmetic / token efficiency (over-broad patterns, stale reminders, low cache-hit, unused declared tools)
+- 🔵 **idea** (Discovery) — additive suggestions surfaced from the current session (new rules, patterns, triggers)
 
-The chat report groups findings by **area** (Skills, Hooks, Settings & Permissions, Memory, References, Plugins, CLAUDE.md, …) under a scorecard, each rendered as a plain-language line with a `[must-fix]` / `[should]` / `[polish]` chip; the canonical tag stays as a trailing machine code (e.g. ` · DEAD-REF`). See [`references/report-format.md`](commands/claude-markdown-health-check/references/report-format.md).
+The chat report groups findings by **area** (Skills, Hooks, Settings & Permissions, Memory, References, Plugins, CLAUDE.md, …) under a scorecard, each rendered as a plain-language line led by a colored 🔴 / 🟠 / 🟡 badge; the canonical tag stays as a trailing machine code (e.g. ` · DEAD-REF`). When a CLAUDE.md is in scope, its block also carries an always-on per-file score (`score: 88/100 (B) — …`). See [`references/report-format.md`](commands/claude-markdown-health-check/references/report-format.md).
 
 Before the report prints, every **judgment** finding (the heuristic calls — weak descriptions, orphaned guides, stale CLAUDE.md commands, …) passes an **evidence-grounding gate**: 
 
-it survives only if it can be grounded in a quoted artifact on disk (a line, a resolved-or-missing path, a metric), and `[must-fix]` / `[should]` findings then carry that proof as an `Evidence:` locator. 
+it survives only if it can be grounded in a quoted artifact on disk (a line, a resolved-or-missing path, a metric), and 🔴 must-fix / 🟠 should findings then carry that proof as an `Evidence:` locator. 
 
 A finding that can't be grounded is downgraded to a non-actionable `[OBSERVATION]` or dropped — so a naive false positive (flagging a guide that _is_ referenced, or a command that _does_ exist) never reaches the report. 
 
@@ -153,7 +154,7 @@ Drop a `markdown-health-check.json` in `~/.claude/` (user defaults) and/or `./.c
 | `verifyFindings` | `true` | Run the evidence-grounding gate over judgment findings; `false` emits them unverified (debug) |
 | `skipPhases` | `[]` | Phase numbers to skip (Phase 5, the deterministic spine, never skips) |
 | `compressBodies` | `false` | Persistent equivalent of `--compress-bodies` |
-| `severityFloor` | `"polish"` | Lowest chip to report — `"should"` hides `[polish]`; `"must-fix"` hides `[polish]` + `[should]` |
+| `severityFloor` | `"polish"` | Lowest chip to report — `"should"` hides 🟡 polish; `"must-fix"` hides 🟡 polish + 🟠 should |
 | `maxFindingsPerDomain` | `0` | Per-domain finding cap (`0` = unlimited); excess is summarised, never silently dropped |
 | `guidanceCacheTtlDays` | `7` | TTL before the threshold cache re-fetches the Anthropic docs |
 
@@ -220,13 +221,13 @@ If you previously referred to phases by the old letter scheme, here is the mappi
 
 Two layers, following Anthropic's [develop-tests](https://platform.claude.com/docs/en/test-and-evaluate/develop-tests) methodology (code-grading is the fastest, most reliable tier — so the bulk is code-graded, and LLM-grading is reserved for the judgment phases):
 
-- **Deterministic (code-graded, CI-safe, no API key).** Synthetic `.claude/` fixture trees under `tests/fixtures/<case>/` each plant one defect; the suite runs `validate-skills.sh` / `scan-graph.sh` against them and asserts the exact `[TAG]` set. A `clean/` fixture asserts **zero** findings — the false-positive guard.
+- **Deterministic (code-graded, CI-safe, no API key).** Synthetic `.claude/` fixture trees under `tests/fixtures/<case>/` each plant one defect; the suite runs `validate-skills.sh` / `scan-graph.sh` against them and asserts the exact `[TAG]` set. A `clean/` fixture asserts **zero** findings — the false-positive guard. Paired guards cover both directions, e.g. cases 73/74 (a `npm run <script>` absent from `package.json` must be flagged `CLAUDEMD-DEAD-SCRIPT`, while one that resolves must **not** be) and cases 75/76 (a memory body citing a missing `.claude/…` path is flagged `MEMORY-STALE-CONTENT`, while one whose path resolves is not).
   ```bash
-  make test              # bash tests/run.sh — anonymization + eval-schema gates, then 61 code-graded cases (189 assertions)
+  make test              # bash tests/run.sh — anonymization + eval-schema gates, then the code-graded cases (199 assertions)
   bash tests/run.sh 02   # run one case / id-prefix (deterministic suite only)
   ```
   `tests/run.sh` also runs two release gates first: an **anonymization** check (no real scanned-project names in the published `commands/`, `tests/fixtures/`, `README.md` — the real blocklist is gitignored, a placeholder ships) and **eval-schema validation** (`validate-evals.sh` asserts every case matches the contract before an expensive run is wasted on a malformed one).
-- **Behavioural (LLM-graded, opt-in, costs tokens).** Runs the full `/claude-markdown-health-check` headless against a fixture to exercise the judgment phases (weak descriptions, thin CLAUDE.md, autonomy-gate compliance) and the evidence-grounding gate — including paired guards (cases 36–41: a referenced guide and a live CLAUDE.md command must _not_ be flagged, while a genuinely-orphaned guide and a missing-script command must _still_ be), graded by an LLM rubric and scored by majority over N runs.
+- **Behavioural (LLM-graded, opt-in, costs tokens).** Runs the full `/claude-markdown-health-check` headless against a fixture to exercise the judgment phases (weak descriptions, thin CLAUDE.md, autonomy-gate compliance) and the evidence-grounding gate — including paired guards (cases 36–41: a referenced guide and a live CLAUDE.md command must _not_ be flagged, while a genuinely-orphaned guide and a missing-script command must _still_ be; case 77: CLAUDE.md self-referential count drift plus the always-on per-file score), graded by an LLM rubric and scored by majority over N runs.
   ```bash
   make evals                            # needs the authenticated `claude` CLI
   HEALTH_CHECK_EVAL_RUNS=3 make evals   # majority vote to smooth LLM noise

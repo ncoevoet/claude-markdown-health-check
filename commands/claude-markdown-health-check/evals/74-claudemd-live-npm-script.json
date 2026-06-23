@@ -1,0 +1,19 @@
+{
+  "id": "74-claudemd-live-npm-script",
+  "command": "claude-markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/claudemd-live-npm-script",
+    "needs_home_override": true,
+    "scanners": ["validate-skills"]
+  },
+  "grader": { "method": "code" },
+  "success_criteria": {
+    "must_detect": [],
+    "must_not_flag": ["CLAUDEMD-DEAD-SCRIPT"],
+    "expect_clean": true
+  },
+  "expected_behavior": [
+    "every `npm run <script>` in CLAUDE.md resolves to a defined package.json script, so no CLAUDEMD-DEAD-SCRIPT is emitted (false-positive counterpart to case 73)"
+  ]
+}
