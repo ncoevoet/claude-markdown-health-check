@@ -1,0 +1,7 @@
+{
+  "name": "demo-app",
+  "scripts": {
+    "build:oss": "ng build InfinityOSS",
+    "oss:lang": "node projects/scripts/generate-lang-keys.js"
+  }
+}

@@ -2,7 +2,7 @@
 
 Loaded by `/claude-markdown-health-check` as **step 1 of the Pre-print pass**
 (before tag-canon enforcement). Filters the JUDGMENT findings — the ones the LLM
-phases reason out (Phases 6, 8, 12, 14, 17, 18, 19) — so the report carries only
+phases reason out (Phases 6, 8, 12, 14, 17, 18, 19, 20) — so the report carries only
 findings provable from a concrete artifact. Deterministic / script-relayed
 findings skip this gate entirely.
 
@@ -32,7 +32,7 @@ This is deliberate. An auditor that trusts its own first-pass judgment inflates
 false positives — it flags a guide as orphaned without re-running the grep, calls a
 CLAUDE.md command stale without checking the path exists, or labels a description
 "weak" on vibe. Hostile re-grounding produces a quieter, trustworthy report. A user
-who gets one wrong `[must-fix]` stops trusting all of them.
+who gets one wrong `🔴 must-fix` stops trusting all of them.
 
 Be hostile to the **finding, not to the tree.** You are prosecuting the claim
 ("prove this specific defect is real on disk") — not hunting the tree for new
@@ -58,8 +58,10 @@ script-owned — the orchestrator only relays them; never re-ground them here:
 `DESCRIPTION-TOO-LONG`, `DESCRIPTION-TRUNCATED`, `OVER-500-LINES`, `MISSING-TOC`,
 `CHAINED-REF`, `NO-PROGRESSIVE-DISCLOSURE`, `THIRD-PERSON`,
 `UNKNOWN-FRONTMATTER-FIELD`, `EMBEDDED-SECRET`, `UNFLAGGED-DESTRUCTIVE`,
-`SETTINGS-BYPASS-MODE`, `SETTINGS-MCP-AUTOAPPROVE`,
-`STALE-THRESHOLD`, `GUIDANCE-FETCH-FAILED`.
+`SETTINGS-BYPASS-MODE`, `SETTINGS-MCP-AUTOAPPROVE`, `CLAUDEMD-DEAD-SCRIPT`,
+`MEMORY-STALE-CONTENT` (only the deterministic slice — a memory body citing a
+missing `.claude/…` path; the judgment behaviour-contradiction slice below is
+verified, not fast-pathed), `STALE-THRESHOLD`, `GUIDANCE-FETCH-FAILED`.
 
 **`scan-graph.sh` (Phase 2 / 11 / 20 / 26 — read from `graph-scan.json`):**
 `PLUGIN-BROKEN-REF`, `PLUGIN-MISSING-MANIFEST`, `PLUGIN-VERSION-DRIFT`,
@@ -101,7 +103,8 @@ re-grepped and saw it — not that it seems true.
 | `ORPHAN-PATTERN` | 17 | Same as `ORPHAN-GUIDE`, scoped to `patterns/`. |
 | `MISSING-TRIGGER` | 17 | Quote the entry present in CLAUDE.md "Automatic Triggers" but absent from settings.json `automatic-guide-triggers` (or vice-versa) — both files checked, the asymmetry shown. |
 | `REPURPOSE` | 18 | Show all four Phase-18 gates hold: topic ∈ a named skill's domain; NOT already in that skill's SKILL.md/`references/` (grep shown); contains actionable patterns; ≥ 300 words (cite the count). Name the `<source> → <skill>/references/<name>.md` target. |
-| `CLAUDEMD-STALE` | 12 | Quote the CLAUDE.md line (command/path/version) AND show the contradicting real artifact — the path that does not resolve, the script that is gone, the version in `package.json`/`pom.xml` that differs. Both quoted. |
+| `CLAUDEMD-STALE` | 12 | Quote the CLAUDE.md line (command/path/version/**count**) AND show the contradicting real artifact — the path that does not resolve, the script that is gone, the version in `package.json`/`pom.xml` that differs, or the cited file's real count (e.g. "36 rules" vs `critical-rules.md`'s 41). Both quoted. |
+| `MEMORY-STALE-CONTENT` (judgment slice) | 20 | A memory body citing a missing `.claude/…` path is deterministic (script-relayed, fast-path) — NOT verified here. This row is the JUDGMENT slice: a memory body asserting a **behaviour** the code contradicts (e.g. "pre-commit runs vitest+prettier" when `.husky/pre-commit` runs prettier only). KEEP only when you can quote BOTH the memory claim AND the real file content that disproves it, AND the memory's project tree is actually on disk to read. If the project the memory describes is not present, you cannot ground it → downgrade to `[OBSERVATION]`, do not flag. Prose/preference claims with nothing to resolve are not this tag. |
 | `CLAUDEMD-GENERIC` | 12 | Quote the boilerplate line AND assert it would read true for an unrelated repo. A repo-specific line that merely reads plainly is NOT this. |
 | `CLAUDEMD-THIN` | 12 | Show the absence: grep for build/test/run commands AND an architecture/directory map both return nothing. A short-but-complete CLAUDE.md is not thin. |
 | `DUPLICATE-LOGIC` | 14 | Quote the overlapping check from BOTH hook scripts (the same condition, two files). |
@@ -171,7 +174,7 @@ know that aren't actionable") — downgrading reuses it, no new vocabulary.
 - For every KEPT judgment finding: "Did I actually re-read/re-grep the cited artifact,
   or am I trusting my Phase 6–19 first pass?" If you did not fetch it, fetch it now,
   then decide.
-- A `[must-fix]` (Critical-tier) judgment finding kept without a quotable Evidence
+- A `🔴 must-fix` (Critical-tier) judgment finding kept without a quotable Evidence
   locator is a calibration smell — ground it harder or downgrade it. Top severity is
   earned by proof, never by inference from naming/type.
 - Re-reads for independent findings have no inter-dependency — issue them in parallel

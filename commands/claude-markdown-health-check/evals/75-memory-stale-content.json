@@ -1,0 +1,20 @@
+{
+  "id": "75-memory-stale-content",
+  "command": "claude-markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/memory-stale-content",
+    "needs_home_override": true,
+    "scanners": ["validate-skills"]
+  },
+  "grader": { "method": "code" },
+  "success_criteria": {
+    "must_detect": [ { "tag": "MEMORY-STALE-CONTENT", "path_substring": "setup-note" } ],
+    "must_not_flag": ["MEMORY-OVERFLOW"],
+    "expect_clean": false
+  },
+  "expected_behavior": [
+    "validate-skills.sh emits [MEMORY-STALE-CONTENT] because setup-note.md's body cites `.claude/scripts/bootstrap.sh`, which does not resolve in the scanned tree",
+    "the MEMORY.md link index itself is clean — the staleness is inside the memory body"
+  ]
+}

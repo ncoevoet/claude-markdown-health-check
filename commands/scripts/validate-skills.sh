@@ -451,6 +451,44 @@ check_dead_refs_in_file() {
     done < <(grep -oE '(~/)?\.claude/[A-Za-z0-9._/-]+\.(md|sh|json)' "$src" 2>/dev/null | sort -u || true)
 }
 
+# Ground a single `npm run <script>` against the nearest package.json. Walks from
+# $1 (a directory) up to the filesystem root. Exit status:
+#   0 = a package.json on the path defines the script   (live — do not flag)
+#   1 = package.json(s) exist on the path, none define it (dead — flag)
+#   2 = no package.json anywhere on the path, or no jq    (cannot ground — skip)
+_npm_script_status() {
+    local script="$1" dir saw_pkg=0
+    command -v jq >/dev/null 2>&1 || return 2
+    dir=$(cd "$2" 2>/dev/null && pwd) || return 2
+    while :; do
+        if [ -f "$dir/package.json" ]; then
+            saw_pkg=1
+            jq -e --arg s "$script" '(.scripts // {})[$s] // empty' "$dir/package.json" >/dev/null 2>&1 && return 0
+        fi
+        [ "$dir" = "/" ] && break
+        dir=$(dirname "$dir")
+    done
+    [ "$saw_pkg" = 1 ] && return 1 || return 2
+}
+
+# Flag `npm run <script>` mentions in a text file whose <script> is defined in no
+# package.json from the file's directory up to the filesystem root (CLAUDEMD-DEAD-SCRIPT).
+# `npm run <name>` always requires a `.scripts.<name>` entry, so the grep is
+# self-constraining — lifecycle verbs (`npm install`/`npm ci`/`npm test`) never match.
+# Placeholder tokens like `<app>:start` carry a `<` and are skipped by the charset.
+# When no package.json exists on the path, grounding is impossible and nothing is flagged.
+check_npm_scripts_in_file() {
+    local src="$1" display="$2" script base_dir
+    [ -f "$src" ] || return 0
+    base_dir=$(dirname "$src")
+    local status
+    while IFS= read -r script; do
+        [ -z "$script" ] && continue
+        _npm_script_status "$script" "$base_dir" && status=0 || status=$?
+        [ "$status" = 1 ] && error "[CLAUDEMD-DEAD-SCRIPT] $display: \`npm run $script\` is not defined in package.json"
+    done < <(grep -oE 'npm run [A-Za-z0-9:_-]+' "$src" 2>/dev/null | awk '{print $3}' | sort -u || true)
+}
+
 # Print the @import tokens of a markdown file. An import is `@<path>` at line start
 # or after whitespace, where the path either ends in an extension or starts with
 # ./ ../ ~/ or / — this avoids matching @mentions, emails, and npm scopes. Fenced
@@ -619,6 +657,24 @@ check_memory_overflow() {
             error "[MEMORY-OVERFLOW] ${mem#$CLAUDE_DIR/}: $ls lines / $bs bytes (max $MEMORY_MAX_LINES lines / $MEMORY_MAX_BYTES bytes)"
         fi
     done
+}
+
+# Flag `.claude/<file>` path citations in auto-memory file BODIES that no longer
+# resolve in the scanned tree → MEMORY-STALE-CONTENT (a memory pointing at a script,
+# guide, or config that has since been removed/renamed). This is the deterministic
+# slice of memory content-grounding; behaviour-contradiction claims stay judgment
+# (Phase 20). Runtime/state paths a memory legitimately mentions are skipped.
+check_memory_stale_refs() {
+    local memf disp p
+    while IFS= read -r memf; do
+        [ -f "$memf" ] || continue
+        disp="projects/${memf#"$CLAUDE_DIR"/projects/}"
+        while IFS= read -r p; do
+            [ -z "$p" ] && continue
+            printf '%s' "$p" | grep -qE "$CLAUDE_RUNTIME_PATHS_RE" && continue
+            [ -f "$(_resolve_dotclaude "$p")" ] || error "[MEMORY-STALE-CONTENT] $disp: cites $p — missing on disk"
+        done < <(grep -oE '(~/)?\.claude/[A-Za-z0-9._/-]+\.(md|sh|json|ts|js)' "$memf" 2>/dev/null | sort -u || true)
+    done < <(find "$CLAUDE_DIR/projects" -path '*/memory/*.md' 2>/dev/null | sort)
 }
 
 # Flag hook timeouts above 2x the documented per-type default. Defaults:
@@ -888,6 +944,7 @@ if [ -f "$CLAUDE_MD" ]; then
         ok "CLAUDE.md: $lines lines (under $CLAUDE_MD_MAX_LINES)"
     fi
     check_dead_refs_in_file "$CLAUDE_MD" "CLAUDE.md"
+    check_npm_scripts_in_file "$CLAUDE_MD" "CLAUDE.md"
     walk_imports "$CLAUDE_MD" "CLAUDE.md" 0
 else
     warning "No CLAUDE.md found"
@@ -896,8 +953,15 @@ fi
 for cl in "$CLAUDE_DIR/CLAUDE.local.md" "$CLAUDE_DIR/../CLAUDE.local.md"; do
     [ -f "$cl" ] || continue
     check_dead_refs_in_file "$cl" "$(basename "$cl")"
+    check_npm_scripts_in_file "$cl" "$(basename "$cl")"
     walk_imports "$cl" "$(basename "$cl")" 0
 done
+# Guides CLAUDE.md routes to — ground their `npm run` mentions the same way.
+if [ -d "$CLAUDE_DIR/documentation/guides" ]; then
+    while IFS= read -r g; do
+        check_npm_scripts_in_file "$g" "documentation/guides/$(basename "$g")"
+    done < <(find "$CLAUDE_DIR/documentation/guides" -name '*.md' 2>/dev/null | sort)
+fi
 check_local_md_tracked
 echo ""
 
@@ -1064,9 +1128,10 @@ check_unregistered_hooks
 check_hook_scripts
 echo ""
 
-# --- Check 7: Auto-memory index size ---
+# --- Check 7: Auto-memory index size + stale body references ---
 bold "--- Memory ---"
 check_memory_overflow
+check_memory_stale_refs
 echo ""
 
 # --- Check 8: Path-scoped rules ---

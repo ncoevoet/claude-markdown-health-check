@@ -1,0 +1,19 @@
+{
+  "id": "76-memory-live-content",
+  "command": "claude-markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/memory-live-content",
+    "needs_home_override": true,
+    "scanners": ["validate-skills"]
+  },
+  "grader": { "method": "code" },
+  "success_criteria": {
+    "must_detect": [],
+    "must_not_flag": ["MEMORY-STALE-CONTENT"],
+    "expect_clean": true
+  },
+  "expected_behavior": [
+    "the memory body cites `.claude/scripts/bootstrap.sh`, which resolves on disk, so no MEMORY-STALE-CONTENT is emitted (false-positive counterpart to case 75)"
+  ]
+}

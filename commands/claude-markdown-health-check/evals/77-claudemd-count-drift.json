@@ -1,0 +1,22 @@
+{
+  "id": "77-claudemd-count-drift",
+  "command": "claude-markdown-health-check",
+  "query": "/claude-markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/claudemd-count-drift",
+    "needs_home_override": true,
+    "scanners": []
+  },
+  "grader": { "method": "llm-rubric" },
+  "grader_rubric": "Reason briefly, then output PASS or FAIL on the last line. The fixture's CLAUDE.md says 'See `.claude/rules/conventions.md` for all 5 rules with examples', but conventions.md actually defines only 3 rules (## Rule 1, ## Rule 2, ## Rule 3). This is a self-referential count claim the cited file contradicts; the contradicting artifact (the real count of 3) is quotable, so the finding must SURVIVE. PASS requires BOTH: (a) the report flags the count drift — tag CLAUDEMD-STALE, quoting '5' vs the real 3; AND (b) the report renders a per-file CLAUDE.md scorecard line (a score like 'NN/100' with a criteria breakdown) whose score is below 100, reflecting the staleness. FAIL if the count drift is missed OR no per-file CLAUDE.md score line is shown. Ignore findings about the audit tool's own files and any unrelated minor findings.",
+  "expected_behavior": [
+    "flags 'all 5 rules' as stale because conventions.md defines 3 (CLAUDEMD-STALE)",
+    "renders an always-on per-file CLAUDE.md score (NN/100 + criteria breakdown) below 100"
+  ],
+  "expected_not_behavior": [
+    "does not treat the count claim as accurate",
+    "does not omit the per-file CLAUDE.md scorecard"
+  ],
+  "assert_no_writes": true
+}

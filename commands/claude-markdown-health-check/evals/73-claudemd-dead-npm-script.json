@@ -1,0 +1,20 @@
+{
+  "id": "73-claudemd-dead-npm-script",
+  "command": "claude-markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/claudemd-dead-npm-script",
+    "needs_home_override": true,
+    "scanners": ["validate-skills"]
+  },
+  "grader": { "method": "code" },
+  "success_criteria": {
+    "must_detect": [ { "tag": "CLAUDEMD-DEAD-SCRIPT", "path_substring": "zod:install" } ],
+    "must_not_flag": ["DEAD-REF"],
+    "expect_clean": false
+  },
+  "expected_behavior": [
+    "validate-skills.sh emits [CLAUDEMD-DEAD-SCRIPT] for `npm run zod:install` (absent from the nearest package.json scripts)",
+    "does NOT flag `npm run build:oss` or `npm run oss:lang` — both are defined in package.json scripts"
+  ]
+}

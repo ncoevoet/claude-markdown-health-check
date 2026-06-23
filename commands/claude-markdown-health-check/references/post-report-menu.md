@@ -4,8 +4,8 @@ Loaded by `/claude-markdown-health-check` Phase 25. After the report prints, thi
 
 ## When to show
 
-- Show the menu only when the report has at least one actionable finding (`[must-fix]`, `[should]`, or `[polish]`). If every domain is empty, print "No findings — ecosystem is healthy." and stop; no menu.
-- `[idea]` Suggestions (`NEW-*`) and `OBSERVATION` lines are informational — they do not by themselves trigger the menu.
+- Show the menu only when the report has at least one actionable finding (`🔴 must-fix`, `🟠 should`, or `🟡 polish`). If every domain is empty, print "No findings — ecosystem is healthy." and stop; no menu.
+- `🔵 idea` Suggestions (`NEW-*`) and `OBSERVATION` lines are informational — they do not by themselves trigger the menu.
 
 ## Primary menu (single-select, via `AskUserQuestion`)
 
@@ -13,8 +13,8 @@ Loaded by `/claude-markdown-health-check` Phase 25. After the report prints, thi
 
 | Label | Offer when | Action |
 |-------|-----------|--------|
-| **Fix must-fix (recommended)** | >=1 `[must-fix]` finding | Apply every `[must-fix]` `Proposed Change` |
-| **Fix must-fix + should** | >=1 `[must-fix]` or `[should]` finding | Apply `[must-fix]` + `[should]` changes |
+| **Fix must-fix (recommended)** | >=1 `🔴 must-fix` finding | Apply every `🔴 must-fix` `Proposed Change` |
+| **Fix must-fix + should** | >=1 `🔴 must-fix` or `🟠 should` finding | Apply `🔴 must-fix` + `🟠 should` changes |
 | **Fix everything** | >=1 finding of any severity | Apply all `Proposed Changes` |
 | **Choose findings** | always, when any finding exists | Free-text via `Other` — name severities, domains, tags, or finding numbers; apply the union |
 
