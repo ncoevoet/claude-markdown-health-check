@@ -1,0 +1,20 @@
+{
+  "id": "80-mcp-clean-env",
+  "command": "claude-markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/mcp-clean-env",
+    "needs_home_override": false,
+    "scanners": ["scan-graph"]
+  },
+  "grader": { "method": "code" },
+  "success_criteria": {
+    "must_detect": [],
+    "must_not_flag": ["MCP-PLAINTEXT-SECRET", "MCP-BAD-DEF", "MCP-DEPRECATED-TRANSPORT"],
+    "expect_clean": true
+  },
+  "expected_behavior": [
+    "a server whose env value is the placeholder ${MY_DB_TOKEN} is NOT flagged MCP-PLAINTEXT-SECRET",
+    "both servers declare a command or url, so neither is MCP-BAD-DEF"
+  ]
+}

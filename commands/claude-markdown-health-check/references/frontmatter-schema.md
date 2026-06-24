@@ -13,7 +13,7 @@ This phase is fully deterministic. `validate-skills.sh` emits the findings direc
 | Tag | Condition | Tier |
 |---|---|---|
 | `BAD-FRONTMATTER-SCHEMA` | description < 40 chars OR `model` value not in `{opus, sonnet, haiku, fable, inherit, claude-(opus\|sonnet\|haiku\|fable)-N}` OR `allowed-tools` has unparseable residue after stripping `Name` / `Name(args)` tokens | Critical |
-| `UNKNOWN-FRONTMATTER-FIELD` | top-level key in frontmatter not in `{name, description, when_to_use, allowed-tools, argument-hint, model, color, user-invocable}` | Hygiene |
+| `UNKNOWN-FRONTMATTER-FIELD` | top-level key in frontmatter not in `{name, description, when_to_use, allowed-tools, disallowed-tools, argument-hint, arguments, model, color, user-invocable, disable-model-invocation, effort, context, agent, hooks, paths, shell, hide-from-slash-command-tool}` | Hygiene |
 
 Existing tags `MISSING-DESC`, `DESCRIPTION-TOO-LONG`, `BAD-NAME`, `RESERVED-NAME`, `NAME-MISMATCH` continue to fire from `validate-skills.sh` per their original rules.
 

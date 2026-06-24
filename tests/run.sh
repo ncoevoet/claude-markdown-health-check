@@ -3,6 +3,7 @@
 #   1. anonymization gate  — no real scanned-project names in published artifacts
 #   2. eval-schema gate    — every evals/*.json matches the case contract
 #   3. deterministic suite — scanners emit the right tags for each fixture
+#   4. history aggregation — scan-history.sh aggregates synthetic transcripts
 # Usage:
 #   bash tests/run.sh           # full gate set (CI)
 #   bash tests/run.sh <prefix>  # only the deterministic suite, one case/prefix (dev)
@@ -23,6 +24,10 @@ fi
 
 echo "== deterministic scanner tests =="
 bash "$HERE/test_scripts.sh" "$filter" || rc=1
+
+echo
+echo "== history aggregation tests =="
+bash "$HERE/test_history.sh" "$filter" || rc=1
 
 echo
 if [ "$rc" -eq 0 ]; then echo "ALL TESTS PASSED"; else echo "TESTS FAILED"; fi

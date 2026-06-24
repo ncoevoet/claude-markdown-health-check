@@ -30,6 +30,9 @@ for f in "$EVALS"/*.json; do
     id=$(jq -r '.id' "$f")
     method=$(jq -r '.grader.method // "code"' "$f")
     [ "$method" = "code" ] || continue
+    # synthetic-jsonl cases assert on history-scan.json, not on a tag set — they
+    # are owned by tests/test_history.sh, not this tag-based runner.
+    [ "$(jq -r '.fixture.kind // "claude-tree"' "$f")" = "synthetic-jsonl" ] && continue
     [ -n "$filter" ] && [[ "$id" != "$filter"* ]] && continue
 
     dir=$(jq -r '.fixture.dir' "$f")

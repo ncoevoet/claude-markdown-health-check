@@ -1,0 +1,23 @@
+{
+  "id": "84-disable-all-hooks",
+  "command": "claude-markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/disable-all-hooks",
+    "needs_home_override": true,
+    "scanners": []
+  },
+  "grader": { "method": "llm-rubric" },
+  "query": "/claude-markdown-health-check deep",
+  "grader_rubric": "The audited environment's settings.json sets \"disableAllHooks\": true and registers exactly one PreToolUse hook (guard.sh), which has fired zero times (the environment has no session history). PASS only if the health report does NOT raise a HOOK-NEVER-FIRED or HOOK-EVENT-MISMATCH finding against the guard hook — with all hooks globally disabled, a registered hook that never fires is expected, not a defect. It is acceptable but not required for the report to note that hooks are globally disabled. FAIL if the report flags the guard hook as never-fired, idle, or event-mismatched. Reason briefly, then output PASS or FAIL on the last line.",
+  "expected_behavior": [
+    "settings.json sets disableAllHooks:true, so the registered-but-idle guard hook is NOT flagged HOOK-NEVER-FIRED",
+    "no HOOK-EVENT-MISMATCH is raised for the guard hook either",
+    "the report may note that hooks are globally disabled"
+  ],
+  "expected_not_behavior": [
+    "HOOK-NEVER-FIRED for the guard hook",
+    "HOOK-EVENT-MISMATCH for the guard hook"
+  ],
+  "assert_no_writes": true
+}

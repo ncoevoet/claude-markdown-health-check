@@ -1,0 +1,6 @@
+{
+  "skillUsage": {
+    "my-skill": { "usageCount": 3, "lastUsedAt": 1000 },
+    "agents:my-skill": { "usageCount": 2, "lastUsedAt": 2000 }
+  }
+}

@@ -60,6 +60,21 @@ IMPORT_MAX_DEPTH=4
 RESERVED_NAMES=("anthropic" "claude")
 KNOWN_FRONTMATTER_FIELDS=("name" "description" "when_to_use" "allowed-tools" "disallowed-tools" "argument-hint" "arguments" "model" "color" "user-invocable" "disable-model-invocation" "effort" "context" "agent" "hooks" "paths" "shell" "hide-from-slash-command-tool")
 MODEL_WHITELIST_RE='^(opus|sonnet|haiku|fable|inherit|claude-(opus|sonnet|haiku|fable)-[0-9])'
+# enforceAvailableModels (settings.json, then settings.local.json overriding): when
+# true with a non-empty availableModels list, a skill/agent `model:` outside that set
+# is flagged MODEL-NOT-AVAILABLE. Matched at family level (opus|sonnet|haiku|fable) so
+# an alias like `model: opus` is satisfied by any `claude-opus-*` entry — keeps FP low.
+ENFORCE_MODELS=0
+AVAILABLE_MODELS=""
+if command -v jq >/dev/null 2>&1; then
+    for _sf in "$CLAUDE_DIR/settings.json" "$CLAUDE_DIR/settings.local.json"; do
+        [ -f "$_sf" ] || continue
+        _ef=$(jq -r 'if .enforceAvailableModels == true then "1" elif .enforceAvailableModels == false then "0" else "" end' "$_sf" 2>/dev/null || echo "")
+        [ -n "$_ef" ] && ENFORCE_MODELS="$_ef"
+        _am=$(jq -r '(.availableModels // []) | if type=="array" then .[] else empty end' "$_sf" 2>/dev/null || true)
+        [ -n "$_am" ] && AVAILABLE_MODELS="$_am"
+    done
+fi
 # Support/utility directories under skills/ that are not themselves skills.
 SKILLS_DIR_EXCLUDES=("bootstrap" "commands")
 # Subagent frontmatter enums — the subagent schema (.claude/agents/<name>.md) differs
@@ -96,6 +111,20 @@ bold()   { printf '\033[1m%s\033[0m\n' "$1"; }
 
 error()   { red   "[ERROR] $1"; ERRORS=$((ERRORS + 1)); EXIT_CODE=1; }
 warning() { yellow "[WARN]  $1"; WARNINGS=$((WARNINGS + 1)); }
+
+# model_in_available <model> — is `model` permitted under AVAILABLE_MODELS? Exact
+# match, else family-level (the opus|sonnet|haiku|fable token in `model` appears in
+# some allowed entry). `inherit` is never constrained.
+model_in_available() {
+    local model="$1" fam line
+    [ "$model" = "inherit" ] && return 0
+    while IFS= read -r line; do
+        [ "$line" = "$model" ] && return 0
+    done <<< "$AVAILABLE_MODELS"
+    fam=$(printf '%s' "$model" | grep -oE 'opus|sonnet|haiku|fable' | head -1 || true)
+    [ -n "$fam" ] && printf '%s\n' "$AVAILABLE_MODELS" | grep -qF "$fam" && return 0
+    return 1
+}
 ok()      { printf '  [OK]  %s\n' "$1"; }
 
 extract_field() {
@@ -174,6 +203,8 @@ validate_skill_md() {
     model_field=$(extract_field "$skill_file" "model")
     if [ -n "$model_field" ] && ! echo "$model_field" | grep -qE "$MODEL_WHITELIST_RE"; then
         error "[BAD-FRONTMATTER-SCHEMA] $skill_name: model '$model_field' not in {opus|sonnet|haiku|fable|inherit|claude-(opus|sonnet|haiku|fable)-N}"
+    elif [ -n "$model_field" ] && [ "$ENFORCE_MODELS" = 1 ] && [ -n "$AVAILABLE_MODELS" ] && ! model_in_available "$model_field"; then
+        warning "[MODEL-NOT-AVAILABLE] $skill_name: model '$model_field' not in settings availableModels (enforceAvailableModels is on)"
     fi
 
     # Check: allowed-tools syntax. Tokens look like `Read`, `WebFetch`, or
@@ -293,6 +324,8 @@ validate_agent_md() {
     model_field=$(extract_field "$agent_file" "model")
     if [ -n "$model_field" ] && ! echo "$model_field" | grep -qE "$MODEL_WHITELIST_RE"; then
         error "[AGENT-BAD-SCHEMA] $display: model '$model_field' not in {opus|sonnet|haiku|fable|inherit|claude-(opus|sonnet|haiku|fable)-N}"
+    elif [ -n "$model_field" ] && [ "$ENFORCE_MODELS" = 1 ] && [ -n "$AVAILABLE_MODELS" ] && ! model_in_available "$model_field"; then
+        warning "[MODEL-NOT-AVAILABLE] $display: model '$model_field' not in settings availableModels (enforceAvailableModels is on)"
     fi
 
     # color enum.

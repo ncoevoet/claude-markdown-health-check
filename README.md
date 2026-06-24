@@ -1,7 +1,7 @@
 # /claude-markdown-health-check
 
 [![CI](https://github.com/ncoevoet/claude-markdown-health-check/actions/workflows/ci.yml/badge.svg)](https://github.com/ncoevoet/claude-markdown-health-check/actions/workflows/ci.yml)
-[![version](https://img.shields.io/badge/version-0.9.0-blue)](.claude-plugin/plugin.json)
+[![version](https://img.shields.io/badge/version-0.10.0-blue)](.claude-plugin/plugin.json)
 [![license](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Claude Code plugin](https://img.shields.io/badge/Claude%20Code-plugin-8A2BE2)](https://code.claude.com/docs/en/plugins)
 
@@ -27,15 +27,15 @@ A scorecard with a letter grade, an always-on per-file CLAUDE.md score, and find
 | **Skill-listing budget** | cumulative `description` + `when_to_use` block exceeding Claude Code's 1%-of-context budget; low-relevance and duplicate-domain skills |
 | **Skill usage** | dormant skills (no fires in 30d), never-fired skills, misfiring skills (loaded but no follow-through), orphan ledger entries |
 | **Skill–tool contract** | tools declared in `allowed-tools` but never called, tools called but not declared |
-| **Frontmatter schema** | `description` too short, `model` not in whitelist (`opus`/`sonnet`/`haiku`/`fable` families), `allowed-tools` malformed, unknown fields |
+| **Frontmatter schema** | `description` too short, `model` not in whitelist (`opus`/`sonnet`/`haiku`/`fable` families), `model` outside the org's `availableModels` when `enforceAvailableModels` is on, `allowed-tools` malformed, unknown fields |
 | **Hooks** | files on disk not registered in `settings.json`, duplicate logic, suspicious timeouts, matchers that match no real tool |
-| **Hook reliability** | high failure-rate hooks, hooks registered but never fired, event-type mismatches |
+| **Hook reliability** | high failure-rate hooks, hooks registered but never fired, event-type mismatches (suppressed when `disableAllHooks` is set) |
 | **Hook safety** | hook script with no `#!` shebang, a script that emits a block/deny decision but exits 1 (non-blocking) instead of 2, `eval` of dynamic input, an http hook leaking the whole environment (auth header, no `allowedEnvVars`) |
 | **Agents** | triggers unreachable from `CLAUDE.md`, overlapping agents, agents on disk never spawned in 30d |
 | **Agent frontmatter** | subagent schema violations — bad `model`/`color`/`permissionMode`/`tools` value, missing `description`, duplicate agent `name`, `permissionMode: bypassPermissions`, plugin agents declaring silently-ignored `hooks`/`mcpServers`/`permissionMode` |
 | **Settings** | malformed JSON, duplicate JSON keys, duplicate array entries, MCP servers missing from `preApprovedTools`, over-broad Bash patterns, stale reminders, risky security keys (`defaultMode: bypassPermissions`, `enableAllProjectMcpServers: true`) |
 | **Permission hygiene** | dead allowlist entries (zero grants), over-broad `:*` patterns, name collisions between `commands/` and `skills/` |
-| **Plugins & MCP** | `installed_plugins.json` entries with missing `installPath`, missing `plugin.json` manifest, version drift between manifest and on-disk, deprecated `sse` MCP transport in `.mcp.json` |
+| **Plugins & MCP** | `installed_plugins.json` entries with missing `installPath`, missing `plugin.json` manifest, version drift between manifest and on-disk, deprecated `sse` MCP transport, an MCP server declaring neither `command` nor `url`, a hardcoded credential in an MCP `env`/`headers` value |
 | **Plugin structure** | (when auditing a plugin root) component dir misplaced inside `.claude-plugin/`, missing or non-semver `version`, component path not relative-with-`./`, dangling `marketplace.json` `source` |
 | **Output styles** | `outputStyle` setting naming a non-existent (and non-built-in) style |
 | **Cross-references** | dead paths in `settings.json` / `CLAUDE.md` / skill `references/`, orphaned guides and patterns, missing triggers |
@@ -221,9 +221,9 @@ If you previously referred to phases by the old letter scheme, here is the mappi
 
 Two layers, following Anthropic's [develop-tests](https://platform.claude.com/docs/en/test-and-evaluate/develop-tests) methodology (code-grading is the fastest, most reliable tier — so the bulk is code-graded, and LLM-grading is reserved for the judgment phases):
 
-- **Deterministic (code-graded, CI-safe, no API key).** Synthetic `.claude/` fixture trees under `tests/fixtures/<case>/` each plant one defect; the suite runs `validate-skills.sh` / `scan-graph.sh` against them and asserts the exact `[TAG]` set. A `clean/` fixture asserts **zero** findings — the false-positive guard. Paired guards cover both directions, e.g. cases 73/74 (a `npm run <script>` absent from `package.json` must be flagged `CLAUDEMD-DEAD-SCRIPT`, while one that resolves must **not** be) and cases 75/76 (a memory body citing a missing `.claude/…` path is flagged `MEMORY-STALE-CONTENT`, while one whose path resolves is not).
+- **Deterministic (code-graded, CI-safe, no API key).** Synthetic `.claude/` fixture trees under `tests/fixtures/<case>/` each plant one defect; the suite runs `validate-skills.sh` / `scan-graph.sh` against them and asserts the exact `[TAG]` set. A `clean/` fixture asserts **zero** findings — the false-positive guard. Paired guards cover both directions, e.g. cases 73/74 (a `npm run <script>` absent from `package.json` must be flagged `CLAUDEMD-DEAD-SCRIPT`, while one that resolves must **not** be) and cases 75/76 (a memory body citing a missing `.claude/…` path is flagged `MEMORY-STALE-CONTENT`, while one whose path resolves is not). A third code-graded layer covers `scan-history.sh`: `synthetic-jsonl` fixtures plant `.claude/projects/*/*.jsonl` transcripts that `tests/test_history.sh` aggregates and asserts field-by-field against `history-scan.json` (e.g. hook failure rates, token sums, ledger folding, window-cutoff exclusion).
   ```bash
-  make test              # bash tests/run.sh — anonymization + eval-schema gates, then the code-graded cases (199 assertions)
+  make test              # bash tests/run.sh — anonymization + eval-schema gates, then the code-graded cases (214 scanner + 13 history assertions)
   bash tests/run.sh 02   # run one case / id-prefix (deterministic suite only)
   ```
   `tests/run.sh` also runs two release gates first: an **anonymization** check (no real scanned-project names in the published `commands/`, `tests/fixtures/`, `README.md` — the real blocklist is gitignored, a placeholder ships) and **eval-schema validation** (`validate-evals.sh` asserts every case matches the contract before an expensive run is wasted on a malformed one).
@@ -233,9 +233,9 @@ Two layers, following Anthropic's [develop-tests](https://platform.claude.com/do
   HEALTH_CHECK_EVAL_RUNS=3 make evals   # majority vote to smooth LLM noise
   ```
 
-Cases live in `commands/claude-markdown-health-check/evals/*.json` (70 cases: 61 `grader.method: code` + 9 `llm-rubric`); fixtures in `tests/fixtures/`. 
+Cases live in `commands/claude-markdown-health-check/evals/*.json` (81 cases: 71 `grader.method: code` + 10 `llm-rubric`; numbered 01–83 with 43 & 50 retired); fixtures in `tests/fixtures/`. 
 
-Tags are the stable machine contract, so the code-graded cases are immune to report-format changes. CI (`.github/workflows/ci.yml`) runs shellcheck + `bash -n` + the anonymization gate + eval-schema validation + the deterministic suite on every push; it does **not** run the token-spending LLM evals. Every real-world miss or false positive should become a new case.
+Tags are the stable machine contract, so the code-graded cases are immune to report-format changes. CI (`.github/workflows/ci.yml`) runs shellcheck + `bash -n` + the anonymization gate + eval-schema validation + the deterministic suite + the history aggregation suite on every push; it does **not** run the token-spending LLM evals. Every real-world miss or false positive should become a new case.
 
 ## Requirements
 
@@ -273,7 +273,7 @@ commands/
 │   │   ├── report-format.md                 # Phase 24 report rendering — domain map + scorecard
 │   │   └── post-report-menu.md              # Phase 25 menu
 │   └── evals/                               # data-driven eval cases
-│       ├── 01-clean-zero-findings.json … 72-chained-ref-artifact.json  (61 code + 9 LLM)
+│       ├── 01-clean-zero-findings.json … 83-history-signals.json  (71 code + 10 LLM; 43 & 50 retired)
 │       └── README.md                        # eval schema + how to run
 └── scripts/
     ├── validate-skills.sh                   # deterministic compliance validator (Phase 5)
@@ -284,14 +284,15 @@ commands/
     └── run-evals.sh                         # manual eval runner
 
 tests/                                       # deterministic test suite (dev-only, CI)
-├── run.sh                                   # entrypoint → anonymization + eval-schema + scanners
+├── run.sh                                   # entrypoint → anonymization + eval-schema + scanners + history
 ├── check-anonymization.sh                   # release gate: no real names in published artifacts
 ├── anonymization-blocklist.example.txt      # placeholder blocklist (real one is gitignored)
 ├── lib.sh                                   # assert helpers + tag extractors
-├── test_scripts.sh                          # data-driven runner over evals/*.json
+├── test_scripts.sh                          # data-driven tag runner over evals/*.json
+├── test_history.sh                          # scan-history.sh aggregation runner (synthetic-jsonl cases)
 └── fixtures/<case>/.claude/…                # synthetic trees, one planted defect each
 
-.github/workflows/ci.yml                     # shellcheck + bash -n + tests/run.sh (anon + eval-schema + scanners)
+.github/workflows/ci.yml                     # shellcheck + bash -n + tests/run.sh (anon + eval-schema + scanners + history)
 ```
 
 All plain Markdown and shell — read, fork, extend.

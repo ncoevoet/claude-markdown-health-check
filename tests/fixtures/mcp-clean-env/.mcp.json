@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "db": {
+      "command": "node",
+      "args": ["server.js"],
+      "env": {
+        "API_KEY": "${MY_DB_TOKEN}"
+      }
+    },
+    "weather": {
+      "type": "http",
+      "url": "https://example.com/mcp"
+    }
+  }
+}

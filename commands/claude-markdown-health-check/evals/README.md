@@ -43,6 +43,27 @@ Tags are the stable machine contract: the human report (Phase 24) is just a
 friendlier projection over the same tags, so the `code` cases are immune to
 report-format changes.
 
+A second `code` shape covers `scan-history.sh`, whose output is an aggregate JSON
+rather than tags:
+
+```jsonc
+{
+  "fixture": {
+    "kind": "synthetic-jsonl",                 // .claude/projects/<slug>/<uuid>.jsonl transcript
+    "dir": "tests/fixtures/history-signals",
+    "needs_home_override": true,
+    "scanners": ["scan-history"]
+  },
+  "grader": { "method": "code" },
+  "success_criteria": {
+    "history_assertions": [                     // jq path into history-scan.json == expected scalar/null
+      { "jq": ".hookEvents.guard.total", "equals": 4 },
+      { "jq": ".skills[\"ancient-skill\"]", "equals": null }
+    ]
+  }
+}
+```
+
 ## Running
 
 ```bash
@@ -72,8 +93,18 @@ report prints. These `llm-rubric` cases cover it from both directions:
   locator quoting the description; `39` asserts an ungrounded-but-plausible trigger
   concern is downgraded to `[OBSERVATION]` rather than emitted as a tagged finding.
 
-**Future work — history phases.** Phases that read session telemetry via
-`scan-history.sh` (SKILL-DORMANT, SKILL-NEVER-FIRED, HOOK-FAILING, token trend)
-are not yet covered: they need synthetic `~/.claude/projects/*/*.jsonl`
-transcripts. The `.jsonl` schema is intricate; build a `synthetic-jsonl` fixture
-kind to cover them.
+**History phases (`scan-history.sh`).** The phases that read session telemetry
+(skill dormancy/usage, skill–tool contract, hook reliability, token trend,
+cross-session, agent spawns) are covered by the **`synthetic-jsonl`** fixture
+kind. `scan-history.sh` emits an *aggregate* `history-scan.json`, not `[TAG]`
+lines, so these cases assert on its fields rather than on a tag set.
+
+Such a case ships a `.claude/projects/<slug>/<uuid>.jsonl` transcript — with
+`__TS_RECENT__` / `__TS_OLD__` timestamp placeholders the runner substitutes at
+run time so planted events land inside / outside the scan window — plus an
+optional sibling `.claude.json` skill-usage ledger. Grading is by
+`success_criteria.history_assertions`: a list of
+`{ "jq": "<path into history-scan.json>", "equals": <scalar|null> }`.
+`tests/test_history.sh` (run by `tests/run.sh`, CI-safe, no API key) copies the
+fixture into a temp `$HOME`, runs `scan-history.sh --no-cache`, and checks each
+assertion. See `83-history-signals.json`.

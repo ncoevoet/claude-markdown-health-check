@@ -59,13 +59,14 @@ script-owned — the orchestrator only relays them; never re-ground them here:
 `CHAINED-REF`, `NO-PROGRESSIVE-DISCLOSURE`, `THIRD-PERSON`,
 `UNKNOWN-FRONTMATTER-FIELD`, `EMBEDDED-SECRET`, `UNFLAGGED-DESTRUCTIVE`,
 `SETTINGS-BYPASS-MODE`, `SETTINGS-MCP-AUTOAPPROVE`, `CLAUDEMD-DEAD-SCRIPT`,
+`MODEL-NOT-AVAILABLE`,
 `MEMORY-STALE-CONTENT` (only the deterministic slice — a memory body citing a
 missing `.claude/…` path; the judgment behaviour-contradiction slice below is
 verified, not fast-pathed), `STALE-THRESHOLD`, `GUIDANCE-FETCH-FAILED`.
 
 **`scan-graph.sh` (Phase 2 / 11 / 20 / 26 — read from `graph-scan.json`):**
 `PLUGIN-BROKEN-REF`, `PLUGIN-MISSING-MANIFEST`, `PLUGIN-VERSION-DRIFT`,
-`MCP-DEPRECATED-TRANSPORT`, `REF-CIRCULAR`, `REF-TOO-DEEP`, `REF-ORPHAN`,
+`MCP-DEPRECATED-TRANSPORT`, `MCP-BAD-DEF`, `MCP-PLAINTEXT-SECRET`, `REF-CIRCULAR`, `REF-TOO-DEEP`, `REF-ORPHAN`,
 `MEMORY-DEAD-LINK`, `MEMORY-ORPHAN-FILE`, `MEMORY-DUP-ENTRY`, `MEMORY-STALE-DATE`,
 `OUTPUTSTYLE-MISSING`.
 

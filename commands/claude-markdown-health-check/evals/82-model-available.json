@@ -1,0 +1,20 @@
+{
+  "id": "82-model-available",
+  "command": "claude-markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/model-available",
+    "needs_home_override": false,
+    "scanners": ["validate-skills"]
+  },
+  "grader": { "method": "code" },
+  "success_criteria": {
+    "must_detect": [],
+    "must_not_flag": ["MODEL-NOT-AVAILABLE"],
+    "expect_clean": true
+  },
+  "expected_behavior": [
+    "the skill is pinned to model: opus and availableModels contains claude-opus-4-8",
+    "family-level match treats opus as available, so MODEL-NOT-AVAILABLE is NOT emitted"
+  ]
+}

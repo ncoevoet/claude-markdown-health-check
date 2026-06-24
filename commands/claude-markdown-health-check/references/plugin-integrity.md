@@ -14,6 +14,8 @@ Validates `~/.claude/plugins/installed_plugins.json` against the on-disk plugin 
 | `PLUGIN-MISSING-MANIFEST` | install dir exists but contains no `plugin.json` | Critical |
 | `PLUGIN-VERSION-DRIFT` | `installed_plugins.json#plugins[].version` differs from on-disk `plugin.json#version` (versions of "unknown" are ignored) | Structural |
 | `MCP-DEPRECATED-TRANSPORT` | an `mcpServers` entry of `"type":"sse"` in `.mcp.json` (project root or `$CLAUDE_DIR/`), `~/.claude.json`, or a settings file — the SSE transport is deprecated in favour of `http`/`streamable-http` | Hygiene |
+| `MCP-BAD-DEF` | an `mcpServers` entry declaring neither a `command` (stdio) nor a `url` (http/sse) — the server has no way to start | Structural |
+| `MCP-PLAINTEXT-SECRET` | an `mcpServers` entry whose `env` or `headers` carries a hardcoded credential (same credential patterns as `EMBEDDED-SECRET`); `${VAR}`/`<your-…>`/`example` placeholders are skipped, so `"Authorization": "Bearer ${TOKEN}"` is clean | Hygiene |
 | `PLUGIN-MISPLACED-DIR` | a component dir (`skills`/`agents`/`commands`/`hooks`/`output-styles`/`monitors`) nested inside `.claude-plugin/` — components must sit at the plugin root | Critical |
 | `PLUGIN-BAD-VERSION` | `plugin.json` has no `version`, or a non-semver one — Claude Code then falls back to the git SHA and treats every commit as a new version | Structural |
 | `PLUGIN-ABS-PATH` | a declared component path (`skills`/`commands`/`agents`/`outputStyles`/`lspServers`) is not relative starting with `./` | Structural |
@@ -35,3 +37,5 @@ Emit nothing when X=Y=Z=0.
 2. `PLUGIN-MISSING-MANIFEST` → reinstall the plugin (most likely a corrupted cache).
 3. `PLUGIN-VERSION-DRIFT` → `/plugin update <name>` to sync, then accept the new manifest.
 4. `MCP-DEPRECATED-TRANSPORT` → change the server's `"type"` from `"sse"` to `"http"` (alias `"streamable-http"`) where the server supports it.
+5. `MCP-BAD-DEF` → add a `command` (for a stdio server) or a `url` (for an http/sse server); an entry with neither never loads.
+6. `MCP-PLAINTEXT-SECRET` → move the literal token to an environment variable and reference it with `${ENV_VAR}` interpolation in `env`/`headers`.

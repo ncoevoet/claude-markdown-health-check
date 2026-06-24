@@ -55,8 +55,11 @@ for f in "$EVALS"/*.json; do
   [ "$(jq -r '.command // empty' "$f")" = "claude-markdown-health-check" ] \
     || err "$base: .command != 'claude-markdown-health-check'"
 
-  [ "$(jq -r '.fixture.kind // empty' "$f")" = "claude-tree" ] \
-    || err "$base: fixture.kind != 'claude-tree'"
+  fkind="$(jq -r '.fixture.kind // empty' "$f")"
+  case "$fkind" in
+    claude-tree|synthetic-jsonl) ;;
+    *) err "$base: fixture.kind '$fkind' not in { claude-tree, synthetic-jsonl }" ;;
+  esac
 
   dir="$(jq -r '.fixture.dir // empty' "$f")"
   if [ -z "$dir" ]; then
@@ -68,18 +71,25 @@ for f in "$EVALS"/*.json; do
   fi
 
   badscan="$(jq -r '(.fixture.scanners // [])
-                     | map(select(. != "validate-skills" and . != "scan-graph"))
+                     | map(select(. != "validate-skills" and . != "scan-graph" and . != "scan-history"))
                      | join(",")' "$f")"
   [ -z "$badscan" ] || err "$base: fixture.scanners has unknown entries: $badscan"
 
   method="$(jq -r '.grader.method // empty' "$f")"
   case "$method" in
     code)
-      jq -e '(.success_criteria | type == "object")
-             and ((.success_criteria | has("must_detect") | not)
-                  or (.success_criteria.must_detect | type == "array"))' \
-         "$f" >/dev/null 2>&1 \
-        || err "$base: code case needs success_criteria object with array must_detect (if present)"
+      if [ "$fkind" = "synthetic-jsonl" ]; then
+        jq -e '(.success_criteria.history_assertions | type == "array" and length > 0)
+               and all(.success_criteria.history_assertions[]?; has("jq"))' \
+           "$f" >/dev/null 2>&1 \
+          || err "$base: synthetic-jsonl code case needs a non-empty success_criteria.history_assertions[] (each with a .jq path)"
+      else
+        jq -e '(.success_criteria | type == "object")
+               and ((.success_criteria | has("must_detect") | not)
+                    or (.success_criteria.must_detect | type == "array"))' \
+           "$f" >/dev/null 2>&1 \
+          || err "$base: code case needs success_criteria object with array must_detect (if present)"
+      fi
       ;;
     llm-rubric)
       jq -e '((.grader_rubric // "")     | type == "string" and length > 0)

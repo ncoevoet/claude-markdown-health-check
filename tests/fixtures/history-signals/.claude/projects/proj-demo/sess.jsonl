@@ -1,0 +1,13 @@
+{"sessionId":"sess-A","timestamp":"__TS_RECENT__","type":"assistant","message":{"content":[{"type":"tool_use","name":"Skill","input":{"skill":"my-skill","args":""}}]}}
+{"sessionId":"sess-B","timestamp":"__TS_RECENT__","type":"assistant","message":{"content":[{"type":"tool_use","name":"Skill","input":{"skill":"my-skill","args":""}}]}}
+{"sessionId":"sess-A","timestamp":"__TS_RECENT__","type":"assistant","message":{"content":[{"type":"tool_use","name":"Agent","input":{"subagent_type":"Explore"}}]}}
+{"sessionId":"sess-B","timestamp":"__TS_RECENT__","type":"assistant","message":{"content":[{"type":"tool_use","name":"Agent","input":{"subagent_type":"Explore"}}]}}
+{"sessionId":"sess-A","timestamp":"__TS_RECENT__","attachment":{"type":"hook_success","hookName":"guard","hookEvent":"PreToolUse","exitCode":0}}
+{"sessionId":"sess-B","timestamp":"__TS_RECENT__","attachment":{"type":"hook_success","hookName":"guard","hookEvent":"PreToolUse","exitCode":0}}
+{"sessionId":"sess-A","timestamp":"__TS_RECENT__","attachment":{"type":"hook_non_blocking_error","hookName":"guard","hookEvent":"PreToolUse"}}
+{"sessionId":"sess-B","timestamp":"__TS_RECENT__","attachment":{"type":"hook_non_blocking_error","hookName":"guard","hookEvent":"PreToolUse"}}
+{"sessionId":"sess-A","timestamp":"__TS_RECENT__","type":"assistant","message":{"usage":{"input_tokens":100,"output_tokens":400,"cache_read_input_tokens":50,"cache_creation_input_tokens":10}}}
+{"sessionId":"sess-A","timestamp":"__TS_RECENT__","type":"assistant","message":{"usage":{"input_tokens":100,"output_tokens":500,"cache_read_input_tokens":50,"cache_creation_input_tokens":0}}}
+{"sessionId":"sess-A","timestamp":"__TS_RECENT__","type":"user","message":{"content":[{"type":"tool_result","is_error":true,"content":"Tool use was rejected"}]}}
+{"sessionId":"sess-A","timestamp":"__TS_RECENT__","type":"user","message":{"content":"no, stop doing that"}}
+{"sessionId":"sess-old","timestamp":"__TS_OLD__","type":"assistant","message":{"content":[{"type":"tool_use","name":"Skill","input":{"skill":"ancient-skill","args":""}}]}}

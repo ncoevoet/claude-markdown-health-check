@@ -334,20 +334,44 @@ scan_output_styles() {
     fi
 }
 
-# MCP transport hygiene: the `sse` transport is deprecated in favour of
-# `http`/`streamable-http`. Flag any mcpServers entry of type "sse" across the
-# project/user MCP config files. Runs on any tree.
+# MCP server hygiene across the project/user MCP config files. Runs on any tree.
+#   MCP-DEPRECATED-TRANSPORT — `sse` is deprecated in favour of `http`/`streamable-http`.
+#   MCP-BAD-DEF              — entry with neither `command` (stdio) nor `url` (remote); cannot start.
+#   MCP-PLAINTEXT-SECRET    — a hardcoded credential in an `env`/`headers` value. Mirrors
+#                             validate-skills.sh check_embedded_secrets; `${VAR}` and other
+#                             placeholders are skipped, so `"Bearer ${TOKEN}"` is clean.
+MCP_SECRET_RE='\b(sk-[A-Za-z0-9_-]{20,}|AKIA[0-9A-Z]{16}|gh[pousr]_[A-Za-z0-9]{20,}|xox[baprs]-[A-Za-z0-9-]{10,}|AIza[0-9A-Za-z_-]{35}|glpat-[A-Za-z0-9_-]{20,})'
+MCP_PLACEHOLDER_RE='(example|placeholder|your[-_]?(key|token|secret|api)|<your|xxxx|0000|redacted|replace[-_]?me|\$\{?[A-Z][A-Z0-9_]*\}?)'
+
 scan_mcp() {
-    local f rel srv
+    local f rel srv val snippet
     for f in "$CLAUDE_DIR/.mcp.json" "$CLAUDE_DIR/../.mcp.json" "$CLAUDE_DIR/../.claude.json" \
              "$CLAUDE_DIR/settings.json" "$CLAUDE_DIR/settings.local.json"; do
         [ -f "$f" ] || continue
         rel="${f#$CLAUDE_DIR/}"
         case "$f" in "$CLAUDE_DIR/../"*) rel="${f##*/}" ;; esac
+
         while IFS= read -r srv; do
             [ -z "$srv" ] && continue
             emit_finding 2 "MCP-DEPRECATED-TRANSPORT" "$rel" "MCP server '$srv' uses deprecated sse transport — migrate to http/streamable-http"
-        done < <(jq -r '(.mcpServers // {}) | to_entries[] | select((.value.type // "") == "sse") | .key' "$f" 2>/dev/null || true)
+        done < <(jq -r '(.mcpServers // {}) | to_entries[] | select((.value|type)=="object") | select((.value.type // "") == "sse") | .key' "$f" 2>/dev/null || true)
+
+        while IFS= read -r srv; do
+            [ -z "$srv" ] && continue
+            emit_finding 2 "MCP-BAD-DEF" "$rel" "MCP server '$srv' declares neither a command (stdio) nor a url (http/sse) — it cannot start"
+        done < <(jq -r '(.mcpServers // {}) | to_entries[] | select((.value|type)=="object") | select(((.value.command // "") == "") and ((.value.url // "") == "")) | .key' "$f" 2>/dev/null || true)
+
+        while IFS=$'\t' read -r srv val; do
+            [ -z "$srv" ] && continue
+            printf '%s' "$val" | grep -qiE "$MCP_PLACEHOLDER_RE" && continue
+            if printf '%s' "$val" | grep -qE "$MCP_SECRET_RE"; then
+                snippet=$(printf '%s' "$val" | grep -oE "$MCP_SECRET_RE" | head -1 | cut -c1-10)
+                emit_finding 2 "MCP-PLAINTEXT-SECRET" "$rel" "MCP server '$srv' embeds a credential (${snippet}…) in env/headers — use \${ENV_VAR} interpolation instead"
+            fi
+        done < <(jq -r '(.mcpServers // {}) | to_entries[] | .key as $srv | (.value | select(type=="object"))
+                        | [ (.env // {}), (.headers // {}) ]
+                        | map(select(type=="object") | to_entries[] | .value | select(type=="string"))
+                        | .[] | "\($srv)\t\(.)"' "$f" 2>/dev/null || true)
     done
 }
 

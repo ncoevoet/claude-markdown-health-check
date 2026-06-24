@@ -1,0 +1,21 @@
+{
+  "id": "81-model-not-available",
+  "command": "claude-markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/model-not-available",
+    "needs_home_override": false,
+    "scanners": ["validate-skills"]
+  },
+  "grader": { "method": "code" },
+  "success_criteria": {
+    "must_detect": [ { "tag": "MODEL-NOT-AVAILABLE", "path_substring": "tester" } ],
+    "must_not_flag": ["BAD-FRONTMATTER-SCHEMA"],
+    "expect_clean": false
+  },
+  "expected_behavior": [
+    "settings.json sets enforceAvailableModels:true with availableModels of opus+sonnet only",
+    "validate-skills.sh emits [MODEL-NOT-AVAILABLE] for the skill pinned to claude-haiku-4-5 (haiku family absent from the allowed set)",
+    "claude-haiku-4-5 is a valid model id, so it is NOT flagged BAD-FRONTMATTER-SCHEMA"
+  ]
+}

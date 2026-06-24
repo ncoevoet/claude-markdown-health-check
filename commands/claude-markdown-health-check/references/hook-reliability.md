@@ -19,6 +19,16 @@ Telemetry-side latency data (`waiting_for_user_permission_ms`) is NOT captured b
 
 `HOOK-FAILING` is owned by this phase (not phase 19) so it fires at Standard depth too.
 
+## Global disable guard
+
+When `settings.json` (or `settings.local.json`) sets `"disableAllHooks": true`, every
+hook is globally off, so a registered hook that never fires is EXPECTED, not a defect.
+Suppress `HOOK-NEVER-FIRED` and `HOOK-EVENT-MISMATCH` for that scope (`HOOK-FAILING`
+cannot arise either — nothing executes); emit at most one `[OBSERVATION]` that hooks are
+globally disabled. The static safety tags (`HOOK-NO-SHEBANG`, `HOOK-UNSAFE-SHELL`,
+`HOOK-EXIT-NONBLOCKING`, `HOOK-ENV-LEAK`) STILL apply — they audit the script on disk,
+which a future re-enable would run.
+
 ## Hook events and their matchers (canonical)
 
 A hook `matcher` matches a TOOL NAME only for tool-events. For every other event
