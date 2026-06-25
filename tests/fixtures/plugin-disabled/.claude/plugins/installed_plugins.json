@@ -1,0 +1,10 @@
+{
+  "plugins": {
+    "parked-plugin@demo-market": [
+      { "scope": "user", "installPath": "", "version": "1.0.0" }
+    ],
+    "active-plugin@demo-market": [
+      { "scope": "user", "installPath": "", "version": "1.0.0" }
+    ]
+  }
+}

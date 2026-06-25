@@ -13,6 +13,7 @@ Validates `~/.claude/plugins/installed_plugins.json` against the on-disk plugin 
 | `PLUGIN-BROKEN-REF` | `installPath` listed in `installed_plugins.json` but directory missing on disk | Critical |
 | `PLUGIN-MISSING-MANIFEST` | install dir exists but contains no `plugin.json` | Critical |
 | `PLUGIN-VERSION-DRIFT` | `installed_plugins.json#plugins[].version` differs from on-disk `plugin.json#version` (versions of "unknown" are ignored) | Structural |
+| `PLUGIN-DISABLED` | a plugin installed at user scope (`installed_plugins.json`) but absent from `settings.json#enabledPlugins` — parked on disk, loaded by nothing. Skipped entirely when no `enabledPlugins` map exists, so enable-state stays indeterminate rather than false-flagged | Hygiene |
 | `MCP-DEPRECATED-TRANSPORT` | an `mcpServers` entry of `"type":"sse"` in `.mcp.json` (project root or `$CLAUDE_DIR/`), `~/.claude.json`, or a settings file — the SSE transport is deprecated in favour of `http`/`streamable-http` | Hygiene |
 | `MCP-BAD-DEF` | an `mcpServers` entry declaring neither a `command` (stdio) nor a `url` (http/sse) — the server has no way to start | Structural |
 | `MCP-PLAINTEXT-SECRET` | an `mcpServers` entry whose `env` or `headers` carries a hardcoded credential (same credential patterns as `EMBEDDED-SECRET`); `${VAR}`/`<your-…>`/`example` placeholders are skipped, so `"Authorization": "Bearer ${TOKEN}"` is clean | Hygiene |
@@ -39,3 +40,4 @@ Emit nothing when X=Y=Z=0.
 4. `MCP-DEPRECATED-TRANSPORT` → change the server's `"type"` from `"sse"` to `"http"` (alias `"streamable-http"`) where the server supports it.
 5. `MCP-BAD-DEF` → add a `command` (for a stdio server) or a `url` (for an http/sse server); an entry with neither never loads.
 6. `MCP-PLAINTEXT-SECRET` → move the literal token to an environment variable and reference it with `${ENV_VAR}` interpolation in `env`/`headers`.
+7. `PLUGIN-DISABLED` → `/plugin uninstall <name>` to reclaim disk if the plugin is unused, or `/plugin enable <name>` if it was parked by mistake. Intentionally-disabled plugins are a legitimate state — this is a polish-tier nudge, not a defect.

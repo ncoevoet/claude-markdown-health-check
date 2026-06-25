@@ -692,21 +692,29 @@ check_memory_overflow() {
     done
 }
 
-# Flag `.claude/<file>` path citations in auto-memory file BODIES that no longer
-# resolve in the scanned tree → MEMORY-STALE-CONTENT (a memory pointing at a script,
-# guide, or config that has since been removed/renamed). This is the deterministic
-# slice of memory content-grounding; behaviour-contradiction claims stay judgment
-# (Phase 20). Runtime/state paths a memory legitimately mentions are skipped.
+# Flag `~/.claude/<file>` path citations in auto-memory file BODIES that no longer
+# resolve under the user root → MEMORY-STALE-CONTENT (a memory pointing at a script,
+# guide, or config that has since been removed/renamed). Only explicit `~/.claude/`
+# citations are grounded: they unambiguously target the user root. A bare `.claude/`
+# citation in a project memory is project-relative — the project tree may live
+# anywhere (including a subdir `.claude/` such as apps/ng/.claude) and is not
+# resolvable from here — so bare citations are intentionally skipped to avoid false
+# positives. Behaviour-contradiction claims stay judgment (Phase 20). User
+# runtime/state subdirs a memory legitimately mentions are skipped.
 check_memory_stale_refs() {
-    local memf disp p
+    local memf disp p rel cites
     while IFS= read -r memf; do
         [ -f "$memf" ] || continue
         disp="projects/${memf#"$CLAUDE_DIR"/projects/}"
+        # shellcheck disable=SC2088  # the "~/.claude/" here is a literal regex matched in the file body, not a path to expand
+        cites=$(grep -oE '~/\.claude/[A-Za-z0-9._/-]+\.(md|sh|json|ts|js)' "$memf" 2>/dev/null | sort -u || true)
+        [ -z "$cites" ] && continue
         while IFS= read -r p; do
             [ -z "$p" ] && continue
-            printf '%s' "$p" | grep -qE "$CLAUDE_RUNTIME_PATHS_RE" && continue
+            rel="${p#\~/.claude/}"
+            printf '%s' "$rel" | grep -qE '^(projects|plugins|\.?cache|telemetry|usage-data|logs|statsig|todos|shell-snapshots|backups|ide)/|^\.(credentials|claude)' && continue
             [ -f "$(_resolve_dotclaude "$p")" ] || error "[MEMORY-STALE-CONTENT] $disp: cites $p — missing on disk"
-        done < <(grep -oE '(~/)?\.claude/[A-Za-z0-9._/-]+\.(md|sh|json|ts|js)' "$memf" 2>/dev/null | sort -u || true)
+        done <<< "$cites"
     done < <(find "$CLAUDE_DIR/projects" -path '*/memory/*.md' 2>/dev/null | sort)
 }
 

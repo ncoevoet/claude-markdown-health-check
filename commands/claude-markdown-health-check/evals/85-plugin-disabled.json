@@ -1,0 +1,20 @@
+{
+  "id": "85-plugin-disabled",
+  "command": "claude-markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/plugin-disabled",
+    "needs_home_override": true,
+    "scanners": ["scan-graph"]
+  },
+  "grader": { "method": "code" },
+  "success_criteria": {
+    "must_detect": [ { "tag": "PLUGIN-DISABLED", "path_substring": "parked-plugin" } ],
+    "must_not_flag": [],
+    "expect_clean": false
+  },
+  "expected_behavior": [
+    "scan-graph.sh emits [PLUGIN-DISABLED] for parked-plugin (installed at user scope, absent from settings.json#enabledPlugins) and NOT for active-plugin (which is enabled).",
+    "The enable-state check is independent of installPath; the stub installPaths in this fixture also yield [PLUGIN-BROKEN-REF] (fixtures cannot carry a machine-portable absolute installPath, same as the plugin-broken-ref fixture) — that is expected and orthogonal to what this case asserts."
+  ]
+}

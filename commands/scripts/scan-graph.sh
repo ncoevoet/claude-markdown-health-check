@@ -103,6 +103,28 @@ scan_plugins() {
             emit_finding 2 "PLUGIN-VERSION-DRIFT" "$key" "installed=$manifest_ver, on-disk=$disk_ver"
         fi
     done
+
+    # PLUGIN-DISABLED: a plugin installed at user scope but absent from
+    # settings.json#enabledPlugins is parked — loaded by nothing, still on disk.
+    # A pure uninstall candidate (or an intentional park). Only run when an
+    # enabledPlugins map exists; without it, enable-state is indeterminate.
+    local settings_file="$USER_TREE/settings.json"
+    [ -f "$settings_file" ] || return 0
+    jq -e '.enabledPlugins' "$settings_file" >/dev/null 2>&1 || return 0
+    local enabled_keys
+    enabled_keys=$(jq -r '(.enabledPlugins // {}) | to_entries[] | select(.value==true) | .key' "$settings_file" 2>/dev/null)
+    jq -r '
+        .plugins // {}
+        | to_entries[]
+        | .key as $k
+        | .value[]?
+        | select((.scope // "user") == "user")
+        | $k
+    ' "$ip_file" 2>/dev/null | sort -u | while IFS= read -r key; do
+        [ -z "$key" ] && continue
+        printf '%s\n' "$enabled_keys" | grep -qxF -- "$key" && continue
+        emit_finding 2 "PLUGIN-DISABLED" "$key" "installed (user scope) but not enabled in settings.json — uninstall to reclaim disk if unused"
+    done
 }
 
 # Resolve a reference path mentioned inside a markdown source file. SKILL.md
