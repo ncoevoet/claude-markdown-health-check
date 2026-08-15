@@ -101,6 +101,15 @@ for f in "$EVALS"/*.json; do
     rm -rf "$tmp"
 done
 
+# --listing-cost excludes disable-model-invocation skills: the clean fixture's
+# only skill (welltuned) sets the flag, so total and count must both be 0.
+lc=$(bash "$VALIDATE" --listing-cost "$REPO/tests/fixtures/clean/.claude" | awk '{print $1, $2}')
+if [ "$lc" = "0 0" ]; then
+    ok "listing-cost: disable-model-invocation skill excluded"
+else
+    no "listing-cost: expected '0 0' for clean fixture, got '$lc'"
+fi
+
 echo
 echo "deterministic: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]

@@ -1200,6 +1200,11 @@ compute_listing_cost() {
     _accumulate() {
         local f="$1"
         [ -f "$f" ] || return 0
+        # A disable-model-invocation skill is removed from Claude's context
+        # entirely (skills doc: Configure skills), so it costs no listing chars.
+        local dmi
+        dmi=$(extract_field "$f" "disable-model-invocation" | tr '[:upper:]' '[:lower:]')
+        case "$dmi" in true|yes|on|1) return 0 ;; esac
         desc=$(extract_field "$f" "description")
         when_to_use=$(extract_field "$f" "when_to_use")
         entry_chars=$(( ${#desc} + ${#when_to_use} ))

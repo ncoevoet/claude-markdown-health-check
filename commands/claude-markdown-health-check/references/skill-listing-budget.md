@@ -22,13 +22,13 @@ GRAND_BUDGET=${U_BUDGET}   # budget is global, not per-scope
 
 Budget resolution inside the script (most specific wins): `SLASH_COMMAND_TOOL_CHAR_BUDGET` env var → `skillListingBudgetFraction` from `<scope>/settings.json` (read via `jq` if available) → built-in default 0.01. The fraction is multiplied by `CLAUDE_CONTEXT_TOKENS × 4` and floored at 8 000 chars per the docs.
 
-The script's count covers user + project SKILL.md + commands. Plugin, marketplace and bundled skills (`/loop`, `/simplify`, `/debug`, `/claude-api`, etc.) are NOT counted. The number is a **lower bound** — say so in the report so the user understands `/doctor`'s runtime number can exceed it. If the most recent transcript shows the truncation banner (`+N more`), trust the runtime signal over the script-side count.
+The script's count covers user + project SKILL.md + commands, excluding any whose frontmatter sets `disable-model-invocation` to a truthy value (`true`/`yes`/`on`/`1`) — Claude Code removes those from the model's context entirely, so they cost no listing chars. Plugin, marketplace and bundled skills (`/loop`, `/simplify`, `/debug`, `/claude-api`, etc.) are NOT counted. The number is a **lower bound** — say so in the report so the user understands `/doctor`'s runtime number can exceed it. If the most recent transcript shows the truncation banner (`+N more`), trust the runtime signal over the script-side count.
 
 ## Findings
 
 - **`SKILL-BUDGET-OVERFLOW`** (Critical) — emit when `GRAND_TOTAL > GRAND_BUDGET`, OR when an active session has visibly truncated descriptions in the recent transcript. Report numbers and the top 5 cost contributors by combined `description` + `when_to_use` byte count.
-- **`SKILL-LOW-RELEVANCE`** (Structural) — for each user-scope skill (skip project + plugins), grep description keywords ≥ 4 chars against the project source tree, capped to 500 hits. Zero hits → flag as a per-project disable candidate. Advisory; tolerate false positives.
-- **`SKILL-DUPLICATE-DOMAIN`** (Structural) — Jaccard similarity ≥ 0.6 across description + when_to_use keyword sets. Two skills covering the same domain waste budget twice.
+- **`SKILL-LOW-RELEVANCE`** (Structural) — for each user-scope skill (skip project + plugins), grep description keywords ≥ 4 chars against the project source tree, capped to 500 hits. Zero hits → flag as a per-project disable candidate. Advisory; tolerate false positives. Skip skills with `disable-model-invocation: true` — they cost no listing chars, so there is nothing to reclaim.
+- **`SKILL-DUPLICATE-DOMAIN`** (Structural) — Jaccard similarity ≥ 0.6 across description + when_to_use keyword sets. Two skills covering the same domain waste budget twice. Skip pairs where either skill sets `disable-model-invocation: true`: a manual-only skill costs no budget and the model can't pick it by mistake, so the duplication is a user preference, not a defect.
 
 ## Remediation order (cheapest first)
 
