@@ -29,6 +29,10 @@ globally disabled. The static safety tags (`HOOK-NO-SHEBANG`, `HOOK-UNSAFE-SHELL
 `HOOK-EXIT-NONBLOCKING`, `HOOK-ENV-LEAK`) STILL apply — they audit the script on disk,
 which a future re-enable would run.
 
+The same reasoning covers a hook already flagged `HOOK-HTTP-BLOCKED`: Claude Code refuses to run
+it, so `HOOK-NEVER-FIRED` and `HOOK-EVENT-MISMATCH` are expected for that hook and are suppressed
+— report the blocked allowlist, not the idle hook.
+
 ## Hook events and their matchers (canonical)
 
 A hook `matcher` matches a TOOL NAME only for tool-events. For every other event

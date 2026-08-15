@@ -1,0 +1,4 @@
+{
+  "sandbox": { "disabled": true },
+  "permissions": { "allow": ["Read(~/.zshrc)"] }
+}

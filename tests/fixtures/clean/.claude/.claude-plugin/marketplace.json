@@ -1,7 +1,20 @@
 {
   "name": "clean-mp",
-  "owner": { "name": "Example" },
+  "owner": {
+    "name": "Example"
+  },
   "plugins": [
-    { "name": "clean-demo", "source": "./" }
+    {
+      "name": "clean-demo",
+      "source": "./"
+    },
+    {
+      "name": "from-npm",
+      "source": "npm:@example/clean-plugin"
+    },
+    {
+      "name": "from-github",
+      "source": "github:example/clean-plugin/pkg"
+    }
   ]
 }

@@ -1,0 +1,7 @@
+{
+  "blockedMarketplaces": ["evil-market"],
+  "enabledPlugins": {
+    "trusted@good-market": true,
+    "rogue@evil-market": true
+  }
+}

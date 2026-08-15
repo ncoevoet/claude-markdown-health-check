@@ -1,0 +1,10 @@
+{
+  "plugins": {
+    "trusted@good-market": [
+      { "scope": "user", "installPath": "__HOME__/.claude/plugins/cache/trusted", "version": "1.0.0" }
+    ],
+    "rogue@evil-market": [
+      { "scope": "user", "installPath": "__HOME__/.claude/plugins/cache/rogue", "version": "1.0.0" }
+    ]
+  }
+}

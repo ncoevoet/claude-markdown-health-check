@@ -1,0 +1,22 @@
+{
+  "id": "101-settings-automode-broad",
+  "command": "claude-markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/settings-automode-broad",
+    "needs_home_override": false,
+    "scanners": ["validate-skills"]
+  },
+  "grader": { "method": "code" },
+  "success_criteria": {
+    "must_detect": [
+      { "tag": "SETTINGS-AUTOMODE-BROAD", "path_substring": "settings.json" }
+    ],
+    "must_not_flag": ["SETTINGS-BYPASS-MODE", "SETTINGS-SANDBOX-OFF"],
+    "expect_clean": false
+  },
+  "expected_behavior": [
+    "validate-skills.sh emits [SETTINGS-AUTOMODE-BROAD] for the Bash(*) entry in autoMode.allow, which hands auto mode the whole Bash tool with no prompt",
+    "the narrow Read entry alone would not trigger the finding"
+  ]
+}

@@ -1,0 +1,6 @@
+{
+  "autoMode": {
+    "allow": ["Read", "Bash(*)"],
+    "hard_deny": ["Bash(rm:*)"]
+  }
+}

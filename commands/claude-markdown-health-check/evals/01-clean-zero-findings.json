@@ -5,9 +5,14 @@
     "kind": "claude-tree",
     "dir": "tests/fixtures/clean",
     "needs_home_override": false,
-    "scanners": ["validate-skills", "scan-graph"]
+    "scanners": [
+      "validate-skills",
+      "scan-graph"
+    ]
   },
-  "grader": { "method": "code" },
+  "grader": {
+    "method": "code"
+  },
   "success_criteria": {
     "must_detect": [],
     "must_not_flag": [
@@ -26,13 +31,22 @@
       "OUTPUTSTYLE-MISSING",
       "MCP-DEPRECATED-TRANSPORT",
       "SETTINGS-BYPASS-MODE",
-      "SETTINGS-MCP-AUTOAPPROVE"
+      "SETTINGS-MCP-AUTOAPPROVE",
+      "PLUGIN-ABS-PATH",
+      "MARKETPLACE-DEAD-SOURCE",
+      "PLUGIN-USERCONFIG-IN-SHELL",
+      "HOOK-HTTP-BLOCKED",
+      "SETTINGS-SANDBOX-OFF",
+      "SETTINGS-AUTOMODE-BROAD"
     ],
     "expect_clean": true
   },
   "expected_behavior": [
     "validate-skills.sh emits zero tagged findings",
     "a SKILL.md using comma-separated allowed-tools plus disable-model-invocation / disallowed-tools / effort triggers neither BAD-FRONTMATTER-SCHEMA nor UNKNOWN-FRONTMATTER-FIELD",
-    "a rules/*.md scoped with paths: does not trigger BAD-RULE-FRONTMATTER"
+    "a rules/*.md scoped with paths: does not trigger BAD-RULE-FRONTMATTER",
+    "the Agent Skills spec fields license / compatibility / metadata and the context: fork pair background trigger no UNKNOWN-FRONTMATTER-FIELD",
+    "plugin.json declaring the documented skills: \".\" exception triggers no PLUGIN-ABS-PATH",
+    "marketplace.json entries with npm: and github: sources are remote, not local paths \u2014 no MARKETPLACE-DEAD-SOURCE"
   ]
 }

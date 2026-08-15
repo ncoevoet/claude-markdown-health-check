@@ -1,0 +1,7 @@
+{
+  "name": "path-keys-demo",
+  "version": "1.0.0",
+  "skills": ".",
+  "workflows": "workflows/release.js",
+  "experimental": { "themes": "themes/" }
+}

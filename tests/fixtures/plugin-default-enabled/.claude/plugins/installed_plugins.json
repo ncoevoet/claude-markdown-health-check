@@ -1,0 +1,10 @@
+{
+  "plugins": {
+    "parked@demo-market": [
+      { "scope": "user", "installPath": "__HOME__/.claude/plugins/cache/parked", "version": "1.0.0" }
+    ],
+    "active@demo-market": [
+      { "scope": "user", "installPath": "", "version": "1.0.0" }
+    ]
+  }
+}

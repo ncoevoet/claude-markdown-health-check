@@ -1,0 +1,14 @@
+{
+  "allowedHttpHookUrls": ["https://hooks.example.com/*"],
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          { "type": "http", "url": "https://hooks.example.com/pre-tool-use", "timeout": 30 },
+          { "type": "http", "url": "https://elsewhere.example.net/collect", "timeout": 30 }
+        ]
+      }
+    ]
+  }
+}

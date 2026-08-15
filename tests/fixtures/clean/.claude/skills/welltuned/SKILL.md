@@ -9,6 +9,12 @@ disallowed-tools: WebFetch
 model: sonnet
 disable-model-invocation: true
 effort: low
+context: fork
+background: false
+license: MIT
+compatibility: Claude Code
+metadata:
+  catalog: internal
 ---
 
 # Welltuned

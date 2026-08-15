@@ -1,0 +1,22 @@
+{
+  "id": "96-hook-http-blocked",
+  "command": "claude-markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/hook-http-blocked",
+    "needs_home_override": false,
+    "scanners": ["validate-skills"]
+  },
+  "grader": { "method": "code" },
+  "success_criteria": {
+    "must_detect": [
+      { "tag": "HOOK-HTTP-BLOCKED", "path_substring": "elsewhere.example.net" }
+    ],
+    "must_not_flag": ["HOOK-ENV-LEAK", "SUSPICIOUS-TIMEOUT"],
+    "expect_clean": false
+  },
+  "expected_behavior": [
+    "validate-skills.sh emits [HOOK-HTTP-BLOCKED] for the hook targeting elsewhere.example.net, which matches no allowedHttpHookUrls pattern and is therefore never run",
+    "the hook matching https://hooks.example.com/* is not flagged"
+  ]
+}

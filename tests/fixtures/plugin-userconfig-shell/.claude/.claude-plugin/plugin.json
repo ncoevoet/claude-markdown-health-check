@@ -1,0 +1,20 @@
+{
+  "name": "userconfig-demo",
+  "version": "1.0.0",
+  "userConfig": {
+    "api_token": { "type": "string", "title": "API Token", "sensitive": true }
+  },
+  "mcpServers": {
+    "api": { "command": "./bin/api", "env": { "TOKEN": "${user_config.api_token}" } }
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write",
+        "hooks": [
+          { "type": "command", "command": "./scripts/publish.sh --token ${user_config.api_token}" }
+        ]
+      }
+    ]
+  }
+}

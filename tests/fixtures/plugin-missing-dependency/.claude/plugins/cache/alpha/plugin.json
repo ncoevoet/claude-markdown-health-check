@@ -1,0 +1,5 @@
+{
+  "name": "alpha",
+  "version": "1.0.0",
+  "dependencies": ["helper-lib", { "name": "secrets-vault", "version": "~2.1.0" }]
+}
