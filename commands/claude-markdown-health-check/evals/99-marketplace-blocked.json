@@ -1,0 +1,22 @@
+{
+  "id": "99-marketplace-blocked",
+  "command": "claude-markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/marketplace-blocked",
+    "needs_home_override": true,
+    "scanners": ["scan-graph"]
+  },
+  "grader": { "method": "code" },
+  "success_criteria": {
+    "must_detect": [
+      { "tag": "MARKETPLACE-BLOCKED", "path_substring": "rogue@evil-market" }
+    ],
+    "must_not_flag": ["PLUGIN-DISABLED", "PLUGIN-BROKEN-REF"],
+    "expect_clean": false
+  },
+  "expected_behavior": [
+    "scan-graph.sh emits [MARKETPLACE-BLOCKED] for rogue@evil-market because blockedMarketplaces lists evil-market — the plugin stays on disk but never loads",
+    "trusted@good-market comes from a marketplace that is neither blocked nor unknown and is not flagged"
+  ]
+}

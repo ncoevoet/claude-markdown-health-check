@@ -1,0 +1,3 @@
+[
+  { "name": "deploy-status", "command": "./scripts/poll.sh --key ${user_config.api_token}", "description": "Deployment status" }
+]

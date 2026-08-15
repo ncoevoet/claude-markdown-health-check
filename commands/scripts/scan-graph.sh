@@ -89,13 +89,19 @@ scan_plugins() {
     [ "$IS_USER_TREE" = 1 ] || return 0
     local ip_file="$USER_TREE/plugins/installed_plugins.json"
     [ -f "$ip_file" ] || return 0
+    # Install keys are `<name>@<marketplace>`; a `dependencies` entry names the plugin
+    # only, so compare against the bare names.
+    local installed_names
+    installed_names=$(jq -r '(.plugins // {}) | keys[]' "$ip_file" 2>/dev/null | sed 's/@.*//' | sort -u)
+    # \u001f, not \t: tab is IFS whitespace, so bash collapses a run of tabs into one
+    # delimiter and an empty installPath would shift the version into $ip.
     jq -r '
         .plugins // {}
         | to_entries[]
         | .key as $k
         | .value[]?
-        | "\($k)\t\(.installPath // "")\t\(.version // "")"
-    ' "$ip_file" 2>/dev/null | while IFS=$'\t' read -r key ip manifest_ver; do
+        | "\($k)\u001f\(.installPath // "")\u001f\(.version // "")"
+    ' "$ip_file" 2>/dev/null | while IFS=$'\x1f' read -r key ip manifest_ver; do
         [ -z "$ip" ] && continue
         if [ ! -d "$ip" ]; then
             emit_finding 2 "PLUGIN-BROKEN-REF" "$key" "installPath missing on disk: $ip"
@@ -124,27 +130,68 @@ scan_plugins() {
            && [ "$disk_ver" != "unknown" ]; then
             emit_finding 2 "PLUGIN-VERSION-DRIFT" "$key" "installed=$manifest_ver, on-disk=$disk_ver"
         fi
+        # A declared dependency that is not installed leaves the plugin half-wired.
+        # Version constraints are not evaluated — only presence.
+        local dep
+        while IFS= read -r dep; do
+            [ -z "$dep" ] && continue
+            printf '%s\n' "$installed_names" | grep -qxF -- "$dep" && continue
+            emit_finding 2 "PLUGIN-MISSING-DEPENDENCY" "$key" "declares dependency '$dep', which is not installed"
+        done < <(jq -r '(.dependencies // []) | if type=="array" then .[] else empty end
+                        | if type=="string" then . elif type=="object" then (.name // empty) else empty end' "$pj" 2>/dev/null || true)
     done
+
+    # MARKETPLACE-BLOCKED: a plugin whose marketplace settings.json blocks — outright
+    # via blockedMarketplaces, or by omission when strictKnownMarketplaces is on —
+    # stays on disk but is never loaded.
+    local settings_file="$USER_TREE/settings.json"
+    local blocked strict extra known mkt
+    if [ -f "$settings_file" ]; then
+        blocked=$(jq -r '(.blockedMarketplaces // []) | if type=="array" then .[] else empty end' "$settings_file" 2>/dev/null)
+        strict=$(jq -r 'if .strictKnownMarketplaces == true then "1" else "0" end' "$settings_file" 2>/dev/null)
+        extra=$(jq -r '(.extraKnownMarketplaces // []) | if type=="array" then (.[] | if type=="string" then . else (.name // empty) end) else empty end' "$settings_file" 2>/dev/null)
+        known=$(jq -r 'if type=="object" then keys[] else empty end' "$USER_TREE/plugins/known_marketplaces.json" 2>/dev/null)
+        while IFS= read -r key; do
+            [ -z "$key" ] && continue
+            mkt="${key##*@}"
+            [ "$mkt" = "$key" ] && continue
+            if printf '%s\n' "$blocked" | grep -qxF -- "$mkt"; then
+                emit_finding 2 "MARKETPLACE-BLOCKED" "$key" "marketplace '$mkt' is in blockedMarketplaces — the plugin stays on disk but never loads"
+                continue
+            fi
+            [ "$strict" = "1" ] || continue
+            printf '%s\n' "$known" | grep -qxF -- "$mkt" && continue
+            printf '%s\n' "$extra" | grep -qxF -- "$mkt" && continue
+            emit_finding 2 "MARKETPLACE-BLOCKED" "$key" "strictKnownMarketplaces is on and marketplace '$mkt' is neither known nor in extraKnownMarketplaces — the plugin never loads"
+        done < <(jq -r '(.plugins // {}) | keys[]' "$ip_file" 2>/dev/null || true)
+    fi
 
     # PLUGIN-DISABLED: a plugin installed at user scope but absent from
     # settings.json#enabledPlugins is parked — loaded by nothing, still on disk.
     # A pure uninstall candidate (or an intentional park). Only run when an
     # enabledPlugins map exists; without it, enable-state is indeterminate.
-    local settings_file="$USER_TREE/settings.json"
     [ -f "$settings_file" ] || return 0
     jq -e '.enabledPlugins' "$settings_file" >/dev/null 2>&1 || return 0
     local enabled_keys
     enabled_keys=$(jq -r '(.enabledPlugins // {}) | to_entries[] | select(.value==true) | .key' "$settings_file" 2>/dev/null)
+    local dpj
     jq -r '
         .plugins // {}
         | to_entries[]
         | .key as $k
         | .value[]?
         | select((.scope // "user") == "user")
-        | $k
-    ' "$ip_file" 2>/dev/null | sort -u | while IFS= read -r key; do
+        | "\($k)\t\(.installPath // "")"
+    ' "$ip_file" 2>/dev/null | sort -u | while IFS=$'\t' read -r key ip; do
         [ -z "$key" ] && continue
         printf '%s\n' "$enabled_keys" | grep -qxF -- "$key" && continue
+        # defaultEnabled:false ships the plugin parked by design — installing it
+        # without enabling it is then the documented behaviour, not a defect.
+        if [ -n "$ip" ] && [ -d "$ip" ]; then
+            dpj=$(find "$ip" -maxdepth 3 -name 'plugin.json' 2>/dev/null | head -1)
+            # `.defaultEnabled // empty` would swallow the false, so test it explicitly.
+            [ -n "$dpj" ] && [ "$(jq -r 'if .defaultEnabled == false then "false" else "" end' "$dpj" 2>/dev/null)" = "false" ] && continue
+        fi
         emit_finding 2 "PLUGIN-DISABLED" "$key" "installed (user scope) but not enabled in settings.json — uninstall to reclaim disk if unused"
     done
 }
@@ -419,16 +466,33 @@ scan_mcp() {
     done
 }
 
+# Emit `display<TAB>command` for every shell command a hooks-shaped or monitors-shaped
+# JSON document declares. Handles the three layouts: inline `hooks` (plugin.json or
+# hooks/hooks.json), inline `experimental.monitors`, and a bare monitors array.
+_plugin_shell_commands() {
+    local f="$1" display="$2"
+    [ -f "$f" ] || return 0
+    jq -r --arg d "$display" '
+        (if type == "object" then . else {} end) as $o
+        | [ ( ($o.hooks // {}) | if type == "object"
+                then [ to_entries[] | .value[]? | (.hooks // [])[]? | (.command // empty) ] else [] end ),
+            ( ($o.experimental // {}) | if type == "object"
+                then ((.monitors // []) | if type == "array" then [ .[]? | (.command // empty) ] else [] end) else [] end ),
+            ( ($o.monitors // []) | if type == "array" then [ .[]? | (.command // empty) ] else [] end ),
+            ( if type == "array" then [ .[]? | if type == "object" then (.command // empty) else empty end ] else [] end ) ]
+        | add | .[]? | select(type == "string" and . != "") | "\($d)\t\(.)"' "$f" 2>/dev/null || true
+}
+
 # Validate a plugin repo's OWN manifest + structure when CLAUDE_DIR is a plugin
 # root (contains .claude-plugin/plugin.json). Phase 2 band; independent of scope —
 # lets the tool dogfood on any plugin tree, not just installed user-tree plugins.
 scan_plugin_self() {
-    local pdir="$CLAUDE_DIR/.claude-plugin" pj comp ver mp src resolved p proot rel
+    local pdir="$CLAUDE_DIR/.claude-plugin" pj comp ver mp src resolved p fld proot rel
     pj="$pdir/plugin.json"
     [ -f "$pj" ] || return 0
 
     # Component dirs must sit at the plugin root, never inside .claude-plugin/.
-    for comp in skills agents commands hooks output-styles monitors; do
+    for comp in skills agents commands hooks output-styles monitors workflows themes bin; do
         [ -d "$pdir/$comp" ] \
             && emit_finding 2 "PLUGIN-MISPLACED-DIR" ".claude-plugin/$comp" "component dir '$comp' is inside .claude-plugin/ — it must sit at the plugin root"
     done
@@ -441,19 +505,45 @@ scan_plugin_self() {
         emit_finding 2 "PLUGIN-BAD-VERSION" ".claude-plugin/plugin.json" "version '$ver' is not semantic (expected MAJOR.MINOR.PATCH)"
     fi
 
-    # Declared component paths must be relative and start with ./.
-    while IFS= read -r p; do
+    # Declared component paths must be relative and start with ./. The one documented
+    # exception is `skills: "."` (the plugin root itself). Inline object values for
+    # hooks/mcpServers/lspServers are configuration, not paths — the jq drops them.
+    while IFS=$'\t' read -r fld p; do
         [ -z "$p" ] && continue
         case "$p" in
-            ./*) : ;;
-            *) emit_finding 2 "PLUGIN-ABS-PATH" ".claude-plugin/plugin.json" "path '$p' must be relative and start with ./" ;;
+            ./*) continue ;;
+            .) [ "$fld" = "skills" ] && continue ;;
         esac
-    done < <(jq -r '[ .skills, .commands, .agents, .outputStyles, .lspServers ]
-                    | map(if type=="array" then .[] elif type=="string" then . else empty end) | .[]?
-                    | select(type=="string")' "$pj" 2>/dev/null || true)
+        emit_finding 2 "PLUGIN-ABS-PATH" ".claude-plugin/plugin.json" "$fld path '$p' must be relative and start with ./"
+    done < <(jq -r '
+        ( to_entries[]
+          | select(.key as $k | ["skills","commands","agents","outputStyles","lspServers","workflows","hooks","mcpServers"] | index($k)) ),
+        ( (.experimental // {} | if type=="object" then . else {} end) | to_entries[]
+          | select(.key as $k | ["themes","monitors"] | index($k))
+          | {key: ("experimental." + .key), value: .value} )
+        | .key as $k
+        | (.value | if type=="array" then .[] elif type=="string" then . else empty end)
+        | select(type=="string")
+        | "\($k)\t\(.)"' "$pj" 2>/dev/null || true)
 
-    # marketplace.json string sources are LOCAL paths (object sources are remote — skipped
-    # by jq). A string resolves relative to the marketplace root, optionally under
+    # ${user_config.*} is substituted in skill/agent bodies and in MCP/LSP env blocks,
+    # but REJECTED in shell commands and in monitor commands — the hook then runs with
+    # the literal, unsubstituted string.
+    local where cmd
+    while IFS=$'\t' read -r where cmd; do
+        [ -z "$cmd" ] && continue
+        case "$cmd" in
+            *'${user_config.'*)
+                emit_finding 2 "PLUGIN-USERCONFIG-IN-SHELL" "$where" "command interpolates \${user_config.…}, which Claude Code rejects in shell commands — use CLAUDE_PLUGIN_OPTION_<KEY> or the exec form with args" ;;
+        esac
+    done < <(
+        _plugin_shell_commands "$pj" ".claude-plugin/plugin.json"
+        _plugin_shell_commands "$CLAUDE_DIR/hooks/hooks.json" "hooks/hooks.json"
+        _plugin_shell_commands "$CLAUDE_DIR/monitors/monitors.json" "monitors/monitors.json"
+    )
+
+    # marketplace.json string sources are LOCAL paths unless they carry a remote scheme
+    # (http/git@/npm:/github:/git: — all skipped; object sources are skipped by the jq). A string resolves relative to the marketplace root, optionally under
     # metadata.pluginRoot (which lets an entry omit the ./ prefix). Only flag a local path
     # that resolves to no directory.
     mp="$pdir/marketplace.json"
@@ -461,7 +551,7 @@ scan_plugin_self() {
         proot=$(jq -r '.metadata.pluginRoot // empty' "$mp" 2>/dev/null)
         while IFS= read -r src; do
             [ -z "$src" ] && continue
-            case "$src" in http*|git@*) continue ;; esac
+            case "$src" in http*|git@*|npm:*|github:*|git:*) continue ;; esac
             rel="$src"
             [ -n "$proot" ] && case "$src" in ./*|/*) : ;; *) rel="$proot/$src" ;; esac
             case "$rel" in /*) resolved="$rel" ;; *) resolved="$CLAUDE_DIR/$rel" ;; esac

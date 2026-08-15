@@ -58,7 +58,7 @@ REF_TOC_THRESHOLD=100
 CLAUDE_MD_MAX_LINES=200
 IMPORT_MAX_DEPTH=4
 RESERVED_NAMES=("anthropic" "claude")
-KNOWN_FRONTMATTER_FIELDS=("name" "description" "when_to_use" "allowed-tools" "disallowed-tools" "argument-hint" "arguments" "model" "color" "user-invocable" "disable-model-invocation" "effort" "context" "agent" "hooks" "paths" "shell" "hide-from-slash-command-tool")
+KNOWN_FRONTMATTER_FIELDS=("name" "description" "when_to_use" "allowed-tools" "disallowed-tools" "argument-hint" "arguments" "model" "color" "user-invocable" "disable-model-invocation" "effort" "context" "agent" "hooks" "paths" "shell" "hide-from-slash-command-tool" "background" "metadata" "license" "compatibility")
 MODEL_WHITELIST_RE='^(opus|sonnet|haiku|fable|inherit|claude-(opus|sonnet|haiku|fable)-[0-9])'
 # enforceAvailableModels (settings.json, then settings.local.json overriding): when
 # true with a non-empty availableModels list, a skill/agent `model:` outside that set
@@ -73,6 +73,23 @@ if command -v jq >/dev/null 2>&1; then
         [ -n "$_ef" ] && ENFORCE_MODELS="$_ef"
         _am=$(jq -r '(.availableModels // []) | if type=="array" then .[] else empty end' "$_sf" 2>/dev/null || true)
         [ -n "$_am" ] && AVAILABLE_MODELS="$_am"
+    done
+fi
+# allowedHttpHookUrls (docs: "Supports * as a wildcard. When set, hooks with
+# non-matching URLs are blocked. Undefined = no restrictions, empty array = block all
+# HTTP hooks. Arrays merge across settings sources."). A blocked hook never runs, so a
+# non-matching url is silent breakage, not a style choice.
+HTTP_URL_ALLOWLIST_SET=0
+HTTP_URL_ALLOWLIST=""
+if command -v jq >/dev/null 2>&1; then
+    for _sf in "$CLAUDE_DIR/settings.json" "$CLAUDE_DIR/settings.local.json"; do
+        [ -f "$_sf" ] || continue
+        jq -e 'has("allowedHttpHookUrls")' "$_sf" >/dev/null 2>&1 || continue
+        HTTP_URL_ALLOWLIST_SET=1
+        _al=$(jq -r '(.allowedHttpHookUrls // []) | if type=="array" then .[] else empty end' "$_sf" 2>/dev/null || true)
+        if [ -n "$_al" ]; then
+            HTTP_URL_ALLOWLIST="${HTTP_URL_ALLOWLIST}${_al}"$'\n'
+        fi
     done
 fi
 # Support/utility directories under skills/ that are not themselves skills.
@@ -835,12 +852,33 @@ check_http_hook_env() {
     fi
 }
 
+# Flag http hooks that no allowedHttpHookUrls pattern matches. Claude Code blocks
+# such a hook outright, so it never runs and never reports an error.
+check_http_hook_allowlist() {
+    local json_file="$1" display="$2" url matched pat
+    [ "$HTTP_URL_ALLOWLIST_SET" -eq 1 ] || return 0
+    [ -f "$json_file" ] || return 0
+    command -v jq >/dev/null 2>&1 || return 0
+    while IFS= read -r url; do
+        [ -z "$url" ] && continue
+        matched=0
+        while IFS= read -r pat; do
+            [ -z "$pat" ] && continue
+            # shellcheck disable=SC2254  # the allowlist entry IS a glob — * is the documented wildcard
+            case "$url" in $pat) matched=1; break ;; esac
+        done <<<"$HTTP_URL_ALLOWLIST"
+        [ "$matched" -eq 1 ] && continue
+        warning "[HOOK-HTTP-BLOCKED] $display: http hook url '$url' matches no allowedHttpHookUrls pattern — Claude Code blocks it, so the hook never runs"
+    done < <(jq -r '(.hooks // {}) | to_entries[] | .value[]? | .hooks[]? | select(.type == "http") | (.url // empty)' "$json_file" 2>/dev/null || true)
+}
+
 # Flag settings keys that broadly loosen the permission sandbox. bypassPermissions
 # auto-approves every tool call; enableAllProjectMcpServers trusts any project
-# .mcp.json without review. Both are valid keys — the finding is the risk, not a
-# schema error.
+# .mcp.json without review; sandbox.disabled drops the filesystem/network sandbox;
+# a wildcard autoMode.allow entry hands auto mode a whole tool. All are valid keys —
+# the finding is the risk, not a schema error.
 check_settings_security() {
-    local json_file="$1" display="$2" mode
+    local json_file="$1" display="$2" mode broad
     [ -f "$json_file" ] || return 0
     command -v jq >/dev/null 2>&1 || return 0
     mode=$(jq -r '(.permissions.defaultMode // .defaultMode) // empty' "$json_file" 2>/dev/null)
@@ -849,6 +887,16 @@ check_settings_security() {
     fi
     if [ "$(jq -r '.enableAllProjectMcpServers // false' "$json_file" 2>/dev/null)" = "true" ]; then
         warning "[SETTINGS-MCP-AUTOAPPROVE] $display: enableAllProjectMcpServers is true — every project MCP server is trusted without review"
+    fi
+    if [ "$(jq -r '.sandbox.disabled // false' "$json_file" 2>/dev/null)" = "true" ]; then
+        warning "[SETTINGS-SANDBOX-OFF] $display: sandbox.disabled is true — tool calls run unsandboxed with full filesystem and network access"
+    fi
+    if [ "$(jq -r '.permissions.disableAutoMode // false' "$json_file" 2>/dev/null)" != "true" ]; then
+        broad=$(jq -r '(.autoMode.allow // []) | if type=="array" then .[] else empty end' "$json_file" 2>/dev/null \
+                | grep -xE '\*|Bash|Bash\(\*\)' | head -1 || true)
+        if [ -n "$broad" ]; then
+            warning "[SETTINGS-AUTOMODE-BROAD] $display: autoMode.allow contains '$broad' — auto mode then runs every matching command with no prompt"
+        fi
     fi
 }
 
@@ -1403,9 +1451,13 @@ for settings_file in "$CLAUDE_DIR/settings.json" "$CLAUDE_DIR/settings.local.jso
         check_mcp_preapproved        "$settings_file" "$sdisp"
         check_hook_timeouts          "$settings_file" "$sdisp"
         check_http_hook_env          "$settings_file" "$sdisp"
+        check_http_hook_allowlist    "$settings_file" "$sdisp"
         check_settings_security      "$settings_file" "$sdisp"
     fi
 done
+# hooks/hooks.json holds hook definitions but no allowlist of its own, so it is
+# checked against the allowlist merged from the settings files above.
+check_http_hook_allowlist "$CLAUDE_DIR/hooks/hooks.json" "hooks/hooks.json"
 if [ "$settings_checked" -eq 0 ]; then
     ok "No settings.json found (skipped)"
 fi

@@ -1,0 +1,3 @@
+{
+  "good-market": { "source": "github:example/good-market", "installLocation": "plugins/marketplaces/good-market", "lastUpdated": 1 }
+}

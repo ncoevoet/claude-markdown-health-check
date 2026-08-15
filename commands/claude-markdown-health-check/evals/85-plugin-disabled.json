@@ -5,16 +5,27 @@
     "kind": "claude-tree",
     "dir": "tests/fixtures/plugin-disabled",
     "needs_home_override": true,
-    "scanners": ["scan-graph"]
+    "scanners": [
+      "scan-graph"
+    ]
   },
-  "grader": { "method": "code" },
+  "grader": {
+    "method": "code"
+  },
   "success_criteria": {
-    "must_detect": [ { "tag": "PLUGIN-DISABLED", "path_substring": "parked-plugin" } ],
-    "must_not_flag": [],
+    "must_detect": [
+      {
+        "tag": "PLUGIN-DISABLED",
+        "path_substring": "parked-plugin"
+      }
+    ],
+    "must_not_flag": [
+      "PLUGIN-BROKEN-REF"
+    ],
     "expect_clean": false
   },
   "expected_behavior": [
     "scan-graph.sh emits [PLUGIN-DISABLED] for parked-plugin (installed at user scope, absent from settings.json#enabledPlugins) and NOT for active-plugin (which is enabled).",
-    "The enable-state check is independent of installPath; the stub installPaths in this fixture also yield [PLUGIN-BROKEN-REF] (fixtures cannot carry a machine-portable absolute installPath, same as the plugin-broken-ref fixture) — that is expected and orthogonal to what this case asserts."
+    "The enable-state check is independent of installPath; the fixture's empty installPaths are skipped by the install-integrity loop, so no PLUGIN-BROKEN-REF is raised for them."
   ]
 }

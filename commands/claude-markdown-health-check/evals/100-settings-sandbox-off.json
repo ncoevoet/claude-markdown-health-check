@@ -1,0 +1,21 @@
+{
+  "id": "100-settings-sandbox-off",
+  "command": "claude-markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/settings-sandbox-off",
+    "needs_home_override": false,
+    "scanners": ["validate-skills"]
+  },
+  "grader": { "method": "code" },
+  "success_criteria": {
+    "must_detect": [
+      { "tag": "SETTINGS-SANDBOX-OFF", "path_substring": "settings.json" }
+    ],
+    "must_not_flag": ["SETTINGS-BYPASS-MODE", "SETTINGS-AUTOMODE-BROAD"],
+    "expect_clean": false
+  },
+  "expected_behavior": [
+    "validate-skills.sh emits [SETTINGS-SANDBOX-OFF] because sandbox.disabled is true, so tool calls run with no filesystem or network sandbox"
+  ]
+}

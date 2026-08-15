@@ -1,0 +1,23 @@
+{
+  "id": "98-plugin-missing-dependency",
+  "command": "claude-markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/plugin-missing-dependency",
+    "needs_home_override": true,
+    "scanners": ["scan-graph"]
+  },
+  "grader": { "method": "code" },
+  "success_criteria": {
+    "must_detect": [
+      { "tag": "PLUGIN-MISSING-DEPENDENCY", "path_substring": "alpha@demo-market" }
+    ],
+    "must_not_flag": ["PLUGIN-DISABLED", "MARKETPLACE-BLOCKED"],
+    "expect_clean": false
+  },
+  "expected_behavior": [
+    "scan-graph.sh emits [PLUGIN-MISSING-DEPENDENCY] for secrets-vault, which alpha declares but no install key provides",
+    "helper-lib is installed, so it is not flagged — only presence is checked, not the version constraint",
+    "with no settings.json in the fixture, enable-state is indeterminate and PLUGIN-DISABLED is skipped"
+  ]
+}

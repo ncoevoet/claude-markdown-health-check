@@ -18,6 +18,8 @@ Because the per-tool denial breakdown is unavailable, Phase 15 only emits the co
 | `PERM-MISSING-ENTRY` | parked until per-tool denial data is reachable | — |
 | `SETTINGS-BYPASS-MODE` | `defaultMode` (or `permissions.defaultMode`) == `"bypassPermissions"` — every tool call is auto-approved with no prompt (relayed from `validate-skills.sh`) | Critical |
 | `SETTINGS-MCP-AUTOAPPROVE` | `enableAllProjectMcpServers` == `true` — every project `.mcp.json` server is trusted without review (relayed from `validate-skills.sh`) | Hygiene |
+| `SETTINGS-SANDBOX-OFF` | `sandbox.disabled` == `true` — tool calls run with no filesystem or network sandbox (relayed from `validate-skills.sh`) | Hygiene |
+| `SETTINGS-AUTOMODE-BROAD` | an `autoMode.allow` entry wildcards a whole tool (`*`, `Bash`, `Bash(*)`) while `permissions.disableAutoMode` is unset — auto mode then runs every matching command with no prompt (relayed from `validate-skills.sh`) | Hygiene |
 
 To compute `PERM-DEAD-ENTRY`: extract each entry's tool name (prefix before `(`), and check it against `history-scan.json` → `.toolCalls` keys. Entries with no matching key are dead.
 
@@ -32,6 +34,8 @@ Allow: N entries · Dead: X · Overbroad: Y · Total denials: Z
 
 1. `SETTINGS-BYPASS-MODE` → drop `bypassPermissions`; use `acceptEdits` or default mode, or set `disableBypassPermissionsMode` in managed settings.
 2. `SETTINGS-MCP-AUTOAPPROVE` → set `enableAllProjectMcpServers` to false and allow-list specific servers via `enabledMcpjsonServers`.
-3. `PERM-OVERBROAD` → tighten the matcher pattern (e.g., `Bash(cat:*)` → `Bash(cat ~/.claude/*)`).
-4. `PERM-DEAD-ENTRY` → delete entries whose tool was never invoked in 30 days.
-5. Review the raw `Total denials` count via the user's session log if it seems high — may indicate a missing allowlist entry.
+3. `SETTINGS-SANDBOX-OFF` → drop `sandbox.disabled` and scope exceptions with `sandbox.filesystem` / `sandbox.network` instead of turning the sandbox off wholesale.
+4. `SETTINGS-AUTOMODE-BROAD` → replace the wildcard with the specific commands auto mode should run, or set `permissions.disableAutoMode`.
+5. `PERM-OVERBROAD` → tighten the matcher pattern (e.g., `Bash(cat:*)` → `Bash(cat ~/.claude/*)`).
+6. `PERM-DEAD-ENTRY` → delete entries whose tool was never invoked in 30 days.
+7. Review the raw `Total denials` count via the user's session log if it seems high — may indicate a missing allowlist entry.

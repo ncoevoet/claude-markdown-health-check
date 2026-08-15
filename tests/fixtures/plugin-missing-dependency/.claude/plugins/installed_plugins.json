@@ -1,0 +1,10 @@
+{
+  "plugins": {
+    "alpha@demo-market": [
+      { "scope": "user", "installPath": "__HOME__/.claude/plugins/cache/alpha", "version": "1.0.0" }
+    ],
+    "helper-lib@demo-market": [
+      { "scope": "user", "installPath": "", "version": "1.0.0" }
+    ]
+  }
+}
