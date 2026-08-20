@@ -240,16 +240,17 @@ validate_skill_md() {
         error "[BAD-FRONTMATTER-SCHEMA] $skill_name: frontmatter is not parseable YAML — a list is indented under the completed scalar '$orphan_key:' (a key line such as when_to_use: is missing above the list); the runtime falls back to the H1 title and the skill loses its routing description"
     fi
 
-    # Check: description present, then length (40 min, 1024 hard, 1536 combined)
+    # Check: description present, then length (40 advisory, 1024 hard, 1536 combined)
     desc=$(extract_field "$skill_file" "description")
     when_to_use=$(extract_field "$skill_file" "when_to_use")
     if [ -n "$desc" ]; then
         local desc_len=${#desc}
-        # The min-length floor exists so a model-invoked SKILL has enough text to
-        # trigger reliably. Slash-command files are user-invoked (typed as /name),
-        # so a terse description is valid — docs require only a non-empty string.
+        # Advisory, not a schema violation: the docs mark description "Recommended"
+        # and set no floor, only the 1536-char truncation ceiling. A terse one still
+        # triggers, just less reliably. Slash-command files are user-invoked (typed
+        # as /name), so a short description there is not even worth mentioning.
         if [ "$is_skill_md" = 1 ] && [ "$desc_len" -lt "$DESC_MIN" ]; then
-            error "[BAD-FRONTMATTER-SCHEMA] $skill_name: description is $desc_len chars (min: $DESC_MIN — too short to trigger reliably)"
+            warning "[DESC-TOO-SHORT] $skill_name: description is $desc_len chars (under $DESC_MIN — may trigger less reliably)"
         fi
         if [ "$desc_len" -gt "$DESC_HARD_MAX" ]; then
             error "[DESCRIPTION-TOO-LONG] $skill_name: description is $desc_len chars (max: $DESC_HARD_MAX)"
