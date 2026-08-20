@@ -281,6 +281,7 @@ plugin/                                      # the installed tree — a plugin i
     ├── plugin-integrity.md                  # Phase 2
     ├── token-trend.md                       # Phase 23
     ├── output-styles.md                     # Phase 26
+    ├── context-coherence.md                 # Phase 27
     ├── finding-verification.md              # Pre-print evidence-grounding gate (judgment findings)
     ├── report-format.md                     # Phase 24 report rendering — domain map + scorecard
     └── post-report-menu.md                  # Phase 25 menu
