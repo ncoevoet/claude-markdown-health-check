@@ -110,6 +110,16 @@ else
     no "listing-cost: expected '0 0' for clean fixture, got '$lc'"
 fi
 
+# The counting path must still work: grounded-claudemd's single skill sets no
+# disable-model-invocation, so it has to contribute a non-zero cost. Without this,
+# the assertion above would pass even if compute_listing_cost always returned 0.
+read -r lc_total lc_count _ < <(bash "$VALIDATE" --listing-cost "$REPO/tests/fixtures/grounded-claudemd/.claude")
+if [ "$lc_count" = "1" ] && [ "$lc_total" -gt 0 ]; then
+    ok "listing-cost: model-invocable skill still counted ($lc_total chars)"
+else
+    no "listing-cost: expected 1 entry with non-zero chars, got '$lc_total $lc_count'"
+fi
+
 echo
 echo "deterministic: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]
