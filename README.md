@@ -122,8 +122,8 @@ Inside Claude Code:
 
 | Argument | Effect |
 |---|---|
-| _(empty)_ | Audits both `~/.claude` and any `./.claude`; depth auto-selected from ecosystem size |
-| `quick` | Fast pass — validator + budget audit + frontmatter / name-collision checks + spot-check 3 highest-risk skills |
+| _(empty)_ | Audits both `~/.claude` and any `./.claude` at Standard depth, upgrading to Deep for a large ecosystem |
+| `quick` | Fast pass — validator + budget audit + frontmatter / name-collision checks + spot-check 3 highest-risk skills. Opt-in only; never selected automatically |
 | `deep` | Full audit including cross-session pattern mining and per-session token trend |
 | `--refresh` | Re-fetch threshold values from the Anthropic docs instead of using the week-long cache |
 | `--compress-bodies` | Opt-in caveman:lite rewrite of skill / rule / reference bodies that pass the filler-density gate; requires the caveman plugin |
@@ -173,7 +173,7 @@ The phase sequence runs flat from 1 to 25, renumbered from the previous 5a / 5b 
 |---|---|---|
 | 1 — Load Config + Thresholds | Reads optional `markdown-health-check.json`, then fetches skill / memory / settings / hooks limits from the Anthropic docs; caches at `~/.claude/.cache/claude-markdown-health-check-guidance.json` | All |
 | 2 — Plugin + MCP Integrity | `installed_plugins.json` vs on-disk cache: broken refs, missing manifests, version drift; deprecated `sse` MCP transport in `.mcp.json` | Standard + Deep |
-| 3 — Select Depth | Picks Quick / Standard / Deep from the argument and the size of your ecosystem | All |
+| 3 — Select Depth | Standard by default, Deep for a large ecosystem, Quick only when you ask for it | All |
 | 4 — Focus + History | Reads the focus message (if any) and mines the current session for recurring bugs, corrections, uncovered patterns | Standard + Deep |
 | 5 — Run validate-skills.sh | Deterministic layer: name regex, line counts, voice, TOC, description sizes, frontmatter schema, name collisions | All |
 | 6 — Skill Listing Budget | Cumulative skill-listing block vs Claude Code's runtime budget | Standard + Deep |
