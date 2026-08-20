@@ -1,7 +1,7 @@
 # /claude-markdown-health-check
 
 [![CI](https://github.com/ncoevoet/claude-markdown-health-check/actions/workflows/ci.yml/badge.svg)](https://github.com/ncoevoet/claude-markdown-health-check/actions/workflows/ci.yml)
-[![version](https://img.shields.io/badge/version-0.10.0-blue)](.claude-plugin/plugin.json)
+[![version](https://img.shields.io/badge/version-0.14.0-blue)](plugin/.claude-plugin/plugin.json)
 [![license](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Claude Code plugin](https://img.shields.io/badge/Claude%20Code-plugin-8A2BE2)](https://code.claude.com/docs/en/plugins)
 
@@ -303,6 +303,24 @@ tests/                                       # deterministic test suite (dev-onl
 ```
 
 All plain Markdown and shell — read, fork, extend.
+
+## Acknowledgements
+
+[asgeirtj/claude-health-check](https://github.com/asgeirtj/claude-health-check), a fork of this
+project by Ásgeir Thor Johnson, found four defects that are fixed here:
+
+- skills with `disable-model-invocation: true` were charged against the skill-listing
+  budget even though Claude Code keeps their description out of context entirely
+  (backported as-is, so the commit carries their authorship)
+- `RESERVED-NAME` matched `anthropic` and `claude` as substrings of a skill name, which
+  the docs do not reserve — it now matches the one name they do, the `synced` folder
+- the 40-char `description` floor was reported as a schema violation; the docs set no
+  minimum, so it is now a Hygiene advisory
+- the plugin shipped its whole repository to every user cache, and `references/` nested
+  under `commands/` registered 21 reference files as slash commands
+
+Their fork also drops depth modes outright; here only the silent auto-Quick downgrade
+was removed.
 
 ## License
 
