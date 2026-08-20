@@ -57,7 +57,7 @@ SKILL_REF_DIR_THRESHOLD=300
 REF_TOC_THRESHOLD=100
 CLAUDE_MD_MAX_LINES=200
 IMPORT_MAX_DEPTH=4
-RESERVED_NAMES=("anthropic" "claude")
+RESERVED_SKILL_DIR="synced"
 KNOWN_FRONTMATTER_FIELDS=("name" "description" "when_to_use" "allowed-tools" "disallowed-tools" "argument-hint" "arguments" "model" "color" "user-invocable" "disable-model-invocation" "effort" "context" "agent" "hooks" "paths" "shell" "hide-from-slash-command-tool" "background" "metadata" "license" "compatibility")
 MODEL_WHITELIST_RE='^(opus|sonnet|haiku|fable|inherit|claude-(opus|sonnet|haiku|fable)-[0-9])'
 # enforceAvailableModels (settings.json, then settings.local.json overriding): when
@@ -240,16 +240,17 @@ validate_skill_md() {
         error "[BAD-FRONTMATTER-SCHEMA] $skill_name: frontmatter is not parseable YAML — a list is indented under the completed scalar '$orphan_key:' (a key line such as when_to_use: is missing above the list); the runtime falls back to the H1 title and the skill loses its routing description"
     fi
 
-    # Check: description present, then length (40 min, 1024 hard, 1536 combined)
+    # Check: description present, then length (40 advisory, 1024 hard, 1536 combined)
     desc=$(extract_field "$skill_file" "description")
     when_to_use=$(extract_field "$skill_file" "when_to_use")
     if [ -n "$desc" ]; then
         local desc_len=${#desc}
-        # The min-length floor exists so a model-invoked SKILL has enough text to
-        # trigger reliably. Slash-command files are user-invoked (typed as /name),
-        # so a terse description is valid — docs require only a non-empty string.
+        # Advisory, not a schema violation: the docs mark description "Recommended"
+        # and set no floor, only the 1536-char truncation ceiling. A terse one still
+        # triggers, just less reliably. Slash-command files are user-invoked (typed
+        # as /name), so a short description there is not even worth mentioning.
         if [ "$is_skill_md" = 1 ] && [ "$desc_len" -lt "$DESC_MIN" ]; then
-            error "[BAD-FRONTMATTER-SCHEMA] $skill_name: description is $desc_len chars (min: $DESC_MIN — too short to trigger reliably)"
+            warning "[DESC-TOO-SHORT] $skill_name: description is $desc_len chars (under $DESC_MIN — may trigger less reliably)"
         fi
         if [ "$desc_len" -gt "$DESC_HARD_MAX" ]; then
             error "[DESCRIPTION-TOO-LONG] $skill_name: description is $desc_len chars (max: $DESC_HARD_MAX)"
@@ -313,7 +314,7 @@ validate_skill_md() {
         done <<< "$frontmatter_keys"
     fi
 
-    # Check: name field — charset, length, reserved words
+    # Check: name field — charset, length
     name_field=$(extract_field "$skill_file" "name")
     if [ "$is_skill_md" = 1 ]; then
         name="${name_field:-$dir_name}"
@@ -327,14 +328,16 @@ validate_skill_md() {
         if [ "${#name}" -gt "$NAME_MAX" ]; then
             error "[BAD-NAME] $skill_name: name is ${#name} chars (max: $NAME_MAX)"
         fi
-        if [ "$is_skill_md" = 1 ]; then
-            for reserved in "${RESERVED_NAMES[@]}"; do
-                case "$name" in
-                    *"$reserved"*)
-                        error "[RESERVED-NAME] $skill_name: name '$name' contains reserved word '$reserved' (a skill name may not contain it)"
-                        ;;
-                esac
-            done
+    fi
+    # Check: reserved skill directory. The docs reserve exactly one name —
+    # the folder `synced`, in any capitalization, in the enterprise, personal
+    # and project skill locations. It is the directory that is reserved, not
+    # the frontmatter name, and nothing forbids `anthropic` or `claude`.
+    if [ "$is_skill_md" = 1 ]; then
+        local dir_lc
+        dir_lc=$(printf '%s' "$dir_name" | tr '[:upper:]' '[:lower:]')
+        if [ "$dir_lc" = "$RESERVED_SKILL_DIR" ]; then
+            error "[RESERVED-NAME] $skill_name: directory '$dir_name' uses the reserved skill folder name '$RESERVED_SKILL_DIR'"
         fi
     fi
     # Check: a SKILL.md frontmatter name must match its directory name
@@ -1200,6 +1203,11 @@ compute_listing_cost() {
     _accumulate() {
         local f="$1"
         [ -f "$f" ] || return 0
+        # A disable-model-invocation skill is removed from Claude's context
+        # entirely (skills doc: Configure skills), so it costs no listing chars.
+        local dmi
+        dmi=$(extract_field "$f" "disable-model-invocation" | tr '[:upper:]' '[:lower:]')
+        case "$dmi" in true|yes|on|1) return 0 ;; esac
         desc=$(extract_field "$f" "description")
         when_to_use=$(extract_field "$f" "when_to_use")
         entry_chars=$(( ${#desc} + ${#when_to_use} ))

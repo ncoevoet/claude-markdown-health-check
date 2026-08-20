@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # test_scripts.sh — data-driven deterministic test suite.
 #
-# For every commands/.../evals/*.json whose grader.method == "code":
+# For every evals/*.json whose grader.method == "code":
 #   1. Run the declared scanners (validate-skills / scan-graph) against the
 #      fixture .claude tree (HOME-overridden into a temp dir when the case needs
 #      user-tree gating).
@@ -16,9 +16,9 @@ REPO="$(cd "$HERE/.." && pwd)"
 # shellcheck source=tests/lib.sh
 . "$HERE/lib.sh"
 
-EVALS="$REPO/commands/claude-markdown-health-check/evals"
-VALIDATE="$REPO/commands/scripts/validate-skills.sh"
-GRAPH="$REPO/commands/scripts/scan-graph.sh"
+EVALS="$REPO/evals"
+VALIDATE="$REPO/plugin/commands/scripts/validate-skills.sh"
+GRAPH="$REPO/plugin/commands/scripts/scan-graph.sh"
 
 command -v jq >/dev/null 2>&1 || { echo "test_scripts.sh: jq is required" >&2; exit 2; }
 [ -d "$EVALS" ] || { echo "test_scripts.sh: no evals dir at $EVALS" >&2; exit 2; }
@@ -100,6 +100,25 @@ for f in "$EVALS"/*.json; do
 
     rm -rf "$tmp"
 done
+
+# --listing-cost excludes disable-model-invocation skills: the clean fixture's
+# only skill (welltuned) sets the flag, so total and count must both be 0.
+lc=$(bash "$VALIDATE" --listing-cost "$REPO/tests/fixtures/clean/.claude" | awk '{print $1, $2}')
+if [ "$lc" = "0 0" ]; then
+    ok "listing-cost: disable-model-invocation skill excluded"
+else
+    no "listing-cost: expected '0 0' for clean fixture, got '$lc'"
+fi
+
+# The counting path must still work: grounded-claudemd's single skill sets no
+# disable-model-invocation, so it has to contribute a non-zero cost. Without this,
+# the assertion above would pass even if compute_listing_cost always returned 0.
+read -r lc_total lc_count _ < <(bash "$VALIDATE" --listing-cost "$REPO/tests/fixtures/grounded-claudemd/.claude")
+if [ "$lc_count" = "1" ] && [ "$lc_total" -gt 0 ]; then
+    ok "listing-cost: model-invocable skill still counted ($lc_total chars)"
+else
+    no "listing-cost: expected 1 entry with non-zero chars, got '$lc_total $lc_count'"
+fi
 
 echo
 echo "deterministic: $PASS passed, $FAIL failed"

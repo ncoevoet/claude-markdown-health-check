@@ -9,11 +9,11 @@
   },
   "grader": { "method": "code" },
   "success_criteria": {
-    "must_detect": [ { "tag": "RESERVED-NAME", "path_substring": "claude-helper" } ],
+    "must_detect": [ { "tag": "RESERVED-NAME", "path_substring": "synced" } ],
     "must_not_flag": ["BAD-NAME", "NAME-MISMATCH"],
     "expect_clean": false
   },
   "expected_behavior": [
-    "validate-skills.sh emits [RESERVED-NAME] because the skill name contains the reserved word 'claude'"
+    "validate-skills.sh emits [RESERVED-NAME] because the skill directory is named 'synced', the one folder name the docs reserve"
   ]
 }

@@ -16,7 +16,7 @@ if [[ -d "$PWD/.claude" ]]; then PROJECT_DIR="$PWD/.claude"; fi
 
 - `USER_DIR` is always audited.
 - `PROJECT_DIR` is audited if it exists.
-- Every `references/*.md` this command names resolves the same way — first that exists of `${CLAUDE_PLUGIN_ROOT}/commands/claude-markdown-health-check/references/<name>`, `~/.claude/claude-markdown-health-check/references/<name>`, then the repo copy. Stated once here; the phases just name the file.
+- Every `references/*.md` this command names resolves the same way — first that exists of `${CLAUDE_PLUGIN_ROOT}/references/<name>`, `~/.claude/claude-markdown-health-check/references/<name>`, then the repo copy. Stated once here; the phases just name the file.
 - Findings MUST be prefixed `[user]` or `[project]` so the user knows which tree the issue is in.
 - Phase 5 runs `validate-skills.sh` once per scope. Phase 2/7/11/15/16/19/20/22/23 read the cached scan outputs.
 
@@ -112,14 +112,18 @@ When the scanned tree is a **plugin root** (a `.claude-plugin/plugin.json` is pr
 
 ```bash
 SKILLS=$(ls "$USER_DIR"/skills/*/SKILL.md ${PROJECT_DIR:+"$PROJECT_DIR"/skills/*/SKILL.md} 2>/dev/null | wc -l)
-HOOKS=$(ls "$USER_DIR"/hooks/*.sh ${PROJECT_DIR:+"$PROJECT_DIR"/hooks/*.sh} 2>/dev/null | wc -l)
 ```
 
 | Depth | Trigger | Phases |
 |-------|---------|--------|
-| Quick | user said `quick`, OR `$SKILLS<10 && $HOOKS<5` | 1, 5, 6, 10, 21, 24, 25 + spot-check 3 highest-risk skills |
+| Quick | user said `quick` (never auto-selected) | 1, 5, 6, 10, 21, 24, 25 + spot-check 3 highest-risk skills |
 | Standard | default | 1–18, 20, 24, 25, 27 |
 | Deep | user said `deep` / `comprehensive`, OR `$SKILLS>20` | 1–27 (full) |
+
+Quick is opt-in only. Auto-selecting it for a small tree silently returned a
+partial audit to exactly the users least able to notice phases were missing;
+the automatic Standard→Deep upgrade stays, because widening coverage is not a
+surprise worth guarding against.
 
 `--window-days=N` overrides the 30-day default used by Phases 7, 9, 15, 16, 19, 22, 23. When no `quick`/`deep` arg is given, the `depth` config key (`config-keys.md`) sets the floor; `SKIP_PHASES` (config) then removes any listed phases from the selected set — except Phase 5, which always runs.
 
@@ -160,7 +164,7 @@ bash "$VALIDATE" "$USER_DIR"
 [[ -n "$PROJECT_DIR" ]] && bash "$VALIDATE" "$PROJECT_DIR"
 ```
 
-This is the deterministic layer. Trust its output for: name regex, reserved words, name/dir mismatch, missing descriptions, voice violations, line counts, chained references, dead links (skill `references/*.md`, settings `guides`, CLAUDE.md `.claude/…` paths), JSON validity, duplicate keys and array entries, MCP pre-approval, unregistered hooks, hook timeouts, memory-index size, rule scoping, TOC presence, description sizes, frontmatter schema (description min length, `model` whitelist, `allowed-tools` syntax), unknown frontmatter fields, name collisions between `commands/` and `skills/`, embedded credentials in skill/reference markdown (`EMBEDDED-SECRET`), destructive shell commands without nearby warning markers (`UNFLAGGED-DESTRUCTIVE`), and the context-engineering set relayed by Phases 12 and 27 (`OVER-CONSTRAINED`, `INSTRUCTION-DUPLICATED`, `CLAUDEMD-OBVIOUS`, `CLAUDEMD-MEMORY-DRIFT`). Later phases MUST NOT re-check anything this script already covers — they MUST only handle what the script can't.
+This is the deterministic layer. Trust its output for: name regex, the reserved `synced` skill folder, name/dir mismatch, missing descriptions, voice violations, line counts, chained references, dead links (skill `references/*.md`, settings `guides`, CLAUDE.md `.claude/…` paths), JSON validity, duplicate keys and array entries, MCP pre-approval, unregistered hooks, hook timeouts, memory-index size, rule scoping, TOC presence, description sizes, frontmatter schema (`model` whitelist, `allowed-tools` syntax), unknown frontmatter fields, name collisions between `commands/` and `skills/`, embedded credentials in skill/reference markdown (`EMBEDDED-SECRET`), destructive shell commands without nearby warning markers (`UNFLAGGED-DESTRUCTIVE`), and the context-engineering set relayed by Phases 12 and 27 (`OVER-CONSTRAINED`, `INSTRUCTION-DUPLICATED`, `CLAUDEMD-OBVIOUS`, `CLAUDEMD-MEMORY-DRIFT`). Later phases MUST NOT re-check anything this script already covers — they MUST only handle what the script can't.
 
 ## Phase 6 — Skill Listing Budget
 

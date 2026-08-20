@@ -18,7 +18,7 @@ if [ -z "$filter" ]; then
   bash "$HERE/check-anonymization.sh" || rc=1
   echo
   echo "== eval-schema gate =="
-  bash "$REPO/commands/scripts/validate-evals.sh" || rc=1
+  bash "$REPO/plugin/commands/scripts/validate-evals.sh" || rc=1
   echo
 fi
 

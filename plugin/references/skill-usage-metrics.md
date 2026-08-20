@@ -31,6 +31,8 @@ The ledger is authoritative: `everFired(s)` distinguishes a skill that has *neve
 | `SKILL-MISFIRING` | `invokes>=5 AND sessions(s)/invokes(s) < 0.20` (loaded but never followed through; same skill repeatedly opened in one session is a poor-trigger signal) | Structural |
 | `SKILL-ORPHAN` | `ledgerCount(s) > 0` AND no SKILL.md found in `~/.claude/skills/` or project tree AND skill not in `enabledPlugins` bundled list | Critical |
 
+Skills whose frontmatter sets `disable-model-invocation: true` load nothing per session and fire only when the user types `/name`. Do not emit `SKILL-NEVER-FIRED` or `SKILL-DORMANT` for them — an unused manual command costs nothing; at most mention it as an observation.
+
 `SKILL-MISFIRING` heuristic uses `sessions/invokes` rather than the planned `engagement_ratio` because telemetry-side load counters are not available locally — multiple invokes in the same session implies the skill body was loaded but the model kept re-loading it, a weaker but observable misfire signal.
 
 ## Report block (above tier list)

@@ -9,8 +9,9 @@
 #   3. Grep the report for each expected_behavior needle; mark PASS/FAIL.
 set -u
 HERE="$(cd "$(dirname "$0")" && pwd)"
-REPO="$(cd "$HERE/../.." && pwd)"
-EVALS="$REPO/commands/claude-markdown-health-check/evals"
+PLUGIN="$(cd "$HERE/../.." && pwd)"        # plugin/
+ROOT="$(cd "$PLUGIN/.." && pwd)"             # repo root
+EVALS="$ROOT/evals"
 filter="${1:-}"
 command -v jq >/dev/null 2>&1 || { echo "run-evals: jq is required." >&2; exit 2; }
 

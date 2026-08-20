@@ -13,11 +13,11 @@ jobs:
 
       # shellcheck and jq are pre-installed on ubuntu-latest runners.
       - name: ShellCheck
-        run: shellcheck -S warning commands/scripts/*.sh tests/*.sh
+        run: shellcheck -S warning plugin/commands/scripts/*.sh tests/*.sh
 
       - name: Bash syntax check
         run: |
-          for f in commands/scripts/*.sh tests/*.sh; do bash -n "$f"; done
+          for f in plugin/commands/scripts/*.sh tests/*.sh; do bash -n "$f"; done
 
       # Eval JSON parse + full schema/contract validation, the anonymization
       # gate, and the deterministic scanner suite all run inside tests/run.sh

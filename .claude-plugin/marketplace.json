@@ -3,12 +3,13 @@
   "owner": {
     "name": "Nicolas Coevoet"
   },
+  "description": "Health-check tooling for Claude Code configurations: audits the .claude/ ecosystem for dead references, weak triggers, token bloat, permission drift and memory hygiene.",
   "plugins": [
     {
       "name": "claude-markdown-health-check",
       "displayName": ".claude/ Health Check",
-      "source": "./",
-      "version": "0.13.0",
+      "source": "./plugin",
+      "version": "0.14.0",
       "description": "Audits the .claude/ ecosystem — skills, commands, hooks, agents, settings, plugins, memory — for dead references, weak triggers, token bloat, dormant skills, permission drift, hook reliability, memory hygiene, and context bloat. Evidence-grounds every judgment finding before reporting.",
       "author": {
         "name": "Nicolas Coevoet"
