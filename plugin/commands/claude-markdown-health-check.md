@@ -16,7 +16,7 @@ if [[ -d "$PWD/.claude" ]]; then PROJECT_DIR="$PWD/.claude"; fi
 
 - `USER_DIR` is always audited.
 - `PROJECT_DIR` is audited if it exists.
-- Every `references/*.md` this command names resolves the same way — first that exists of `${CLAUDE_PLUGIN_ROOT}/commands/claude-markdown-health-check/references/<name>`, `~/.claude/claude-markdown-health-check/references/<name>`, then the repo copy. Stated once here; the phases just name the file.
+- Every `references/*.md` this command names resolves the same way — first that exists of `${CLAUDE_PLUGIN_ROOT}/references/<name>`, `~/.claude/claude-markdown-health-check/references/<name>`, then the repo copy. Stated once here; the phases just name the file.
 - Findings MUST be prefixed `[user]` or `[project]` so the user knows which tree the issue is in.
 - Phase 5 runs `validate-skills.sh` once per scope. Phase 2/7/11/15/16/19/20/22/23 read the cached scan outputs.
 

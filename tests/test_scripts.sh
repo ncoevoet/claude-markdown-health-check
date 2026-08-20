@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # test_scripts.sh — data-driven deterministic test suite.
 #
-# For every commands/.../evals/*.json whose grader.method == "code":
+# For every evals/*.json whose grader.method == "code":
 #   1. Run the declared scanners (validate-skills / scan-graph) against the
 #      fixture .claude tree (HOME-overridden into a temp dir when the case needs
 #      user-tree gating).
@@ -16,9 +16,9 @@ REPO="$(cd "$HERE/.." && pwd)"
 # shellcheck source=tests/lib.sh
 . "$HERE/lib.sh"
 
-EVALS="$REPO/commands/claude-markdown-health-check/evals"
-VALIDATE="$REPO/commands/scripts/validate-skills.sh"
-GRAPH="$REPO/commands/scripts/scan-graph.sh"
+EVALS="$REPO/evals"
+VALIDATE="$REPO/plugin/commands/scripts/validate-skills.sh"
+GRAPH="$REPO/plugin/commands/scripts/scan-graph.sh"
 
 command -v jq >/dev/null 2>&1 || { echo "test_scripts.sh: jq is required" >&2; exit 2; }
 [ -d "$EVALS" ] || { echo "test_scripts.sh: no evals dir at $EVALS" >&2; exit 2; }

@@ -19,8 +19,8 @@ REPO="$(cd "$HERE/.." && pwd)"
 # shellcheck source=tests/lib.sh
 . "$HERE/lib.sh"
 
-EVALS="$REPO/commands/claude-markdown-health-check/evals"
-HISTORY="$REPO/commands/scripts/scan-history.sh"
+EVALS="$REPO/evals"
+HISTORY="$REPO/plugin/commands/scripts/scan-history.sh"
 
 command -v jq >/dev/null 2>&1 || { echo "test_history.sh: jq is required" >&2; exit 2; }
 [ -d "$EVALS" ] || { echo "test_history.sh: no evals dir at $EVALS" >&2; exit 2; }

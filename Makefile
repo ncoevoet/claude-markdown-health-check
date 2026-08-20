@@ -5,15 +5,15 @@
 # `make check-self` — install, then remind you to run /claude-markdown-health-check
 
 CLAUDE_DIR  := $(HOME)/.claude
-CMD_SRC     := commands/claude-markdown-health-check.md
+CMD_SRC     := plugin/commands/claude-markdown-health-check.md
 CMD_DEST    := $(CLAUDE_DIR)/commands/claude-markdown-health-check.md
-REF_SRC     := commands/claude-markdown-health-check/references
+REF_SRC     := plugin/references
 REF_DEST    := $(CLAUDE_DIR)/claude-markdown-health-check/references
-SCRIPT_SRC  := commands/scripts/validate-skills.sh
+SCRIPT_SRC  := plugin/commands/scripts/validate-skills.sh
 SCRIPT_DEST := $(CLAUDE_DIR)/commands/scripts/validate-skills.sh
-GRAPH_SRC   := commands/scripts/scan-graph.sh
+GRAPH_SRC   := plugin/commands/scripts/scan-graph.sh
 GRAPH_DEST  := $(CLAUDE_DIR)/commands/scripts/scan-graph.sh
-HIST_SRC    := commands/scripts/scan-history.sh
+HIST_SRC    := plugin/commands/scripts/scan-history.sh
 HIST_DEST   := $(CLAUDE_DIR)/commands/scripts/scan-history.sh
 
 .PHONY: install uninstall check-self smoke-scan test evals help
@@ -60,4 +60,4 @@ test:
 	@bash tests/run.sh
 
 evals:
-	@bash commands/scripts/run-evals-headless.sh
+	@bash plugin/commands/scripts/run-evals-headless.sh

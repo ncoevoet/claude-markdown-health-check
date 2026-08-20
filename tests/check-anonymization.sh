@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# check-anonymization.sh — release gate: the published artifacts (commands/,
+# check-anonymization.sh — release gate: the published artifacts (plugin/, evals/,
 # tests/fixtures/, README.md) must contain NO real employer / product / repo /
 # ticket / scanned-project names. This auditor is dogfooded against real
 # ~/.claude trees, so an accidental paste of a real finding into an eval fixture
@@ -33,12 +33,12 @@ if [[ -z "$pattern" ]]; then
   exit 2
 fi
 
-echo "check-anonymization: scanning commands/ + tests/fixtures/ + README.md against $mode"
+echo "check-anonymization: scanning plugin/ + evals/ + tests/fixtures/ + README.md against $mode"
 # Scan only published artifacts. The blocklist files live directly under tests/
 # (not tests/fixtures/), so they are never scanned and the gate can never match
 # its own pattern list.
 matches="$(grep -rinE "$pattern" \
-  "$ROOT/commands" "$ROOT/tests/fixtures" "$ROOT/README.md" 2>/dev/null)"
+  "$ROOT/plugin" "$ROOT/evals" "$ROOT/tests/fixtures" "$ROOT/README.md" 2>/dev/null)"
 rc=$?
 if [[ $rc -eq 0 ]]; then
   printf '%s\n' "$matches"

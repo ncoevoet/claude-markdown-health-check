@@ -24,10 +24,11 @@
 # --dangerously-skip-permissions because every target is a throwaway fixture.
 set -u
 HERE="$(cd "$(dirname "$0")" && pwd)"          # commands/scripts
-REPO="$(cd "$HERE/../.." && pwd)"
-EVALS="$REPO/commands/claude-markdown-health-check/evals"
-CMD_MD="$REPO/commands/claude-markdown-health-check.md"
-REFS="$REPO/commands/claude-markdown-health-check/references"
+PLUGIN="$(cd "$HERE/../.." && pwd)"        # plugin/
+ROOT="$(cd "$PLUGIN/.." && pwd)"             # repo root
+EVALS="$ROOT/evals"
+CMD_MD="$PLUGIN/commands/claude-markdown-health-check.md"
+REFS="$PLUGIN/references"
 filter="${1:-}"
 
 command -v claude >/dev/null 2>&1 || { echo "run-evals-headless: 'claude' CLI not found on PATH." >&2; exit 127; }
@@ -62,9 +63,9 @@ for f in "$EVALS"/*.json; do
     for ((r=1; r<=runs; r++)); do
         tmp=$(mktemp -d)
         mkdir -p "$tmp/.claude/commands/scripts" "$tmp/.claude/claude-markdown-health-check/references" "$tmp/.claude/.cache" "$tmp/work"
-        cp -r "$REPO/$dir/.claude/." "$tmp/.claude/" 2>/dev/null
+        cp -r "$ROOT/$dir/.claude/." "$tmp/.claude/" 2>/dev/null
         cp "$CMD_MD" "$tmp/.claude/commands/" 2>/dev/null
-        cp "$REPO"/commands/scripts/*.sh "$tmp/.claude/commands/scripts/" 2>/dev/null
+        cp "$PLUGIN"/commands/scripts/*.sh "$tmp/.claude/commands/scripts/" 2>/dev/null
         # References go to the make-install location (top-level), NOT under
         # commands/<cmd>/references/ — otherwise the audit scans the tool's own
         # references and pollutes the report. The command resolves them via its

@@ -24,8 +24,9 @@
 set -u
 
 HERE="$(cd "$(dirname "$0")" && pwd)"          # commands/scripts
-REPO="$(cd "$HERE/../.." && pwd)"
-EVALS="${1:-$REPO/commands/claude-markdown-health-check/evals}"
+PLUGIN="$(cd "$HERE/../.." && pwd)"        # plugin/
+ROOT="$(cd "$PLUGIN/.." && pwd)"             # repo root
+EVALS="${1:-$ROOT/evals}"
 
 command -v jq >/dev/null 2>&1 || { echo "validate-evals: jq is required." >&2; exit 2; }
 [ -d "$EVALS" ] || { echo "validate-evals: no such dir: $EVALS" >&2; exit 2; }
@@ -64,9 +65,9 @@ for f in "$EVALS"/*.json; do
   dir="$(jq -r '.fixture.dir // empty' "$f")"
   if [ -z "$dir" ]; then
     err "$base: fixture.dir missing/empty"
-  elif [ ! -d "$REPO/$dir" ]; then
+  elif [ ! -d "$ROOT/$dir" ]; then
     err "$base: fixture.dir '$dir' does not exist on disk"
-  elif [ ! -d "$REPO/$dir/.claude" ]; then
+  elif [ ! -d "$ROOT/$dir/.claude" ]; then
     err "$base: fixture.dir '$dir' has no .claude/ subtree"
   fi
 

@@ -65,7 +65,7 @@ it survives only if it can be grounded in a quoted artifact on disk (a line, a r
 
 A finding that can't be grounded is downgraded to a non-actionable `[OBSERVATION]` or dropped — so a naive false positive (flagging a guide that _is_ referenced, or a command that _does_ exist) never reaches the report. 
 
-Deterministic scanner findings skip the gate — the script is already the proof. See [`references/finding-verification.md`](commands/claude-markdown-health-check/references/finding-verification.md).
+Deterministic scanner findings skip the gate — the script is already the proof. See [`references/finding-verification.md`](plugin/references/finding-verification.md).
 
 ## Install
 
@@ -163,7 +163,7 @@ Drop a `markdown-health-check.json` in `~/.claude/` (user defaults) and/or `./.c
 { "windowDays": 14, "severityFloor": "should", "skipPhases": [23] }
 ```
 
-Full per-key rationale: [`references/config-keys.md`](commands/claude-markdown-health-check/references/config-keys.md).
+Full per-key rationale: [`references/config-keys.md`](plugin/references/config-keys.md).
 
 ## How it works — phases
 
@@ -228,14 +228,14 @@ Two layers, following Anthropic's [develop-tests](https://platform.claude.com/do
   make test              # bash tests/run.sh — anonymization + eval-schema gates, then the code-graded cases (241 scanner + 13 history assertions)
   bash tests/run.sh 02   # run one case / id-prefix (deterministic suite only)
   ```
-  `tests/run.sh` also runs two release gates first: an **anonymization** check (no real scanned-project names in the published `commands/`, `tests/fixtures/`, `README.md` — the real blocklist is gitignored, a placeholder ships) and **eval-schema validation** (`validate-evals.sh` asserts every case matches the contract before an expensive run is wasted on a malformed one).
+  `tests/run.sh` also runs two release gates first: an **anonymization** check (no real scanned-project names in the published `plugin/`, `evals/`, `tests/fixtures/`, `README.md` — the real blocklist is gitignored, a placeholder ships) and **eval-schema validation** (`validate-evals.sh` asserts every case matches the contract before an expensive run is wasted on a malformed one).
 - **Behavioural (LLM-graded, opt-in, costs tokens).** Runs the full `/claude-markdown-health-check` headless against a fixture to exercise the judgment phases (weak descriptions, thin CLAUDE.md, autonomy-gate compliance) and the evidence-grounding gate — including paired guards (cases 36–41: a referenced guide and a live CLAUDE.md command must _not_ be flagged, while a genuinely-orphaned guide and a missing-script command must _still_ be; case 77: CLAUDE.md self-referential count drift plus the always-on per-file score), graded by an LLM rubric and scored by majority over N runs.
   ```bash
   make evals                            # needs the authenticated `claude` CLI
   HEALTH_CHECK_EVAL_RUNS=3 make evals   # majority vote to smooth LLM noise
   ```
 
-Cases live in `commands/claude-markdown-health-check/evals/*.json` (81 cases: 71 `grader.method: code` + 10 `llm-rubric`; numbered 01–83 with 43 & 50 retired); fixtures in `tests/fixtures/`. 
+Cases live in `evals/*.json` (81 cases: 71 `grader.method: code` + 10 `llm-rubric`; numbered 01–83 with 43 & 50 retired); fixtures in `tests/fixtures/`. 
 
 Tags are the stable machine contract, so the code-graded cases are immune to report-format changes. CI (`.github/workflows/ci.yml`) runs shellcheck + `bash -n` + the anonymization gate + eval-schema validation + the deterministic suite + the history aggregation suite on every push; it does **not** run the token-spending LLM evals. Every real-world miss or false positive should become a new case.
 
@@ -250,40 +250,44 @@ Tags are the stable machine contract, so the code-graded cases are immune to rep
 ## Layout
 
 ```
-commands/
-├── claude-markdown-health-check.md          # the slash command (~440 lines, orchestrator)
-├── claude-markdown-health-check/
-│   ├── references/
-│   │   ├── config-keys.md                   # Phase 1 config schema (markdown-health-check.json)
-│   │   ├── skill-listing-budget.md          # Phase 6 audit logic
-│   │   ├── skill-usage-metrics.md           # Phase 7
-│   │   ├── skill-tool-contract.md           # Phase 9
-│   │   ├── frontmatter-schema.md            # Phase 10
-│   │   ├── agent-frontmatter.md             # Phase 14 — subagent schema
-│   │   ├── hook-safety.md                   # Phase 14 — hook script safety
-│   │   ├── reference-graph.md               # Phase 11
-│   │   ├── claude-md-quality.md             # Phase 12 rubric
-│   │   ├── body-compression.md              # Phase 13 logic
-│   │   ├── permission-hygiene.md            # Phase 15
-│   │   ├── hook-reliability.md              # Phase 16
-│   │   ├── cross-session-patterns.md        # Phase 19 + 22
-│   │   ├── memory-hygiene.md                # Phase 20
-│   │   ├── plugin-integrity.md              # Phase 2
-│   │   ├── token-trend.md                   # Phase 23
-│   │   ├── output-styles.md                 # Phase 26
-│   │   ├── finding-verification.md          # Pre-print evidence-grounding gate (judgment findings)
-│   │   ├── report-format.md                 # Phase 24 report rendering — domain map + scorecard
-│   │   └── post-report-menu.md              # Phase 25 menu
-│   └── evals/                               # data-driven eval cases
-│       ├── 01-clean-zero-findings.json … 83-history-signals.json  (71 code + 10 LLM; 43 & 50 retired)
-│       └── README.md                        # eval schema + how to run
-└── scripts/
-    ├── validate-skills.sh                   # deterministic compliance validator (Phase 5)
-    ├── scan-graph.sh                        # static graph scanner (Phases 2, 11, 20, 26)
-    ├── scan-history.sh                      # session-log miner (Phases 7, 9, 15, 16, 19, 22, 23)
-    ├── validate-evals.sh                    # eval-case schema/contract gate (CI)
-    ├── run-evals-headless.sh                # opt-in LLM-graded eval runner
-    └── run-evals.sh                         # manual eval runner
+plugin/                                      # the installed tree — a plugin install copies ONLY this
+├── .claude-plugin/plugin.json
+├── LICENSE
+├── commands/
+│   ├── claude-markdown-health-check.md      # the slash command (~440 lines, orchestrator)
+│   └── scripts/
+│       ├── validate-skills.sh               # deterministic compliance validator (Phase 5)
+│       ├── scan-graph.sh                    # static graph scanner (Phases 2, 11, 20, 26)
+│       ├── scan-history.sh                  # session-log miner (Phases 7, 9, 15, 16, 19, 22, 23)
+│       ├── validate-evals.sh                # eval-case schema/contract gate (CI)
+│       ├── run-evals-headless.sh            # opt-in LLM-graded eval runner
+│       └── run-evals.sh                     # manual eval runner
+└── references/                              # kept OUT of commands/ — Claude Code walks commands/
+    │                                          recursively and would register each .md as a command
+    ├── config-keys.md                       # Phase 1 config schema (markdown-health-check.json)
+    ├── skill-listing-budget.md              # Phase 6 audit logic
+    ├── skill-usage-metrics.md               # Phase 7
+    ├── skill-tool-contract.md               # Phase 9
+    ├── frontmatter-schema.md                # Phase 10
+    ├── agent-frontmatter.md                 # Phase 14 — subagent schema
+    ├── hook-safety.md                       # Phase 14 — hook script safety
+    ├── reference-graph.md                   # Phase 11
+    ├── claude-md-quality.md                 # Phase 12 rubric
+    ├── body-compression.md                  # Phase 13 logic
+    ├── permission-hygiene.md                # Phase 15
+    ├── hook-reliability.md                  # Phase 16
+    ├── cross-session-patterns.md            # Phase 19 + 22
+    ├── memory-hygiene.md                    # Phase 20
+    ├── plugin-integrity.md                  # Phase 2
+    ├── token-trend.md                       # Phase 23
+    ├── output-styles.md                     # Phase 26
+    ├── finding-verification.md              # Pre-print evidence-grounding gate (judgment findings)
+    ├── report-format.md                     # Phase 24 report rendering — domain map + scorecard
+    └── post-report-menu.md                  # Phase 25 menu
+
+evals/                                       # data-driven eval cases (dev-only, never installed)
+├── 01-clean-zero-findings.json … 83-history-signals.json  (71 code + 10 LLM; 43 & 50 retired)
+└── README.md                                # eval schema + how to run
 
 tests/                                       # deterministic test suite (dev-only, CI)
 ├── run.sh                                   # entrypoint → anonymization + eval-schema + scanners + history
@@ -294,6 +298,7 @@ tests/                                       # deterministic test suite (dev-onl
 ├── test_history.sh                          # scan-history.sh aggregation runner (synthetic-jsonl cases)
 └── fixtures/<case>/.claude/…                # synthetic trees, one planted defect each
 
+.claude-plugin/marketplace.json              # marketplace entry; source points at ./plugin
 .github/workflows/ci.yml                     # shellcheck + bash -n + tests/run.sh (anon + eval-schema + scanners + history)
 ```
 
