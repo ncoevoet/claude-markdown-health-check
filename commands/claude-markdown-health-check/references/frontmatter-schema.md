@@ -15,7 +15,9 @@ This phase is fully deterministic. `validate-skills.sh` emits the findings direc
 | `BAD-FRONTMATTER-SCHEMA` | description < 40 chars OR `model` value not in `{opus, sonnet, haiku, fable, inherit, claude-(opus\|sonnet\|haiku\|fable)-N}` OR `allowed-tools` has unparseable residue after stripping `Name` / `Name(args)` tokens | Critical |
 | `UNKNOWN-FRONTMATTER-FIELD` | top-level key in frontmatter not in `{name, description, when_to_use, allowed-tools, disallowed-tools, argument-hint, arguments, model, color, user-invocable, disable-model-invocation, effort, context, agent, hooks, paths, shell, hide-from-slash-command-tool, background, metadata, license, compatibility}` — the last four are Agent Skills spec / `context: fork` fields Claude Code accepts | Hygiene |
 
-Existing tags `MISSING-DESC`, `DESCRIPTION-TOO-LONG`, `BAD-NAME`, `RESERVED-NAME`, `NAME-MISMATCH` continue to fire from `validate-skills.sh` per their original rules.
+Existing tags `MISSING-DESC`, `DESCRIPTION-TOO-LONG`, `BAD-NAME`, `NAME-MISMATCH` continue to fire from `validate-skills.sh` per their original rules.
+
+`RESERVED-NAME` fires on the one name the docs reserve: a skill **directory** called `synced`, in any capitalization, in the enterprise, personal or project skills location. It is the folder that is reserved, not the frontmatter `name`, and no word is forbidden inside a name — `claude-api` and `claude-helper` are legal.
 
 ## Report block
 

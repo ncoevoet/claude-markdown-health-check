@@ -57,7 +57,7 @@ SKILL_REF_DIR_THRESHOLD=300
 REF_TOC_THRESHOLD=100
 CLAUDE_MD_MAX_LINES=200
 IMPORT_MAX_DEPTH=4
-RESERVED_NAMES=("anthropic" "claude")
+RESERVED_SKILL_DIR="synced"
 KNOWN_FRONTMATTER_FIELDS=("name" "description" "when_to_use" "allowed-tools" "disallowed-tools" "argument-hint" "arguments" "model" "color" "user-invocable" "disable-model-invocation" "effort" "context" "agent" "hooks" "paths" "shell" "hide-from-slash-command-tool" "background" "metadata" "license" "compatibility")
 MODEL_WHITELIST_RE='^(opus|sonnet|haiku|fable|inherit|claude-(opus|sonnet|haiku|fable)-[0-9])'
 # enforceAvailableModels (settings.json, then settings.local.json overriding): when
@@ -313,7 +313,7 @@ validate_skill_md() {
         done <<< "$frontmatter_keys"
     fi
 
-    # Check: name field — charset, length, reserved words
+    # Check: name field — charset, length
     name_field=$(extract_field "$skill_file" "name")
     if [ "$is_skill_md" = 1 ]; then
         name="${name_field:-$dir_name}"
@@ -327,14 +327,16 @@ validate_skill_md() {
         if [ "${#name}" -gt "$NAME_MAX" ]; then
             error "[BAD-NAME] $skill_name: name is ${#name} chars (max: $NAME_MAX)"
         fi
-        if [ "$is_skill_md" = 1 ]; then
-            for reserved in "${RESERVED_NAMES[@]}"; do
-                case "$name" in
-                    *"$reserved"*)
-                        error "[RESERVED-NAME] $skill_name: name '$name' contains reserved word '$reserved' (a skill name may not contain it)"
-                        ;;
-                esac
-            done
+    fi
+    # Check: reserved skill directory. The docs reserve exactly one name —
+    # the folder `synced`, in any capitalization, in the enterprise, personal
+    # and project skill locations. It is the directory that is reserved, not
+    # the frontmatter name, and nothing forbids `anthropic` or `claude`.
+    if [ "$is_skill_md" = 1 ]; then
+        local dir_lc
+        dir_lc=$(printf '%s' "$dir_name" | tr '[:upper:]' '[:lower:]')
+        if [ "$dir_lc" = "$RESERVED_SKILL_DIR" ]; then
+            error "[RESERVED-NAME] $skill_name: directory '$dir_name' uses the reserved skill folder name '$RESERVED_SKILL_DIR'"
         fi
     fi
     # Check: a SKILL.md frontmatter name must match its directory name
