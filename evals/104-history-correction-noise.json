@@ -1,0 +1,31 @@
+{
+  "id": "104-history-correction-noise",
+  "command": "claude-markdown-health-check",
+  "fixture": {
+    "kind": "synthetic-jsonl",
+    "dir": "tests/fixtures/history-correction-noise",
+    "needs_home_override": true,
+    "scanners": ["scan-history"]
+  },
+  "grader": { "method": "code" },
+  "success_criteria": {
+    "history_assertions": [
+      { "jq": "(.corrections | length)", "equals": 1 },
+      { "jq": ".corrections[0].text", "equals": "no, do x instead" },
+      {
+        "jq": "([.corrections[] | select(.text | test(\"stop hook feedback\"))] | length)",
+        "equals": 0
+      },
+      {
+        "jq": "([.corrections[] | select(.text | test(\"^never\"))] | length)",
+        "equals": 0
+      }
+    ]
+  },
+  "expected_behavior": [
+    "a Stop-hook-feedback line injected by the harness matches the ^stop correction regex but is NOT a correction: the isMeta record is dropped, and so is the copy without isMeta (the ^stop hook feedback text guard covers transcripts that omit the flag)",
+    "an isSidechain user string is an agent-authored prompt, not human input, so 'never edit the generated files' is not mined as a correction",
+    "a tool_result-only user record has an array content and never reaches the correction regex",
+    "only the human-typed 'no, do X instead' survives, lowercased and capped at 120 chars"
+  ]
+}

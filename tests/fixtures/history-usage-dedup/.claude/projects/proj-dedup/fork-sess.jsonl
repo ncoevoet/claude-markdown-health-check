@@ -1,0 +1,1 @@
+{"sessionId":"sess-dedup","timestamp":"__TS_RECENT__","type":"assistant","message":{"id":"msg-multi","content":[{"type":"text","text":"same message, second transcript file"}],"usage":{"input_tokens":100,"output_tokens":400,"cache_read_input_tokens":50,"cache_creation_input_tokens":10}}}

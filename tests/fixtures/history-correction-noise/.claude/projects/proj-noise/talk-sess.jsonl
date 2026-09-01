@@ -1,0 +1,5 @@
+{"sessionId":"sess-noise","timestamp":"__TS_RECENT__","type":"user","isMeta":true,"message":{"content":"Stop hook feedback:\n[/plugins/demo-loop/scripts/gate.sh]: gate: the oracle is red"}}
+{"sessionId":"sess-noise","timestamp":"__TS_RECENT__","type":"user","message":{"content":"Stop hook feedback:\n[/plugins/demo-loop/scripts/gate.sh]: gate: still red"}}
+{"sessionId":"sess-noise","timestamp":"__TS_RECENT__","type":"user","isSidechain":true,"message":{"content":"never edit the generated files"}}
+{"sessionId":"sess-noise","timestamp":"__TS_RECENT__","type":"user","message":{"content":[{"type":"tool_result","is_error":false,"content":"no matching files"}]}}
+{"sessionId":"sess-noise","timestamp":"__TS_RECENT__","type":"user","message":{"content":"no, do X instead"}}

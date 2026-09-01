@@ -6,7 +6,13 @@ Pulls recurring signals from `history-scan.json`. Runs at Deep depth only.
 
 `history-scan.json` sections:
 - `.denials.count` → aggregate denial count.
-- `.corrections` → array of `{session, text}` matching `^(no|nope|not that|wait|stop|always|never)\b`.
+- `.corrections` → array of `{session, text}` matching `^(no|nope|not that|wait|stop|always|never)\b`,
+  restricted to **human-typed** input. Harness-injected records are excluded before the regex runs:
+  `isMeta: true` (stop-hook feedback, `<local-command-caveat>`, system notifications), `isSidechain: true`
+  (agent-authored subagent prompts), and any text starting `stop hook feedback` (the explicit guard for
+  transcripts that omit `isMeta`). Without it a Stop hook's own output matches the `^stop` alternative and
+  floods the array. Records whose `message.content` is an array (tool results, tool calls) never reach the
+  regex — the extractor only reads string content.
 - `.agentSpawns[<subagent>]` → `{count, sessions}`.
 
 ## Tags (phase 19)

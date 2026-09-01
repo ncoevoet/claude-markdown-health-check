@@ -1,0 +1,26 @@
+{
+  "id": "103-history-usage-dedup",
+  "command": "claude-markdown-health-check",
+  "fixture": {
+    "kind": "synthetic-jsonl",
+    "dir": "tests/fixtures/history-usage-dedup",
+    "needs_home_override": true,
+    "scanners": ["scan-history"]
+  },
+  "grader": { "method": "code" },
+  "success_criteria": {
+    "history_assertions": [
+      { "jq": ".tokenUsage[\"sess-dedup\"].turns", "equals": 4 },
+      { "jq": ".tokenUsage[\"sess-dedup\"].input", "equals": 109 },
+      { "jq": ".tokenUsage[\"sess-dedup\"].output", "equals": 415 },
+      { "jq": ".tokenUsage[\"sess-dedup\"].cache_read", "equals": 53 },
+      { "jq": ".tokenUsage[\"sess-dedup\"].cache_creation", "equals": 11 }
+    ]
+  },
+  "expected_behavior": [
+    "msg-multi repeats the same message.usage across 3 content-block records (text/thinking/tool_use) plus a 4th record in a second transcript file of the same session: all four collapse to ONE turn counted once (in 100 / out 400 / cr 50 / cc 10)",
+    "msg-second contributes its own turn (in 7 / out 11 / cr 3 / cc 1)",
+    "the two records with no message.id cannot be deduped and each stay their own turn (in 1 / out 2 apiece)",
+    "totals are therefore turns 4, input 109, output 415, cache_read 53, cache_creation 11 — not the 7 raw records"
+  ]
+}

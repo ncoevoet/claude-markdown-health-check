@@ -104,15 +104,17 @@ select(. != null) | (epoch_of) as $ts
       {kind:"hook", session:.sessionId, ts:$ts, hook:(.attachment.hookName // "unknown"), event:(.attachment.hookEvent // "unknown"), exit:1}
     else empty end,
     if (.message.usage?) then
-      {kind:"usage", session:.sessionId, ts:$ts,
+      {kind:"usage", session:.sessionId, mid:(.message.id // null), ts:$ts,
        in:(.message.usage.input_tokens // 0),
        out:(.message.usage.output_tokens // 0),
        cr:(.message.usage.cache_read_input_tokens // 0),
        cc:(.message.usage.cache_creation_input_tokens // 0)}
     else empty end,
-    if (.type? == "user" and (.message.content? | type == "string")) then
+    if (.type? == "user" and (.message.content? | type == "string")
+        and ((.isMeta // false) | not) and ((.isSidechain // false) | not)) then
       (.message.content | ascii_downcase) as $txt
-      | if ($txt | test("^(no|nope|not that|wait|stop|always|never)\\b")) then
+      | if ($txt | test("^(no|nope|not that|wait|stop|always|never)\\b"))
+           and (($txt | test("^stop hook feedback")) | not) then
           {kind:"correction", session:.sessionId, ts:$ts, text:($txt[0:120])}
         else empty end
     else empty end
@@ -161,10 +163,32 @@ collect_jsonl_events() {
     wait
 }
 
+# Claude Code writes ONE JSONL record per assistant content block (text /
+# thinking / tool_use), and every record of a message repeats the SAME
+# message.usage object. Summing every record therefore inflates turns and token
+# totals 3-4x, so keep only the FIRST usage event per (session, message.id).
+# One streaming pass, no sort: the seen-set holds one key per message, not per
+# record. Records with no message.id cannot be deduped and each stay their own
+# turn. Coupled to the compact key order jq -c emits for the usage event above;
+# anything that does not parse falls through and is kept (fail-open).
+DEDUP_USAGE_AWK='
+index($0, "{\"kind\":\"usage\",") != 1 { print; next }
+{
+    sid = ""; mid = "";
+    if (match($0, /"session":"[^"]*"/)) sid = substr($0, RSTART + 11, RLENGTH - 12);
+    if (match($0, /"mid":"[^"]*"/))     mid = substr($0, RSTART + 7,  RLENGTH - 8);
+    if (mid == "") { print; next }
+    key = sid "\034" mid;
+    if (key in seen) next;
+    seen[key] = 1;
+    print;
+}
+'
+
 aggregate_jsonl() {
     local merged="$TMP_DIR/events.jsonl"
     : >"$merged"
-    cat "$EXTRACT_DIR"/*.events 2>/dev/null >>"$merged" || true
+    cat "$EXTRACT_DIR"/*.events 2>/dev/null | awk "$DEDUP_USAGE_AWK" >>"$merged" || true
 
     jq -s '
         def session_set: map(.session // "_") | unique;

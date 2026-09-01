@@ -6,6 +6,14 @@ Per-session token usage mined from `message.usage` events in JSONL. Runs at Deep
 
 `history-scan.json` → `.tokenUsage[<sessionId>]` = `{input, output, cache_read, cache_creation, turns}`.
 
+Counts are **deduplicated by `message.id`**. Claude Code writes one JSONL record per
+assistant content block (text / thinking / tool_use), and every record of a message
+repeats the *same* `message.usage` object — so summing records inflates both `turns` and
+the token totals 3–4×. `scan-history.sh` keeps the first usage event per
+`(sessionId, message.id)`: `turns` is the **distinct message count**, and each message's
+tokens are added once. Records carrying no `message.id` cannot be deduped and each stay
+their own turn.
+
 ## Tags
 
 | Tag | Condition | Tier |
