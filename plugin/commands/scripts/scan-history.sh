@@ -121,13 +121,17 @@ select(. != null) | (epoch_of) as $ts
   else empty end
 '
 
+# The caller passes the FULL output path, never a directory: two transcripts can
+# share a basename under different project dirs (a resumed/forked session, a
+# copied tree), and deriving the name from `basename "$f"` would make them
+# collide — silently dropping one file's events, or interleaving both, since
+# these run backgrounded. The name is assigned by the parent loop before the
+# fork, so it is unique by construction and race-free.
 process_jsonl() {
-    local f="$1" out_base="$2"
-    local fname
-    fname=$(basename "$f")
+    local f="$1" out_file="$2"
     awk -v max="$MAX_LINE_BYTES" 'length($0) < max' "$f" 2>/dev/null \
         | jq -c --argjson cutoff "$T_CUTOFF" "$PER_FILE_FILTER" 2>/dev/null \
-        > "$out_base/$fname.events" || true
+        > "$out_file" || true
 }
 
 export -f process_jsonl
@@ -151,8 +155,8 @@ collect_jsonl_events() {
             log "BUDGET EXCEEDED at $count/$total"
             return 0
         fi
-        process_jsonl "$f" "$EXTRACT_DIR" &
         count=$((count + 1))
+        process_jsonl "$f" "$EXTRACT_DIR/$count.events" &
         if (( count % parallel == 0 )); then
             wait
         fi

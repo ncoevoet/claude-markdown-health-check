@@ -1,0 +1,2 @@
+{"sessionId":"sess-beta","timestamp":"__TS_RECENT__","type":"assistant","message":{"id":"msg-beta-1","content":[{"type":"text","text":"beta first"}],"usage":{"input_tokens":100,"output_tokens":200,"cache_read_input_tokens":50,"cache_creation_input_tokens":10}}}
+{"sessionId":"sess-beta","timestamp":"__TS_RECENT__","type":"assistant","message":{"id":"msg-beta-2","content":[{"type":"tool_use","name":"Skill","input":{"skill":"beta-skill"}}],"usage":{"input_tokens":9,"output_tokens":13,"cache_read_input_tokens":4,"cache_creation_input_tokens":2}}}
