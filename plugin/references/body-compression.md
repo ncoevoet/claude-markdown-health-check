@@ -25,11 +25,15 @@ Even without `--compress-bodies`, the default audit emits a `BODY-FILLER-HIGH` H
 - Filler-word density > 6% of body words, computed by:
 
   ```bash
-  body_words=$(awk 'in_fm{if(/^---$/){in_fm=0}else{next}}
-                    /^---$/ && NR==1{in_fm=1;next}
-                    in_code{if(/^```/){in_code=0}else{next}}
-                    /^```/{in_code=1;next}
-                    {n+=NF} END{print n+0}' "$file")
+  # body_words counts prose only: frontmatter and fenced code are excluded.
+  # code_lines/tot_lines gives the fenced-code ratio the 70% skip rule needs.
+  read -r body_words code_lines tot_lines < <(awk '
+      NR==1 && /^---$/ { fm=1; next }
+      fm                { if (/^---$/) fm=0; next }
+      /^```/            { inc = !inc; code++; tot++; next }
+                        { tot++; if (inc) { code++; next } ; n += NF }
+      END               { print n+0, code+0, tot+0 }' "$file")
+  pct_code=$(( code_lines * 100 / (tot_lines + 1) ))
   filler_hits=$(grep -ohE -w \
       '(just|really|basically|actually|simply|literally|essentially|you should|might want|in order to|in fact|of course)' \
       "$file" | wc -l)
@@ -77,7 +81,7 @@ For each `*.md` under the audit scopes, include only files that meet ALL of:
 
 1. Path matches one of: `skills/*/SKILL.md`, `rules/*.md`, `skills/*/references/*.md`, `documentation/guides/*.md`, `patterns/*.md`.
 2. Body line count > 100 (after stripping YAML frontmatter and fenced code blocks).
-3. Body is NOT ≥ 70% fenced code (compression gains <3% on code-heavy files).
+3. Body is NOT ≥ 70% fenced code — `pct_code` from the detection formula above (compression gains <3% on code-heavy files).
 4. File does NOT contain the literal marker `<!-- caveman:lite v1 -->` anywhere.
 5. File does NOT contain the escape hatch marker `<!-- DO NOT COMPRESS -->`.
 6. Filler density > 6% (per the detection formula above).
