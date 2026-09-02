@@ -25,8 +25,16 @@ else
     ok "docs-snippets: found a bash snippet in body-compression.md"
 fi
 
-out=$(file="$FIXTURE"; eval "$snippet"; echo "$body_words $pct_code $ratio")
-read -r body_words pct_code ratio <<<"$out"
+# The snippet reads $file and sets body_words / pct_code / ratio.
+file="$FIXTURE"
+if [ -f "$file" ]; then
+    ok "docs-snippets: fixture present at ${file#"$REPO"/}"
+else
+    no "docs-snippets: fixture present at ${file#"$REPO"/}"
+    exit 1
+fi
+body_words=""; pct_code=""; ratio=""
+eval "$snippet"
 
 # 7 prose words: "# Heading"(2) + "alpha beta gamma"(3) + "delta epsilon"(2).
 # The two `const` lines and the fences must NOT count.
