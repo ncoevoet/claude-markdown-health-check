@@ -10,7 +10,11 @@
 #   - id == filename stem
 #   - .command == "claude-markdown-health-check"
 #   - fixture.kind == "claude-tree"
-#   - fixture.dir is non-empty, exists on disk, and has a .claude/ subtree
+#   - fixture.dir is non-empty, exists on disk, and has a dot-claude/ subtree
+#     (fixtures store their config tree on disk as dot-claude/, not .claude/,
+#     so Claude Code's lazy nested-skills discovery never registers a
+#     fixture's SKILL.md as a live skill in this repo; test harnesses
+#     materialize it into a temp .claude/ at run time)
 #   - fixture.scanners ⊆ { "validate-skills", "scan-graph" }
 #   - grader.method ∈ { "code", "llm-rubric" }
 #   - code      cases: success_criteria is an object; must_detect (if present) is an array
@@ -67,8 +71,8 @@ for f in "$EVALS"/*.json; do
     err "$base: fixture.dir missing/empty"
   elif [ ! -d "$ROOT/$dir" ]; then
     err "$base: fixture.dir '$dir' does not exist on disk"
-  elif [ ! -d "$ROOT/$dir/.claude" ]; then
-    err "$base: fixture.dir '$dir' has no .claude/ subtree"
+  elif [ ! -d "$ROOT/$dir/dot-claude" ]; then
+    err "$base: fixture.dir '$dir' has no dot-claude/ subtree"
   fi
 
   badscan="$(jq -r '(.fixture.scanners // [])

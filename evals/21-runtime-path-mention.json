@@ -5,12 +5,25 @@
     "kind": "claude-tree",
     "dir": "tests/fixtures/runtime-path-mention",
     "needs_home_override": false,
-    "scanners": ["validate-skills", "scan-graph"]
+    "scanners": [
+      "validate-skills",
+      "scan-graph"
+    ]
   },
-  "grader": { "method": "code" },
+  "grader": {
+    "method": "code"
+  },
   "success_criteria": {
     "must_detect": [],
-    "must_not_flag": ["CHAINED-REF", "MISSING-TOC", "DEAD-REF", "REF-ORPHAN"],
+    "must_not_flag": [
+      "ANCHOR-COLLISION",
+      "ANCHOR-NOT-STATED",
+      "CHAINED-REF",
+      "DEAD-REF",
+      "MISSING-TOC",
+      "NO-UNIQUE-ANCHOR",
+      "REF-ORPHAN"
+    ],
     "expect_clean": true
   },
   "expected_behavior": [

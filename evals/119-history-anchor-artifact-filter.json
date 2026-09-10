@@ -1,0 +1,27 @@
+{
+  "id": "119-history-anchor-artifact-filter",
+  "command": "claude-markdown-health-check",
+  "fixture": {
+    "kind": "synthetic-jsonl",
+    "dir": "tests/fixtures/history-bare-noun-filter",
+    "needs_home_override": true,
+    "scanners": ["scan-history"],
+    "anchors_file": "tests/fixtures/history-bare-noun-filter/anchors.json"
+  },
+  "grader": { "method": "code" },
+  "success_criteria": {
+    "history_assertions": [
+      { "jq": ".observedRecall[\"noun-skill\"].triggers", "equals": null },
+      { "jq": ".observedRecall[\"noun-skill\"].misses", "equals": null },
+      { "jq": ".observedRecall[\"artifact-skill\"].triggers", "equals": 1 },
+      { "jq": ".observedRecall[\"artifact-skill\"].misses", "equals": 0 }
+    ]
+  },
+  "expected_behavior": [
+    "noun-skill owns only the bare single-word token 'gadget' (a proper-noun/acronym-shaped token per validate-skills.sh --anchors, not a file extension, dotted filename, or multi-word backticked literal) -- is_artifact_shaped (scan-history.sh) filters it out before anchor_pattern ever runs",
+    "sess-noun's prompt ('please check the gadget settings') contains 'gadget' as a clean, word-boundary-correct standalone occurrence, and noun-skill fires 10s later in the SAME session -- if the join still accepted bare-noun tokens this would be a textbook trigger (triggers=1); with the filter it produces no anchor_hit event at all, so the skill never appears in observedRecall and both fields read null",
+    "artifact-skill owns '.bpmn', a leading-dot extension -- an artifact-shaped token that passes the filter unchanged",
+    "sess-artifact's prompt ('please handle the export.bpmn workflow') contains '.bpmn' at a genuine word boundary, and artifact-skill fires 10s later in the same session -- 1 trigger, 0 misses",
+    "same fixture, same join, same 300s window: the only variable is token shape -- proving the artifact-shape restriction is what gates SKILL-LOW-OBSERVED-RECALL, not boundary logic or timing (already covered by 109/110/118)"
+  ]
+}

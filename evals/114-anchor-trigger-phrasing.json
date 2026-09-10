@@ -1,0 +1,21 @@
+{
+  "id": "114-anchor-trigger-phrasing",
+  "command": "claude-markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/anchor-phrasing",
+    "needs_home_override": false,
+    "scanners": ["validate-skills"]
+  },
+  "grader": { "method": "code" },
+  "success_criteria": {
+    "must_detect": [],
+    "must_not_flag": ["ANCHOR-NOT-STATED", "NO-UNIQUE-ANCHOR", "ANCHOR-COLLISION"],
+    "expect_clean": true
+  },
+  "expected_behavior": [
+    "regression for the four-literal-phrase bug ('always invoke for|use for|use when|triggers on') that measured near-100% false positive on real skill corpora: real descriptions overwhelmingly phrase the trigger differently ('Use it for', 'Use this skill when', 'This skill should be used when', 'Triggers on:', 'Use to ...')",
+    "skills/bpmnaudit's description ('Audits BPMN diagrams for schema drift. Use it for \"check my .bpmn file\", \"validate BPMN\", or any Camunda model review.') uses exactly the 'Use it for' phrasing and names its unique anchor tokens (.bpmn, bpmn, camunda) inside that same trigger sentence",
+    "validate-skills.sh must recognize 'Use it for' as trigger-ish and must not emit [ANCHOR-NOT-STATED] — the old fixed-phrase matcher would have missed this phrasing entirely and wrongly flagged it"
+  ]
+}

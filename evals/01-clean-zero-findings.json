@@ -16,28 +16,31 @@
   "success_criteria": {
     "must_detect": [],
     "must_not_flag": [
-      "UNKNOWN-FRONTMATTER-FIELD",
+      "ANCHOR-COLLISION",
+      "ANCHOR-NOT-STATED",
       "BAD-FRONTMATTER-SCHEMA",
-      "DEAD-REF",
       "BAD-NAME",
-      "MISSING-DESC",
-      "THIRD-PERSON",
-      "NAME-COLLISION",
-      "EMBEDDED-SECRET",
-      "UNFLAGGED-DESTRUCTIVE",
       "BAD-RULE-FRONTMATTER",
-      "REF-ORPHAN",
-      "REF-CIRCULAR",
-      "OUTPUTSTYLE-MISSING",
+      "DEAD-REF",
+      "EMBEDDED-SECRET",
+      "HOOK-HTTP-BLOCKED",
+      "MARKETPLACE-DEAD-SOURCE",
       "MCP-DEPRECATED-TRANSPORT",
+      "MISSING-DESC",
+      "NAME-COLLISION",
+      "NO-UNIQUE-ANCHOR",
+      "OUTPUTSTYLE-MISSING",
+      "PLUGIN-ABS-PATH",
+      "PLUGIN-USERCONFIG-IN-SHELL",
+      "REF-CIRCULAR",
+      "REF-ORPHAN",
+      "SETTINGS-AUTOMODE-BROAD",
       "SETTINGS-BYPASS-MODE",
       "SETTINGS-MCP-AUTOAPPROVE",
-      "PLUGIN-ABS-PATH",
-      "MARKETPLACE-DEAD-SOURCE",
-      "PLUGIN-USERCONFIG-IN-SHELL",
-      "HOOK-HTTP-BLOCKED",
       "SETTINGS-SANDBOX-OFF",
-      "SETTINGS-AUTOMODE-BROAD"
+      "THIRD-PERSON",
+      "UNFLAGGED-DESTRUCTIVE",
+      "UNKNOWN-FRONTMATTER-FIELD"
     ],
     "expect_clean": true
   },
@@ -47,6 +50,6 @@
     "a rules/*.md scoped with paths: does not trigger BAD-RULE-FRONTMATTER",
     "the Agent Skills spec fields license / compatibility / metadata and the context: fork pair background trigger no UNKNOWN-FRONTMATTER-FIELD",
     "plugin.json declaring the documented skills: \".\" exception triggers no PLUGIN-ABS-PATH",
-    "marketplace.json entries with npm: and github: sources are remote, not local paths \u2014 no MARKETPLACE-DEAD-SOURCE"
+    "marketplace.json entries with npm: and github: sources are remote, not local paths — no MARKETPLACE-DEAD-SOURCE"
   ]
 }

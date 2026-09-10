@@ -1,7 +1,7 @@
 # /claude-markdown-health-check
 
 [![CI](https://github.com/ncoevoet/claude-markdown-health-check/actions/workflows/ci.yml/badge.svg)](https://github.com/ncoevoet/claude-markdown-health-check/actions/workflows/ci.yml)
-[![version](https://img.shields.io/badge/version-0.16.1-blue)](plugin/.claude-plugin/plugin.json)
+[![version](https://img.shields.io/badge/version-0.18.0-blue)](plugin/.claude-plugin/plugin.json)
 [![license](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Claude Code plugin](https://img.shields.io/badge/Claude%20Code-plugin-8A2BE2)](https://code.claude.com/docs/en/plugins)
 
@@ -223,7 +223,7 @@ If you previously referred to phases by the old letter scheme, here is the mappi
 
 Two layers, following Anthropic's [develop-tests](https://platform.claude.com/docs/en/test-and-evaluate/develop-tests) methodology (code-grading is the fastest, most reliable tier — so the bulk is code-graded, and LLM-grading is reserved for the judgment phases):
 
-- **Deterministic (code-graded, CI-safe, no API key).** Synthetic `.claude/` fixture trees under `tests/fixtures/<case>/` each plant one defect; the suite runs `validate-skills.sh` / `scan-graph.sh` against them and asserts the exact `[TAG]` set. A `clean/` fixture asserts **zero** findings — the false-positive guard. Paired guards cover both directions, e.g. cases 73/74 (a `npm run <script>` absent from `package.json` must be flagged `CLAUDEMD-DEAD-SCRIPT`, while one that resolves must **not** be) cases 75/76 (a memory body citing a missing `.claude/…` path is flagged `MEMORY-STALE-CONTENT`, while one whose path resolves is not), and cases 88/90 (a bare file-tree dump in CLAUDE.md is flagged `CLAUDEMD-OBVIOUS`, while an architecture map whose entries carry relationships is not). A third code-graded layer covers `scan-history.sh`: `synthetic-jsonl` fixtures plant `.claude/projects/*/*.jsonl` transcripts that `tests/test_history.sh` aggregates and asserts field-by-field against `history-scan.json` (e.g. hook failure rates, token sums, ledger folding, window-cutoff exclusion).
+- **Deterministic (code-graded, CI-safe, no API key).** Synthetic `dot-claude/` fixture trees (materialized as `.claude/` at test time, so a fixture's SKILL.md never registers as a live skill in this repo) under `tests/fixtures/<case>/` each plant one defect; the suite runs `validate-skills.sh` / `scan-graph.sh` against them and asserts the exact `[TAG]` set. A `clean/` fixture asserts **zero** findings — the false-positive guard. Paired guards cover both directions, e.g. cases 73/74 (a `npm run <script>` absent from `package.json` must be flagged `CLAUDEMD-DEAD-SCRIPT`, while one that resolves must **not** be) cases 75/76 (a memory body citing a missing `.claude/…` path is flagged `MEMORY-STALE-CONTENT`, while one whose path resolves is not), and cases 88/90 (a bare file-tree dump in CLAUDE.md is flagged `CLAUDEMD-OBVIOUS`, while an architecture map whose entries carry relationships is not). A third code-graded layer covers `scan-history.sh`: `synthetic-jsonl` fixtures plant `.claude/projects/*/*.jsonl` transcripts that `tests/test_history.sh` aggregates and asserts field-by-field against `history-scan.json` (e.g. hook failure rates, token sums, ledger folding, window-cutoff exclusion).
   ```bash
   make test              # bash tests/run.sh — anonymization + eval-schema gates, then the code-graded cases (241 scanner + 13 history assertions)
   bash tests/run.sh 02   # run one case / id-prefix (deterministic suite only)
@@ -297,7 +297,10 @@ tests/                                       # deterministic test suite (dev-onl
 ├── lib.sh                                   # assert helpers + tag extractors
 ├── test_scripts.sh                          # data-driven tag runner over evals/*.json
 ├── test_history.sh                          # scan-history.sh aggregation runner (synthetic-jsonl cases)
-└── fixtures/<case>/.claude/…                # synthetic trees, one planted defect each
+└── fixtures/<case>/dot-claude/…             # synthetic trees, one planted defect each (named
+                                              # dot-claude/ on disk, materialized as .claude/ at
+                                              # test time, so a fixture SKILL.md never registers
+                                              # as a live skill in this repo)
 
 .claude-plugin/marketplace.json              # marketplace entry; source points at ./plugin
 .github/workflows/ci.yml                     # shellcheck + bash -n + tests/run.sh (anon + eval-schema + scanners + history)

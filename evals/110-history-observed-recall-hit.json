@@ -1,0 +1,23 @@
+{
+  "id": "110-history-observed-recall-hit",
+  "command": "claude-markdown-health-check",
+  "fixture": {
+    "kind": "synthetic-jsonl",
+    "dir": "tests/fixtures/history-observed-recall-hit",
+    "needs_home_override": true,
+    "scanners": ["scan-history"],
+    "anchors_file": "tests/fixtures/history-observed-recall-hit/anchors.json"
+  },
+  "grader": { "method": "code" },
+  "success_criteria": {
+    "history_assertions": [
+      { "jq": ".observedRecall[\"maven-helper\"].triggers", "equals": 1 },
+      { "jq": ".observedRecall[\"maven-helper\"].misses", "equals": 0 }
+    ]
+  },
+  "expected_behavior": [
+    "control case: sess-hit's prompt contains the anchor token 'pom.xml' owned by maven-helper, and maven-helper fires in the SAME session 10 real seconds later (__TS_RECENT_PLUS10__) -- the anchor hit is followed through within the 300s join window",
+    "the __TS_OLD__ anchor hit in sess-other is outside the 30-day window and must not surface as an extra miss (or trigger)",
+    "observedRecall reports 1 trigger / 0 misses for maven-helper -- a real follow-through produces no low-observed-recall evidence"
+  ]
+}

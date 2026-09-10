@@ -18,13 +18,16 @@ set -euo pipefail
 #   3) $HOME/.claude (the canonical user install)
 # This avoids the silent "no skills found" trap when the script is invoked from
 # an arbitrary CWD with relative paths.
-# Optional flag: --listing-cost prints machine-readable budget stats and exits.
-# Accepts the flag in any position; the first non-flag positional is CLAUDE_DIR.
+# Optional flags: --listing-cost prints machine-readable budget stats and exits;
+# --anchors prints machine-readable unique-anchor-token JSON and exits.
+# Accepts either flag in any position; the first non-flag positional is CLAUDE_DIR.
 LISTING_COST_ONLY=0
+ANCHORS_ONLY=0
 POS_ARGS=()
 for a in "$@"; do
     case "$a" in
         --listing-cost) LISTING_COST_ONLY=1 ;;
+        --anchors) ANCHORS_ONLY=1 ;;
         *) POS_ARGS+=("$a") ;;
     esac
 done
@@ -183,6 +186,131 @@ extract_field() {
             print v; exit
         }
     ' "$file"
+}
+
+# --- Anchor-grade tokenizer (backs check_anchor_analysis / --anchors) ------
+# The coder_eval study found the strongest lever for skill-activation recall
+# is a trigger clause naming a token the skill uniquely owns — not a generic
+# verb. These five classes are the only ones that count as "anchor-grade":
+# a file extension, a dotted filename, a backticked literal, a hyphenated/
+# compound lowercase identifier, or a capitalized mid-sentence proper noun.
+# Everything else is too common to disambiguate.
+ANCHOR_EXT_RE='\.[a-z0-9]{2,6}\b'
+ANCHOR_DOTTED_RE='\b[a-z0-9_-]+\.[a-z0-9]{2,6}\b'
+ANCHOR_BACKTICK_RE='`[^`]+`'
+# Hyphenated/compound lowercase identifiers (`coder-eval`,
+# `claude-markdown-health-check`) read as domain-specific product/artifact
+# names, not prose — but plenty of ordinary English is hyphenated too
+# ("well-known", "built-in"). Matched lowercase-only (no `-i`) so a
+# Capitalized-Hyphenated run (sentence-initial or not) is left to the
+# proper-noun class instead of double-counted here.
+ANCHOR_HYPHEN_RE='\b[a-z][a-z0-9]*(-[a-z0-9]+)+\b'
+# Bare TLDs and URL hosts are not file extensions or filenames: a description
+# mentioning `coder-eval.com` or `https://example.org/api` must not gain
+# ".com"/"coder-eval.com"/".org"/"example.org" as anchor-grade tokens — any
+# description containing a URL would otherwise pick up several "unique"
+# tokens for free and could never trip NO-UNIQUE-ANCHOR. This is checked as a
+# token-suffix filter (below, in anchor_tokens_from), never against real
+# extension vocabulary, so genuine extensions (`.bpmn`, `.xml`, `.logx`) are
+# unaffected. Heuristic/curated, same spirit as ANCHOR_VERB_BLOCKLIST_RE —
+# not exhaustive.
+ANCHOR_TLD_BLOCKLIST_RE='\.(com|org|net|io|dev|co|gov|edu|info|biz|app|ai|me|us|uk|ca|eu|gg|sh|xyz|tech|cloud|online|site|blog|ly|to|tv)$'
+# Heuristic for "capitalized, not sentence-initial" without a real sentence
+# tokenizer: a lowercase letter directly followed by whitespace then a
+# Capitalized word. A period breaks that adjacency, so both string-start and
+# post-". " capitals are excluded for free — but excluded is not the same as
+# irrelevant: a sentence-initial product/brand name ("Confluence page
+# operations…", "Jira ticket automation…") is a very common way to lead a
+# description, and dropping it entirely is its own bug. Caught separately
+# below by ANCHOR_PROPER_NOUN_INITIAL_RE, restricted to words NOT ending in
+# "s": this codebase's own house style writes descriptions in third-person
+# ("Handles X", "Reviews Y", "Coordinates Z" — see the THIRD-PERSON check),
+# so a sentence-initial generic verb in that voice always ends in -s, while a
+# leading proper noun usually does not. That one grammatical fact admits real
+# leading proper nouns without reopening the whole generic-verb blocklist to
+# every English verb.
+ANCHOR_PROPER_NOUN_RE='[a-z][[:space:]]+[A-Z][A-Za-z]*'
+ANCHOR_PROPER_NOUN_INITIAL_RE='(^[[:space:]]*|[.!?][[:space:]]+)[A-Z][A-Za-z]*'
+# Generic verbs anchor nothing, and neither do ordinary hyphenated English
+# adjectives/compounds that the hyphen class above would otherwise catch —
+# both are subtracted before ownership is computed. Hyphenated additions:
+# well-known, built-in, read-only, visual-design, real-time, long-running,
+# self-contained, open-source, end-to-end, high-level, low-level, one-time,
+# ad-hoc, follow-up, opt-in, no-op, up-to-date, hands-on, general-purpose,
+# cross-platform, user-friendly, easy-to-use, non-functional.
+ANCHOR_VERB_BLOCKLIST_RE='^(review|audit|check|fix|run|build|test|help|manage|handle|update|create|analyze|scan|verify|validate|generate|use|work|task|project|file|code|well-known|built-in|read-only|visual-design|real-time|long-running|self-contained|open-source|end-to-end|high-level|low-level|one-time|ad-hoc|follow-up|opt-in|no-op|up-to-date|hands-on|general-purpose|cross-platform|user-friendly|easy-to-use|non-functional)$'
+# Ordinary English words admitted by the proper-noun classes above are not
+# artifact names: on a real tree, "for" (sentence-initial), "rest"/"ci"/"sas"
+# (mid-sentence, from "REST API"/"CI/CD"/"SAS test") and "auto"/"complete"
+# (sentence-initial) all measured as *owned* — a downstream consumer that
+# joins these tokens against raw prompt text would match a majority of
+# unrelated prompts on a token like "ci". Two independent filters, since
+# neither alone separates this from genuine short acronyms (JVM, SIP, ICP,
+# SAS — real technical acronyms that are ALSO all-caps in source, so casing
+# cannot be the discriminator, and "sip" is even a real dictionary word, so
+# a system dictionary lookup would wrongly reject it too — hence a curated
+# list, not a dictionary, and deliberately NOT exhaustive):
+#   1. A length floor (below, in anchor_tokens_from): a 1-2 char token is
+#      never a useful anchor regardless of what it is — this alone accounts
+#      for "ci"/"mr". Harmless to every other class: ANCHOR_EXT_RE/
+#      ANCHOR_DOTTED_RE require >=2 chars after the dot (min token length 3,
+#      ".ts"/".md" included) and ANCHOR_HYPHEN_RE needs two segments (min
+#      length 3, "a-b"), so real extensions/filenames/hyphenated identifiers
+#      are never shortened by this floor.
+#   2. This closed-class-plus-evidence word list, for tokens length 3+ that
+#      the floor does not catch ("for", "rest", "auto", "complete", "pull").
+#      Mostly closed-class English (determiners/pronouns/prepositions/
+#      conjunctions — a bounded set, unlike open-class nouns/verbs) plus the
+#      specific open-class words measured above. A real acronym never
+#      collides with this list (SIP/JVM/ICP/SAS/CI/CVE are not English
+#      function words), even when, like "sip", it also happens to have an
+#      unrelated dictionary meaning nothing on this list captures.
+ANCHOR_COMMON_WORD_RE='^(for|rest|auto|complete|pull|the|this|that|these|those|there|here|its|they|them|their|our|your|and|but|nor|yet|per|via|with|from|into|about|over|under|before|after|until|than|then|also|only|just|even|both|each|either|neither|any|some|none|many|much|own|same|more|most|new|old|top|way|out|off)$'
+# The study's one-sentence intervention, expressed as a trigger-ish sentence
+# matcher. The original four literal phrases (`always invoke for|use for|use
+# when|triggers on`) measured near-100% false positive on real corpora — real
+# descriptions overwhelmingly phrase it differently ("Use it for", "Use this
+# skill when", "This skill should be used when", "Triggers on:", "Use to …").
+# Broadened to the underlying verb families instead of a fixed phrase list,
+# and matched per-sentence (see ANCHOR_SENTENCE_UNIT_RE below), not against
+# just the text following the match: the tag's actual question is "does a
+# token this skill uniquely owns appear anywhere in a use/trigger-ish
+# context", not "does one specific phrase's tail happen to name it".
+ANCHOR_TRIGGER_SENTENCE_RE='(\bus(e|es|ed|ing)\b.{0,40}\b(when|for|to|in|on|at|if)\b|\bshould be used\b|\balways invoke\b|\binvok(e|es|ed|ing)\b.{0,40}\b(when|for)\b|\btrigger(s|ed|ing)?\b)'
+# A "sentence" is a maximal run that treats "period + 1-6 alnum + word
+# boundary" as one atomic non-breaking unit, so a file extension like
+# ".bpmn" is never mistaken for a sentence break — any other character that
+# isn't a period passes through unchanged, so a run still ends at a genuine
+# ". " or end-of-string. Used to split a description into sentences before
+# testing each one against ANCHOR_TRIGGER_SENTENCE_RE.
+ANCHOR_SENTENCE_UNIT_RE='([^.]|\.[A-Za-z0-9]{1,6}\b)+'
+
+# anchor_tokens_from <text> -> one lowercased, blocklist-filtered anchor-grade
+# token per line (deduped), extracted from <text>. Extraction runs on <text>
+# as given (case preserved, needed for the proper-noun class); tokens are
+# lowercased afterward so ownership comparison is case-insensitive.
+anchor_tokens_from() {
+    local text="$1"
+    {
+        printf '%s\n' "$text" | grep -ioE "$ANCHOR_EXT_RE" 2>/dev/null || true
+        printf '%s\n' "$text" | grep -ioE "$ANCHOR_DOTTED_RE" 2>/dev/null || true
+        printf '%s\n' "$text" | grep -oE "$ANCHOR_BACKTICK_RE" 2>/dev/null | tr -d '`' || true
+        printf '%s\n' "$text" | grep -oE "$ANCHOR_HYPHEN_RE" 2>/dev/null || true
+        printf '%s\n' "$text" | grep -oE "$ANCHOR_PROPER_NOUN_RE" 2>/dev/null | grep -oE '[A-Z][A-Za-z]*$' || true
+        printf '%s\n' "$text" | grep -oE "$ANCHOR_PROPER_NOUN_INITIAL_RE" 2>/dev/null | grep -oE '[A-Z][A-Za-z]*$' | grep -vE '[sS]$' || true
+    } | tr '[:upper:]' '[:lower:]' \
+      | sed -E 's/^[^a-z0-9.]+//; s/[^a-z0-9]+$//' \
+      | awk 'length($0) >= 3' \
+      | grep -vE "$ANCHOR_VERB_BLOCKLIST_RE" \
+      | grep -vE "$ANCHOR_TLD_BLOCKLIST_RE" \
+      | grep -vE "$ANCHOR_COMMON_WORD_RE" \
+      | grep -v '^$' \
+      | sort -u
+    # A zero-token result is a legitimate outcome (that IS NO-UNIQUE-ANCHOR's
+    # signal), but `grep -v` with nothing surviving exits 1 — under pipefail
+    # that makes the pipeline's status nonzero and, under `set -e`, would abort
+    # the whole script at `tokens=$(anchor_tokens_from ...)`. Force success.
+    return 0
 }
 
 # A block-sequence item indented under a COMPLETED scalar mapping line is not
@@ -1196,6 +1324,178 @@ check_name_collisions() {
     fi
 }
 
+# Detect skills whose stated (or entire) vocabulary offers no anchor a model
+# can use to disambiguate them from siblings — the coder_eval study's leading
+# cause of silent skill non-activation. Standalone pass over SKILLS_DIR built
+# on the check_name_collisions() pattern: its own walk, SKILLS_DIR_EXCLUDES
+# honoured, flat sorted lists + sort|uniq -c for ownership, no associative
+# arrays. Also backs `--anchors`: same extraction, JSON instead of findings —
+# branches on ANCHORS_ONLY so the corpus is only walked once.
+check_anchor_analysis() {
+    local d name skip ex file desc when_to_use text tokens
+    local skill_names=() skill_tokens=() skill_texts=()
+    if [ -d "$SKILLS_DIR" ]; then
+        for d in "$SKILLS_DIR"/*/; do
+            [ -d "$d" ] || continue
+            name=$(basename "$d"); skip=0
+            for ex in "${SKILLS_DIR_EXCLUDES[@]}"; do [ "$name" = "$ex" ] && skip=1 && break; done
+            [ "$skip" = 1 ] && continue
+            file="$d/SKILL.md"
+            [ -f "$file" ] || continue
+            desc=$(extract_field "$file" "description")
+            when_to_use=$(extract_field "$file" "when_to_use")
+            text="$desc $when_to_use"
+            tokens=$(anchor_tokens_from "$text")
+            skill_names+=("$name")
+            skill_tokens+=("$tokens")
+            skill_texts+=("$text")
+        done
+    fi
+
+    if [ "${#skill_names[@]}" -eq 0 ]; then
+        [ "$ANCHORS_ONLY" = 1 ] && printf '{}\n'
+        return 0
+    fi
+
+    # Flat (skill,token) pairs -> owner-count per token. Each skill's own
+    # token list is already deduped (anchor_tokens_from sorts -u), so counting
+    # occurrences across the flattened list IS the distinct-skill count.
+    local i pairs owner_counts
+    pairs=""
+    for i in "${!skill_names[@]}"; do
+        [ -z "${skill_tokens[$i]}" ] && continue
+        pairs="${pairs}${skill_tokens[$i]}"$'\n'
+    done
+    # uniq -c's own output ("  N token text") is itself whitespace-delimited,
+    # so a multi-word token (`mvn clean install`) would smear across $2..$N
+    # if read back with a bare field split. The sed below anchors ONLY on the
+    # leading run it just added (spaces + digits + spaces) and replaces it
+    # with a single TAB — the token's own internal spaces, whatever they are,
+    # are never touched. Ownership is then queried with `awk -F'\t'`, so the
+    # token is compared as one whole field, never split on whitespace.
+    owner_counts=$(printf '%s\n' "$pairs" | grep -v '^$' | sort | uniq -c \
+        | sed -E 's/^[[:space:]]*([0-9]+)[[:space:]]+/\1\t/' || true)
+
+    # _anchor_owner_count <token> -> distinct-skill count from $owner_counts
+    # (a parent local, per this file's existing nested-function convention —
+    # see _accumulate() inside compute_listing_cost() below). -F'\t' is load-
+    # bearing: it makes $2 the whole rest-of-line (including any spaces in a
+    # multi-word token) instead of just its first word.
+    _anchor_owner_count() {
+        printf '%s\n' "$owner_counts" | awk -F'\t' -v t="$1" '$2==t{print $1; f=1} END{if(!f) print 0}'
+    }
+
+    local json_lines=""
+    for i in "${!skill_names[@]}"; do
+        name="${skill_names[$i]}"
+        local tok oc unique_tokens shared_tokens clause clause_tokens stated free
+        unique_tokens=""; shared_tokens=""
+        while IFS= read -r tok; do
+            [ -z "$tok" ] && continue
+            oc=$(_anchor_owner_count "$tok")
+            if [ "$oc" -eq 1 ]; then
+                unique_tokens="${unique_tokens}${tok}"$'\n'
+            else
+                shared_tokens="${shared_tokens}${tok}"$'\n'
+            fi
+        done <<< "${skill_tokens[$i]}"
+        unique_tokens=$(printf '%s' "$unique_tokens" | grep -v '^$' || true)
+        shared_tokens=$(printf '%s' "$shared_tokens" | grep -v '^$' || true)
+
+        if [ "$ANCHORS_ONLY" = 1 ]; then
+            # Build each skill's JSON fragment with jq itself (jq -R -s split on
+            # "\n", never a shell join/re-split on ","): a token can legitimately
+            # contain an internal comma (a backticked literal like `mvn clean
+            # install, then deploy`), and `paste -sd, -` + jq's `split(",")` used
+            # to corrupt exactly that token into two. A token cannot contain a
+            # literal newline (it was extracted from a single-line variable), so
+            # "\n" is the one delimiter guaranteed safe here. `-c` keeps each
+            # fragment on one line so the outer split("\n") below still works.
+            if command -v jq >/dev/null 2>&1; then
+                json_lines="${json_lines}$(printf '%s\n' "$unique_tokens" | jq -R -s -c --arg name "$name" '
+                    split("\n") | map(select(length > 0)) | {key: $name, value: .}
+                ' 2>/dev/null)"$'\n'
+            fi
+            continue
+        fi
+
+        # Trigger-ish sentences (shared by NO-UNIQUE-ANCHOR / ANCHOR-NOT-STATED /
+        # ANCHOR-COLLISION below). Split the full text into sentences and union
+        # the anchor tokens of every sentence that reads as trigger-ish, rather
+        # than extracting a single clause from the first phrase match to the end
+        # of ONE sentence: a real description often states its trigger in one
+        # sentence ("Use it for …") and names the very anchor token in another
+        # ("… prefer the CodeGraph MCP tools.") — restricting to one sentence
+        # would still miss it.
+        local sentences sent clause_tokens_multi
+        sentences=$(printf '%s\n' "${skill_texts[$i]}" | grep -oE "$ANCHOR_SENTENCE_UNIT_RE" 2>/dev/null || true)
+        clause=""; clause_tokens_multi=""
+        while IFS= read -r sent; do
+            [ -z "$sent" ] && continue
+            if printf '%s' "$sent" | grep -qiE "$ANCHOR_TRIGGER_SENTENCE_RE" 2>/dev/null; then
+                [ -z "$clause" ] && clause="$sent"
+                clause_tokens_multi="${clause_tokens_multi}$(anchor_tokens_from "$sent")"$'\n'
+            fi
+        done <<< "$sentences"
+        clause_tokens=$(printf '%s' "$clause_tokens_multi" | grep -v '^$' | sort -u || true)
+
+        # NO-UNIQUE-ANCHOR fires whenever unique_tokens is empty — full stop.
+        # A trigger sentence's presence/absence selects WHICH of the two
+        # remediations (plan requirement) prints; it must never gate whether
+        # the tag fires at all. Exempting "has a trigger sentence" from this
+        # check makes the tag unreachable for exactly the case it exists to
+        # catch: a skill can write a complete trigger clause out of entirely
+        # generic/shared vocabulary and still own nothing unique.
+        #   - owns >=1 anchor-grade token but every one is shared, OR states a
+        #     trigger sentence that itself names no anchor-grade token at all:
+        #     "structurally un-anchorable" — wording cannot fix this, accept
+        #     the overlap or merge with the skill that owns the artifact.
+        #   - owns zero anchor-grade tokens AND states no trigger sentence
+        #     either: the skill hasn't tried — state the specific artifact or
+        #     term it uniquely handles, not just a generic verb.
+        if [ -z "$unique_tokens" ]; then
+            if [ -n "${skill_tokens[$i]}" ]; then
+                error "[NO-UNIQUE-ANCHOR] $name: every anchor-grade token here ($(printf '%s' "$shared_tokens" | tr '\n' ',' | sed 's/,$//')) is also claimed by another skill — structurally un-anchorable: wording cannot create uniqueness, accept the overlap or merge with the skill that owns the artifact"
+            elif [ -n "$clause" ]; then
+                error "[NO-UNIQUE-ANCHOR] $name: states a trigger sentence, but it names no file extension, filename, backticked literal, hyphenated identifier, or mid-sentence proper noun either — structurally un-anchorable: a more elaborate trigger sentence cannot create uniqueness here, accept the overlap or merge with the skill that owns the artifact"
+            else
+                error "[NO-UNIQUE-ANCHOR] $name: description/when_to_use names no file extension, filename, backticked literal, hyphenated identifier, or mid-sentence proper noun, and states no trigger sentence either — state the specific artifact or term this skill uniquely handles, not just a generic verb"
+            fi
+        fi
+
+        # ANCHOR-NOT-STATED (Hygiene): owns a unique token, never names it in
+        # a trigger sentence — the study's exact one-sentence intervention.
+        if [ -n "$unique_tokens" ]; then
+            stated=$(comm -12 <(printf '%s\n' "$unique_tokens" | sort -u) <(printf '%s\n' "$clause_tokens" | sort -u) 2>/dev/null || true)
+            if [ -z "$stated" ]; then
+                warning "[ANCHOR-NOT-STATED] $name: owns unique anchor token(s) ($(printf '%s' "$unique_tokens" | tr '\n' ',' | sed 's/,$//')) but no trigger sentence ('Use for' / 'Use when' / 'Triggers on' / 'Always invoke for') names one"
+            fi
+        fi
+
+        # ANCHOR-COLLISION (Structural): the trigger sentence exists but every
+        # anchor-grade token in it is also claimed by another skill.
+        if [ -n "$clause_tokens" ]; then
+            free=$(comm -12 <(printf '%s\n' "$clause_tokens" | sort -u) <(printf '%s\n' "$unique_tokens" | sort -u) 2>/dev/null || true)
+            if [ -z "$free" ]; then
+                error "[ANCHOR-COLLISION] $name: trigger sentence names only token(s) ($(printf '%s' "$clause_tokens" | tr '\n' ',' | sed 's/,$//')) that other skills also claim — restate it around a token this skill uniquely owns"
+            fi
+        fi
+    done
+
+    if [ "$ANCHORS_ONLY" = 1 ]; then
+        if command -v jq >/dev/null 2>&1; then
+            printf '%s' "$json_lines" | jq -R -s '
+                split("\n")
+                | map(select(length > 0))
+                | map(fromjson)
+                | from_entries
+            '
+        else
+            printf '{}\n'
+        fi
+    fi
+}
+
 # Sum description + when_to_use chars across every SKILL.md and command .md
 # under CLAUDE_DIR. Mirrors what Claude Code feeds into the skill-listing block.
 compute_listing_cost() {
@@ -1266,6 +1566,14 @@ if [ "$LISTING_COST_ONLY" = 1 ]; then
     fi
     OVER=$(( LIST_TOTAL - EFFECTIVE_BUDGET ))
     printf '%d %d %d %d\n' "$LIST_TOTAL" "$LIST_COUNT" "$EFFECTIVE_BUDGET" "$OVER"
+    exit 0
+fi
+
+# --anchors: print {"skill":["token",...], ...} — unique anchor-grade tokens
+# only — and exit. Same extraction as the interactive Anchor Analysis check;
+# check_anchor_analysis() branches on ANCHORS_ONLY so the corpus walk runs once.
+if [ "$ANCHORS_ONLY" = 1 ]; then
+    check_anchor_analysis
     exit 0
 fi
 
@@ -1496,6 +1804,11 @@ echo ""
 # --- Check 10: Context coherence (repetition across context sources) ---
 bold "--- Context Coherence ---"
 check_instruction_duplication
+echo ""
+
+# --- Check 11: Anchor analysis (unique-trigger-token ownership) ---
+bold "--- Anchor Analysis ---"
+check_anchor_analysis
 echo ""
 
 # --- Summary ---

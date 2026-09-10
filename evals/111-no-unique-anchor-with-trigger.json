@@ -1,0 +1,21 @@
+{
+  "id": "111-no-unique-anchor-with-trigger",
+  "command": "claude-markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/anchor-unanchorable",
+    "needs_home_override": false,
+    "scanners": ["validate-skills"]
+  },
+  "grader": { "method": "code" },
+  "success_criteria": {
+    "must_detect": [
+      { "tag": "NO-UNIQUE-ANCHOR", "path_substring": "reviewer: states a trigger sentence, but it names no file extension, filename, backticked literal, hyphenated identifier, or mid-sentence proper noun either — structurally un-anchorable" }
+    ],
+    "must_not_flag": ["ANCHOR-NOT-STATED", "ANCHOR-COLLISION"],
+    "expect_clean": false
+  },
+  "expected_behavior": [
+    "validate-skills.sh emits [NO-UNIQUE-ANCHOR] for skills/reviewer even though it already states a full trigger sentence ('Use when the user asks to review a diff before opening a merge request.') — the trigger sentence itself names no anchor-grade token, so a trigger sentence's presence must select the remediation wording, not gate whether the tag fires at all"
+  ]
+}

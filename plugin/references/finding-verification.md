@@ -65,7 +65,9 @@ script-owned — the orchestrator only relays them; never re-ground them here:
 `CLAUDEMD-OBVIOUS`, `CLAUDEMD-MEMORY-DRIFT`,
 `MEMORY-STALE-CONTENT` (only the deterministic slice — a memory body citing a
 missing `.claude/…` path; the judgment behaviour-contradiction slice below is
-verified, not fast-pathed), `STALE-THRESHOLD`, `GUIDANCE-FETCH-FAILED`.
+verified, not fast-pathed), `STALE-THRESHOLD`, `GUIDANCE-FETCH-FAILED`,
+`NO-UNIQUE-ANCHOR`, `ANCHOR-COLLISION`, `ANCHOR-NOT-STATED` (`--anchors` token
+extraction; the tokenizer is the proof, don't re-derive the keyword set here).
 
 **`scan-graph.sh` (Phase 2 / 11 / 20 / 26 — read from `graph-scan.json`):**
 `PLUGIN-BROKEN-REF`, `PLUGIN-MISSING-MANIFEST`, `PLUGIN-VERSION-DRIFT`,
@@ -79,13 +81,15 @@ verified, not fast-pathed), `STALE-THRESHOLD`, `GUIDANCE-FETCH-FAILED`.
 `SKILL-TOOL-UNUSED`, `SKILL-TOOL-UNDECLARED`, `PERM-DEAD-ENTRY`, `PERM-OVERBROAD`,
 `HOOK-FAILING`, `HOOK-NEVER-FIRED`, `HOOK-EVENT-MISMATCH`, `RECURRING-DENIAL`,
 `RECURRING-CORRECTION`, `MISSING-SKILL-GAP`, `AGENT-NEVER-SPAWNED`, `LOW-CACHE-HIT`,
-`CONTEXT-BLOAT`.
+`CONTEXT-BLOAT`, `SKILL-LOW-OBSERVED-RECALL`.
 
 > History-derived tags are deterministic *in their metric* (the count came from
 > `history-scan.json`) but the **threshold interpretation is the orchestrator's**.
 > They still skip the gate — but the Evidence locator the report attaches must cite
 > the metric (`0 invocations / 30d`, `284/304 failed`), so the number that
-> justified the finding is visible. Do not re-mine the JSONL.
+> justified the finding is visible. Do not re-mine the JSONL. `SKILL-LOW-OBSERVED-RECALL`
+> is a count, not a verdict — cite it as `N prompts / 30d contained "<anchor>"; skill
+> fired on M — in this install`.
 
 If a tag is NOT in the three lists above, it is a JUDGMENT tag — verify it.
 

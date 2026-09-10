@@ -2,8 +2,10 @@
 
 Data-driven test cases, following Anthropic's
 [develop-tests](https://platform.claude.com/docs/en/test-and-evaluate/develop-tests)
-methodology. Each `NN-name.json` describes a fixture `.claude/` tree (under
-`tests/fixtures/<dir>/`) and the findings the audit must (and must not) produce.
+methodology. Each `NN-name.json` describes a fixture `dot-claude/` tree
+(under `tests/fixtures/<dir>/`, materialized as `.claude/` at test time so it
+never registers as a live skill in this repo) and the findings the audit must
+(and must not) produce.
 
 Two grading tiers (develop-tests: code-grading > LLM-grading):
 
@@ -19,7 +21,8 @@ Two grading tiers (develop-tests: code-grading > LLM-grading):
   "id": "02-dead-ref",
   "command": "claude-markdown-health-check",
   "fixture": {
-    "kind": "claude-tree",            // fixture is tests/fixtures/<dir>/.claude
+    "kind": "claude-tree",            // fixture is tests/fixtures/<dir>/dot-claude, materialized
+                                      //       as .claude at run time (never a live-loaded skill)
     "dir": "tests/fixtures/dead-ref",
     "needs_home_override": false,     // true: copy tree into a temp $HOME/.claude
                                       //       (user-tree-gated scans: plugins, scan-graph memory)
@@ -76,7 +79,9 @@ HEALTH_CHECK_EVAL_RUNS=3 make evals    # majority vote over 3 runs to smooth LLM
 ## Growing the suite
 
 Every real-world miss or false positive should become a new case. Add a fixture
-tree under `tests/fixtures/<name>/.claude/...`, then a `NN-name.json` here.
+tree under `tests/fixtures/<name>/dot-claude/...` (not `.claude/` — the on-disk
+name keeps Claude Code's lazy nested-skills discovery from registering the
+fixture as a live skill in this repo), then a `NN-name.json` here.
 
 **Evidence-grounding gate (cases 36–41).** The judgment phases run through the
 Pre-print evidence-grounding gate (`references/finding-verification.md`) before the

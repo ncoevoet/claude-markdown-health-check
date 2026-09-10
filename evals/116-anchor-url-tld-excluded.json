@@ -1,0 +1,23 @@
+{
+  "id": "116-anchor-url-tld-excluded",
+  "command": "claude-markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/anchor-url-tld",
+    "needs_home_override": false,
+    "scanners": ["validate-skills"]
+  },
+  "grader": { "method": "code" },
+  "success_criteria": {
+    "must_detect": [
+      { "tag": "NO-UNIQUE-ANCHOR", "path_substring": "urlref: description/when_to_use names no file extension, filename, backticked literal, hyphenated identifier, or mid-sentence proper noun, and states no trigger sentence either" }
+    ],
+    "must_not_flag": ["ANCHOR-NOT-STATED", "ANCHOR-COLLISION"],
+    "expect_clean": false
+  },
+  "expected_behavior": [
+    "regression for the bare-TLD/URL-host bug: a URL host like 'example.org' used to be extracted as BOTH an owned dotted-filename token ('example.org') and a bare extension token ('.org'), letting any description that merely mentions a URL manufacture >=1 'unique' anchor token for free and never trip NO-UNIQUE-ANCHOR",
+    "skills/urlref's description ('Handles reminders and syncs data with example.org for the team.') has no genuine anchor-grade content once the URL host is correctly excluded — 'Handles' is a sentence-initial generic verb (ends in -s, filtered) and 'example.org' must not be counted",
+    "validate-skills.sh must emit the real [NO-UNIQUE-ANCHOR] (structurally un-anchorable / never tried) verdict, not be masked into silence by the URL-derived token"
+  ]
+}

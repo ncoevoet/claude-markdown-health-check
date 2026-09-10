@@ -5,12 +5,21 @@
     "kind": "claude-tree",
     "dir": "tests/fixtures/memory-live-content",
     "needs_home_override": true,
-    "scanners": ["validate-skills"]
+    "scanners": [
+      "validate-skills"
+    ]
   },
-  "grader": { "method": "code" },
+  "grader": {
+    "method": "code"
+  },
   "success_criteria": {
     "must_detect": [],
-    "must_not_flag": ["MEMORY-STALE-CONTENT"],
+    "must_not_flag": [
+      "ANCHOR-COLLISION",
+      "ANCHOR-NOT-STATED",
+      "MEMORY-STALE-CONTENT",
+      "NO-UNIQUE-ANCHOR"
+    ],
     "expect_clean": true
   },
   "expected_behavior": [

@@ -1,0 +1,22 @@
+{
+  "id": "106-anchor-collision",
+  "command": "claude-markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/anchor-collision",
+    "needs_home_override": false,
+    "scanners": ["validate-skills"]
+  },
+  "grader": { "method": "code" },
+  "success_criteria": {
+    "must_detect": [
+      { "tag": "ANCHOR-COLLISION", "path_substring": "a: trigger sentence names only token(s) (ticket)" },
+      { "tag": "ANCHOR-COLLISION", "path_substring": "b: trigger sentence names only token(s) (ticket)" }
+    ],
+    "must_not_flag": ["ANCHOR-NOT-STATED"],
+    "expect_clean": false
+  },
+  "expected_behavior": [
+    "validate-skills.sh emits [ANCHOR-COLLISION] for both skills/a and skills/b because both state a 'Use for Ticket ...' trigger sentence over the same token, and neither owns it uniquely"
+  ]
+}

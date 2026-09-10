@@ -1,0 +1,2 @@
+{"sessionId":"sess-miss","timestamp":"__TS_RECENT__","type":"user","message":{"content":"can you check this pom.xml please"}}
+{"sessionId":"sess-decoy","timestamp":"__TS_RECENT__","type":"assistant","message":{"content":[{"type":"tool_use","name":"Skill","input":{"skill":"maven-helper","args":""}}]}}

@@ -1,0 +1,32 @@
+{
+  "id": "118-history-anchor-word-boundary",
+  "command": "claude-markdown-health-check",
+  "fixture": {
+    "kind": "synthetic-jsonl",
+    "dir": "tests/fixtures/history-anchor-boundary",
+    "needs_home_override": true,
+    "scanners": ["scan-history"],
+    "anchors_file": "tests/fixtures/history-anchor-boundary/anchors.json"
+  },
+  "grader": { "method": "code" },
+  "success_criteria": {
+    "history_assertions": [
+      { "jq": ".observedRecall[\"ci-skill\"].triggers", "equals": 1 },
+      { "jq": ".observedRecall[\"ci-skill\"].misses", "equals": 0 },
+      { "jq": ".observedRecall[\"ext-skill\"].triggers", "equals": 1 },
+      { "jq": ".observedRecall[\"ext-skill\"].misses", "equals": 0 },
+      { "jq": ".observedRecall[\"hyphen-skill\"].triggers", "equals": 1 },
+      { "jq": ".observedRecall[\"hyphen-skill\"].misses", "equals": 0 }
+    ]
+  },
+  "expected_behavior": [
+    "all three anchor tokens here are artifact-shaped (a dotted filename, a leading-dot extension, a multi-word backticked literal) so the observed-recall join's artifact-shape filter (see 119) lets all three through -- this eval is purely about anchor_pattern's word-boundary logic within that surviving set",
+    "sess-ci-decoy's prompt ('we should diff pom.xmlbackup against head') contains the anchor token 'pom.xml' only as a prefix of the longer identifier 'pom.xmlbackup' -- it must NOT register as an anchor_hit, so it must not show up as an extra miss for ci-skill",
+    "sess-ci-hit's prompt ('please check pom.xml before merging') contains 'pom.xml' as a genuine standalone token, and ci-skill fires 10s later in the same session -- 1 trigger",
+    "sess-ext-decoy's prompt contains 'my.logxx', which contains the literal substring '.logx' but is a different, longer extension -- must NOT register as an anchor_hit for ext-skill (dotted-extension token shape)",
+    "sess-ext-hit's prompt ('please decrypt call.logx now') is a genuine '.logx' occurrence followed by a word boundary, and ext-skill fires 10s later -- 1 trigger",
+    "sess-hyphen-decoy's prompt contains 'ng builder', which contains the literal substring 'ng build' as a prefix of the longer word 'builder' -- must NOT register as an anchor_hit for hyphen-skill (multi-word backticked-literal token shape)",
+    "sess-hyphen-hit's prompt ('please run ng build now') is a genuine 'ng build' occurrence, and hyphen-skill fires 10s later -- 1 trigger",
+    "if the scanner still used an unbounded contains($tok) substring match, every *-decoy session would produce a spurious anchor_hit with no matching fire, pushing misses to 1 for each skill -- misses staying 0 proves the word-boundary fix"
+  ]
+}

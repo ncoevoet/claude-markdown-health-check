@@ -4,9 +4,9 @@ Loaded by `/claude-markdown-health-check` Phase 6. Audits whether the cumulative
 
 ## Why this exists
 
-Per the official skills doc, Claude Code loads every skill's `description` + `when_to_use` into a single listing block at session start. The listing is capped at **1% of the context window with an 8,000-character floor**, and `/doctor` surfaces this as `skillListingBudgetFraction`. When the listing exceeds the budget, descriptions are dropped to name-only — the skill stays invocable by name, but Claude can't auto-route to it because the routing keywords are gone.
+Claude Code loads every skill's `description` + `when_to_use` into one listing block at session start, capped at **1% of the context window (8,000-char floor)**; `/doctor` surfaces this as `skillListingBudgetFraction`. Over budget, descriptions drop to name-only — still invocable by name, but Claude can't auto-route to it (routing keywords gone).
 
-The per-entry combined `description` + `when_to_use` is also hard-capped at **1,536 characters** regardless of budget. That cap is enforced by `validate-skills.sh` (`DESCRIPTION-TRUNCATED` warning) — do NOT re-check it in this phase.
+Per-entry combined `description` + `when_to_use` is separately hard-capped at **1,536 characters**, enforced by `validate-skills.sh` (`DESCRIPTION-TRUNCATED`) — do NOT re-check it here.
 
 ## Compute the cost (per scope)
 
@@ -20,26 +20,27 @@ GRAND_COUNT=$(( U_COUNT + ${P_COUNT:-0} ))
 GRAND_BUDGET=${U_BUDGET}   # budget is global, not per-scope
 ```
 
-Budget resolution inside the script (most specific wins): `SLASH_COMMAND_TOOL_CHAR_BUDGET` env var → `skillListingBudgetFraction` from `<scope>/settings.json` (read via `jq` if available) → built-in default 0.01. The fraction is multiplied by `CLAUDE_CONTEXT_TOKENS × 4` and floored at 8 000 chars per the docs.
+Budget resolution (most specific wins): `SLASH_COMMAND_TOOL_CHAR_BUDGET` env var → `skillListingBudgetFraction` in `<scope>/settings.json` (via `jq`) → default `0.01`. Multiply by `CLAUDE_CONTEXT_TOKENS × 4`, floor at 8,000 chars, per the docs.
 
-The script's count covers user + project SKILL.md + commands, excluding any whose frontmatter sets `disable-model-invocation` to a truthy value (`true`/`yes`/`on`/`1`) — Claude Code removes those from the model's context entirely, so they cost no listing chars. Plugin, marketplace and bundled skills (`/loop`, `/simplify`, `/debug`, `/claude-api`, etc.) are NOT counted. The number is a **lower bound** — say so in the report so the user understands `/doctor`'s runtime number can exceed it. If the most recent transcript shows the truncation banner (`+N more`), trust the runtime signal over the script-side count.
+The script counts user + project SKILL.md + commands, excluding any with `disable-model-invocation` truthy (`true`/`yes`/`on`/`1`) — dropped from context entirely, so they cost nothing. Plugin, marketplace and bundled skills (`/loop`, `/simplify`, `/debug`, `/claude-api`, etc.) are NOT counted. The number is a **lower bound** — say so in the report; `/doctor`'s runtime number can exceed it. Trust a visible truncation banner (`+N more`) in the latest transcript over the script-side count.
 
 ## Findings
 
-- **`SKILL-BUDGET-OVERFLOW`** (Critical) — emit when `GRAND_TOTAL > GRAND_BUDGET`, OR when an active session has visibly truncated descriptions in the recent transcript. Report numbers and the top 5 cost contributors by combined `description` + `when_to_use` byte count.
-- **`SKILL-LOW-RELEVANCE`** (Structural) — for each user-scope skill (skip project + plugins), grep description keywords ≥ 4 chars against the project source tree, capped to 500 hits. Zero hits → flag as a per-project disable candidate. Advisory; tolerate false positives. Skip skills with `disable-model-invocation: true` — they cost no listing chars, so there is nothing to reclaim.
-- **`SKILL-DUPLICATE-DOMAIN`** (Structural) — Jaccard similarity ≥ 0.6 across description + when_to_use keyword sets. Two skills covering the same domain waste budget twice. Skip pairs where either skill sets `disable-model-invocation: true`: a manual-only skill costs no budget and the model can't pick it by mistake, so the duplication is a user preference, not a defect.
+- **`SKILL-BUDGET-OVERFLOW`** (Critical) — emit when `GRAND_TOTAL > GRAND_BUDGET`, OR an active session shows truncated descriptions. Report the numbers and top 5 cost contributors by combined `description` + `when_to_use` byte count.
+- **`SKILL-LOW-RELEVANCE`** (Structural) — for each user-scope skill (skip project + plugins), grep description keywords ≥ 4 chars against the project tree (cap 500 hits). Zero hits → disable candidate. Advisory; tolerate false positives. Skip `disable-model-invocation: true` skills — nothing to reclaim.
+- **`SKILL-DUPLICATE-DOMAIN`** (Structural) — Jaccard similarity ≥ 0.6, over the token set `validate-skills.sh --anchors` already produced — never derive a second keyword set from description + when_to_use. `--anchors`'s owner-count logic decides `NO-UNIQUE-ANCHOR` / `ANCHOR-COLLISION` (Phase 5); this phase reruns Jaccard ≥ 0.6 on those same tokens. Don't re-tokenize a pair that already tripped `ANCHOR-COLLISION`. Two skills covering one domain waste budget twice. Skip pairs where either sets `disable-model-invocation: true`: manual-only skills cost no budget and can't be picked by mistake, so overlap there is preference, not defect.
+- **`NO-UNIQUE-ANCHOR`** (Structural) / **`ANCHOR-COLLISION`** (Structural) / **`ANCHOR-NOT-STATED`** (Hygiene) — relayed verbatim from `validate-skills.sh --anchors` (Phase 5); not recomputed, just reported alongside the budget numbers (script-emitted, fast-pathed — see `finding-verification.md`, no re-grounding needed). `NO-UNIQUE-ANCHOR` has three distinct shapes, never collapse them: (1) the skill owns anchor-grade token(s), but every one is also claimed by another skill; (2) it states a trigger sentence naming no anchor-grade token at all; (3) it names no anchor-grade token anywhere and states no trigger sentence either. Shapes 1 and 2 are structurally un-anchorable — wording cannot create uniqueness; remediation is accept the overlap or merge with the skill that owns the artifact, never "write a better description". Shape 3 is different: the skill hasn't tried — remediation is name the specific artifact or term it uniquely handles, not just a generic verb.
 
 ## Remediation order (cheapest first)
 
-When `SKILL-BUDGET-OVERFLOW` fires, the report's "Skill Listing Budget" block MUST list these options verbatim so the user can pick one. Do not collapse the list — each option has different cost and reversibility.
+When `SKILL-BUDGET-OVERFLOW` fires, the report's "Skill Listing Budget" block MUST list these options verbatim — don't collapse the list; each has different cost and reversibility.
 
-1. **Trim descriptions in source** — for the top 5 bloat contributors, propose tightening `description` + `when_to_use`. Anthropic's own first recommendation: "trim the description and when_to_use text at the source: put the key use case first." Zero ongoing cost.
-2. **Disable irrelevant skills per-project** — for each `SKILL-LOW-RELEVANCE` candidate, suggest either `/skills` (interactive) or adding `skillOverrides: {"<name>": "off"}` (or `"name-only"` to keep it invocable) to the project's settings.json. Per-project overrides don't affect other repos.
-3. **Trim `enabledPlugins`** — if any enabled plugin provides skills not used in the current project, propose removing it from `enabledPlugins` in the user settings. Plugins are per-machine; check `git log` of the user settings file and recent skill invocations before suggesting (don't propose disabling a plugin the user enabled this week).
-4. **Raise the budget — last resort** — `SLASH_COMMAND_TOOL_CHAR_BUDGET` env var (documented) or `skillListingBudgetFraction` in the user settings (e.g., `0.02`). Trade-off the `/doctor` warning calls out: ~4k extra tokens per turn and faster rate-limit burn. Only suggest if 1–3 are exhausted.
+1. **Trim descriptions in source** — for the top 5 bloat contributors, tighten `description` + `when_to_use`. Anthropic's first recommendation: "trim the description and when_to_use text at the source: put the key use case first." Zero ongoing cost.
+2. **Disable irrelevant skills per-project** — for each `SKILL-LOW-RELEVANCE` candidate, suggest `/skills` or `skillOverrides: {"<name>": "off"}` (or `"name-only"` to keep it invocable) in the project's settings.json. Per-project overrides don't affect other repos.
+3. **Trim `enabledPlugins`** — if an enabled plugin's skills go unused here, propose removing it from `enabledPlugins` in user settings. Plugins are per-machine; check `git log` and recent invocations first (don't disable a plugin enabled this week).
+4. **Raise the budget — last resort** — `SLASH_COMMAND_TOOL_CHAR_BUDGET` env var or `skillListingBudgetFraction` in user settings (e.g. `0.02`). Trade-off per `/doctor`'s warning: ~4k extra tokens/turn, faster rate-limit burn. Only suggest once 1–3 are exhausted.
 
-When `SKILL-DUPLICATE-DOMAIN` fires, propose **merging or deleting one of the pair** instead of disabling — duplicates indicate a design issue, not a budget issue.
+When `SKILL-DUPLICATE-DOMAIN` fires, propose merging or deleting one of the pair instead of disabling — duplicates are a design issue, not a budget issue. Overlapping siblings are a recall tax independent of budget: merging two has been measured to raise combined observed recall 0.68 → 0.84 with neither description getting smarter. Prefer merge over delete when both have real usage history (`skill-usage-metrics.md`) — deleting the less-used one discards capability instead of consolidating it.
 
 ## Report block (emitted from Phase 24)
 
