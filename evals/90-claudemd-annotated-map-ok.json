@@ -5,11 +5,23 @@
     "kind": "claude-tree",
     "dir": "tests/fixtures/claudemd-annotated-map",
     "needs_home_override": false,
-    "scanners": ["validate-skills"]
+    "scanners": [
+      "validate-skills"
+    ]
   },
-  "grader": { "method": "code" },
+  "grader": {
+    "method": "code"
+  },
   "success_criteria": {
-    "must_not_flag": ["CLAUDEMD-OBVIOUS", "CLAUDEMD-MEMORY-DRIFT", "INSTRUCTION-DUPLICATED", "OVER-CONSTRAINED"],
+    "must_not_flag": [
+      "ANCHOR-COLLISION",
+      "ANCHOR-NOT-STATED",
+      "CLAUDEMD-MEMORY-DRIFT",
+      "CLAUDEMD-OBVIOUS",
+      "INSTRUCTION-DUPLICATED",
+      "NO-UNIQUE-ANCHOR",
+      "OVER-CONSTRAINED"
+    ],
     "expect_clean": true
   },
   "expected_behavior": [

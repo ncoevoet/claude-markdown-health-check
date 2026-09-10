@@ -23,7 +23,7 @@ for f in "$EVALS"/*.json; do
     [ -n "$filter" ] && [[ "$id" != "$filter"* ]] && continue
 
     echo; echo "=== eval: $id ==="
-    echo "Fixture: $(jq -r '.fixture.dir' "$f")/.claude"
+    echo "Fixture: $(jq -r '.fixture.dir' "$f")/dot-claude  (copy to a scratch .claude/ before opening Claude Code there — on disk it's named dot-claude/ so it never registers as a live skill in this repo)"
     echo "Expected behaviour:"; jq -r '.expected_behavior[]? | "  + " + .' "$f"
     echo "Expected NOT behaviour:"; jq -r '.expected_not_behavior[]? | "  - " + .' "$f"
     echo

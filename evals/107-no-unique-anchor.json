@@ -1,0 +1,21 @@
+{
+  "id": "107-no-unique-anchor",
+  "command": "claude-markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/weak-desc",
+    "needs_home_override": false,
+    "scanners": ["validate-skills"]
+  },
+  "grader": { "method": "code" },
+  "success_criteria": {
+    "must_detect": [
+      { "tag": "NO-UNIQUE-ANCHOR", "path_substring": "helper: description/when_to_use names no file extension" }
+    ],
+    "must_not_flag": ["ANCHOR-NOT-STATED", "ANCHOR-COLLISION"],
+    "expect_clean": false
+  },
+  "expected_behavior": [
+    "validate-skills.sh emits [NO-UNIQUE-ANCHOR] for skills/helper: its description ('Helps with various tasks and assorted operations...') has zero anchor-grade tokens (no extension, filename, backticked literal, or mid-sentence proper noun) and no trigger sentence either"
+  ]
+}

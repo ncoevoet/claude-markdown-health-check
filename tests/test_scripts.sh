@@ -3,8 +3,11 @@
 #
 # For every evals/*.json whose grader.method == "code":
 #   1. Run the declared scanners (validate-skills / scan-graph) against the
-#      fixture .claude tree (HOME-overridden into a temp dir when the case needs
-#      user-tree gating).
+#      fixture's config tree, materialized into a temp dir literally named
+#      .claude (HOME-overridden when the case needs user-tree gating). On disk
+#      fixtures store it as dot-claude/ so Claude Code's lazy nested-skills
+#      discovery never registers a fixture SKILL.md as a live skill in this
+#      repo.
 #   2. Collect the emitted TAG set + normalized finding lines.
 #   3. Assert: expect_clean -> empty set; each must_detect.tag present (and, when
 #      given, at the must_detect.path_substring); each must_not_flag absent.
@@ -44,9 +47,19 @@ for f in "$EVALS"/*.json; do
 
     tmp=$(mktemp -d)
     cache="$tmp/cache"; mkdir -p "$cache"
+    # Fixtures store their config tree on disk as dot-claude/ (not .claude/) so
+    # Claude Code's lazy nested-skills discovery never registers a fixture's
+    # deliberately-bad SKILL.md as a live skill while this repo is open. Every
+    # case — home-overridden or not — materializes the WHOLE fixture (dot-claude/
+    # renamed to .claude/, plus any root-level sibling such as .mcp.json that a
+    # scanner resolves via CLAUDE_DIR/../…) into a temp copy before scanning, so
+    # no scanner behavior depends on the on-disk rename.
+    mkdir -p "$tmp/target"
+    cp -r "$REPO/$dir/." "$tmp/target/"
+    mv "$tmp/target/dot-claude" "$tmp/target/.claude"
     if [ "$needs_home" = "true" ]; then
-        mkdir -p "$tmp/home/.claude"
-        cp -r "$REPO/$dir/.claude/." "$tmp/home/.claude/"
+        mkdir -p "$tmp/home"
+        mv "$tmp/target/.claude" "$tmp/home/.claude"
         # installed_plugins.json carries absolute installPaths, which a fixture cannot
         # know ahead of the temp copy. Fixtures write the literal token __HOME__ and we
         # expand it here so a case can point at a real directory inside the fake HOME.
@@ -55,7 +68,13 @@ for f in "$EVALS"/*.json; do
         target="$tmp/home/.claude"
         run_env=(env "HOME=$tmp/home" "CLAUDE_PLUGIN_DATA=$cache")
     else
-        target="$REPO/$dir/.claude"
+        # check_local_md_tracked (validate-skills.sh) walks up from CLAUDE_DIR
+        # looking for a .git dir to decide whether an ungitignored CLAUDE.local.md
+        # is worth flagging. Fixtures used to be scanned in place inside this
+        # repo's own git tree, so plant a marker here to keep that check exercised
+        # the same way now that the scan runs against a temp copy instead.
+        mkdir -p "$tmp/target/.git"
+        target="$tmp/target/.claude"
         run_env=(env "CLAUDE_PLUGIN_DATA=$cache")
     fi
 
@@ -101,9 +120,16 @@ for f in "$EVALS"/*.json; do
     rm -rf "$tmp"
 done
 
+# Materialize into a temp dir literally named .claude — same reason as the
+# per-case loop above.
+tmp_lc=$(mktemp -d)
+mkdir -p "$tmp_lc/clean/.claude" "$tmp_lc/grounded/.claude"
+cp -r "$REPO/tests/fixtures/clean/dot-claude/." "$tmp_lc/clean/.claude/"
+cp -r "$REPO/tests/fixtures/grounded-claudemd/dot-claude/." "$tmp_lc/grounded/.claude/"
+
 # --listing-cost excludes disable-model-invocation skills: the clean fixture's
 # only skill (welltuned) sets the flag, so total and count must both be 0.
-lc=$(bash "$VALIDATE" --listing-cost "$REPO/tests/fixtures/clean/.claude" | awk '{print $1, $2}')
+lc=$(bash "$VALIDATE" --listing-cost "$tmp_lc/clean/.claude" | awk '{print $1, $2}')
 if [ "$lc" = "0 0" ]; then
     ok "listing-cost: disable-model-invocation skill excluded"
 else
@@ -113,12 +139,13 @@ fi
 # The counting path must still work: grounded-claudemd's single skill sets no
 # disable-model-invocation, so it has to contribute a non-zero cost. Without this,
 # the assertion above would pass even if compute_listing_cost always returned 0.
-read -r lc_total lc_count _ < <(bash "$VALIDATE" --listing-cost "$REPO/tests/fixtures/grounded-claudemd/.claude")
+read -r lc_total lc_count _ < <(bash "$VALIDATE" --listing-cost "$tmp_lc/grounded/.claude")
 if [ "$lc_count" = "1" ] && [ "$lc_total" -gt 0 ]; then
     ok "listing-cost: model-invocable skill still counted ($lc_total chars)"
 else
     no "listing-cost: expected 1 entry with non-zero chars, got '$lc_total $lc_count'"
 fi
+rm -rf "$tmp_lc"
 
 echo
 echo "deterministic: $PASS passed, $FAIL failed"

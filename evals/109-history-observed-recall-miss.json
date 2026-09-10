@@ -1,0 +1,23 @@
+{
+  "id": "109-history-observed-recall-miss",
+  "command": "claude-markdown-health-check",
+  "fixture": {
+    "kind": "synthetic-jsonl",
+    "dir": "tests/fixtures/history-observed-recall-miss",
+    "needs_home_override": true,
+    "scanners": ["scan-history"],
+    "anchors_file": "tests/fixtures/history-observed-recall-miss/anchors.json"
+  },
+  "grader": { "method": "code" },
+  "success_criteria": {
+    "history_assertions": [
+      { "jq": ".observedRecall[\"maven-helper\"].misses", "equals": 1 },
+      { "jq": ".observedRecall[\"maven-helper\"].triggers", "equals": 0 }
+    ]
+  },
+  "expected_behavior": [
+    "sess-miss's prompt contains the anchor token 'pom.xml' owned by maven-helper (per anchors.json), but maven-helper never fires in that session",
+    "a decoy Skill(maven-helper) fire DOES occur, but in a different session (sess-decoy) -- the join is scoped to (session, skill), so it must not paper over the miss",
+    "observedRecall reports 1 miss / 0 triggers for maven-helper -- a count, not a verdict, that a downstream low-observed-recall check can act on"
+  ]
+}

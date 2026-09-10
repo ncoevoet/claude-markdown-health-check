@@ -162,9 +162,30 @@ If `$LATEST` exists, extract: tool success rate, files reworked >1×, count of c
 VALIDATE="${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}/commands/scripts/validate-skills.sh"
 bash "$VALIDATE" "$USER_DIR"
 [[ -n "$PROJECT_DIR" ]] && bash "$VALIDATE" "$PROJECT_DIR"
+
+# Anchor tokens feed Phase 7's observed-recall join (scan-history.sh --anchors-file).
+# A scope = one validate-skills.sh invocation, so merge the USER_DIR + PROJECT_DIR
+# anchor tables here (Change 1's --anchors is per-scope by design) — transcripts
+# under ~/.claude/projects are never scope-partitioned, so the join needs one
+# combined table. Fails open at every step: --anchors itself prints "{}" when jq
+# is missing or a scope has no skills (never a non-zero exit), and if jq isn't
+# available here either, ANCHORS_FILE stays empty and Phase 7 simply runs without
+# it (observedRecall == {}), same as today.
+ANCHORS_FILE=""
+if command -v jq >/dev/null 2>&1; then
+    ANCHORS_CACHE_DIR="${CLAUDE_PLUGIN_DATA:-$HOME/.claude/.cache}"
+    mkdir -p "$ANCHORS_CACHE_DIR" 2>/dev/null
+    ANCHORS_CANDIDATE="$ANCHORS_CACHE_DIR/anchors-merged.json"
+    if { bash "$VALIDATE" --anchors "$USER_DIR" 2>/dev/null
+         [[ -n "$PROJECT_DIR" ]] && bash "$VALIDATE" --anchors "$PROJECT_DIR" 2>/dev/null
+       } | jq -s 'add // {}' >"$ANCHORS_CANDIDATE" 2>/dev/null \
+      && [[ -s "$ANCHORS_CANDIDATE" ]]; then
+        ANCHORS_FILE="$ANCHORS_CANDIDATE"
+    fi
+fi
 ```
 
-This is the deterministic layer. Trust its output for: name regex, the reserved `synced` skill folder, name/dir mismatch, missing descriptions, voice violations, line counts, chained references, dead links (skill `references/*.md`, settings `guides`, CLAUDE.md `.claude/…` paths), JSON validity, duplicate keys and array entries, MCP pre-approval, unregistered hooks, hook timeouts, memory-index size, rule scoping, TOC presence, description sizes, frontmatter schema (`model` whitelist, `allowed-tools` syntax), unknown frontmatter fields, name collisions between `commands/` and `skills/`, embedded credentials in skill/reference markdown (`EMBEDDED-SECRET`), destructive shell commands without nearby warning markers (`UNFLAGGED-DESTRUCTIVE`), and the context-engineering set relayed by Phases 12 and 27 (`OVER-CONSTRAINED`, `INSTRUCTION-DUPLICATED`, `CLAUDEMD-OBVIOUS`, `CLAUDEMD-MEMORY-DRIFT`). Later phases MUST NOT re-check anything this script already covers — they MUST only handle what the script can't.
+This is the deterministic layer. Trust its output for: name regex, the reserved `synced` skill folder, name/dir mismatch, missing descriptions, voice violations, line counts, chained references, dead links (skill `references/*.md`, settings `guides`, CLAUDE.md `.claude/…` paths), JSON validity, duplicate keys and array entries, MCP pre-approval, unregistered hooks, hook timeouts, memory-index size, rule scoping, TOC presence, description sizes, frontmatter schema (`model` whitelist, `allowed-tools` syntax), unknown frontmatter fields, name collisions between `commands/` and `skills/`, embedded credentials in skill/reference markdown (`EMBEDDED-SECRET`), destructive shell commands without nearby warning markers (`UNFLAGGED-DESTRUCTIVE`), the context-engineering set relayed by Phases 12 and 27 (`OVER-CONSTRAINED`, `INSTRUCTION-DUPLICATED`, `CLAUDEMD-OBVIOUS`, `CLAUDEMD-MEMORY-DRIFT`), and anchor-token analysis over description + when_to_use (`NO-UNIQUE-ANCHOR`, `ANCHOR-COLLISION`, `ANCHOR-NOT-STATED`). Later phases MUST NOT re-check anything this script already covers — they MUST only handle what the script can't.
 
 ## Phase 6 — Skill Listing Budget
 
@@ -176,10 +197,14 @@ Cross-session invocation, dormancy, and orphan detection over the 30-day window.
 
 ```bash
 HIST="${CLAUDE_PLUGIN_DATA:-$HOME/.claude/.cache}/history-scan.json"
-bash "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}/commands/scripts/scan-history.sh" ${WINDOW:+--window-days "$WINDOW"} >/dev/null
+bash "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude}/commands/scripts/scan-history.sh" \
+    ${WINDOW:+--window-days "$WINDOW"} \
+    ${ANCHORS_FILE:+--anchors-file "$ANCHORS_FILE"} >/dev/null
 ```
 
-See `skill-usage-metrics.md` for the heuristic formulas and tag definitions (`SKILL-NEVER-FIRED`, `SKILL-DORMANT`, `SKILL-MISFIRING`, `SKILL-ORPHAN`). Findings reference skill names only; wording must say "in this install" since `.skillUsage` is per-machine.
+`ANCHORS_FILE` is set (or left empty) by Phase 5. Passing it is what makes `.observedRecall` non-empty — without it every anchor-bearing prompt in the transcripts still gets scanned for other signals, but the observed-recall join never runs and `SKILL-LOW-OBSERVED-RECALL` can never fire.
+
+See `skill-usage-metrics.md` for the heuristic formulas and tag definitions (`SKILL-NEVER-FIRED`, `SKILL-DORMANT`, `SKILL-MISFIRING`, `SKILL-ORPHAN`, `SKILL-LOW-OBSERVED-RECALL`). Findings reference skill names only; wording must say "in this install" since `.skillUsage` is per-machine.
 
 ## Phase 8 — Skill Semantic Audit
 
@@ -432,10 +457,10 @@ issues: Skills 3 · Hooks 1 · Settings & Permissions 1
 `DEAD-REF`, `DUPLICATE-KEY`, `INVALID-JSON`, `MISSING-DESC`, `DEAD-MATCHER`, `UNREGISTERED-HOOK`, `MISSING-PRE-APPROVED`, `MEMORY-OVERFLOW`, `SKILL-BUDGET-OVERFLOW`, `STALE-THRESHOLD`, `GUIDANCE-FETCH-FAILED`, `BAD-FRONTMATTER-SCHEMA`, `NAME-COLLISION`, `SKILL-ORPHAN`, `MISSING-SKILL-GAP`, `PLUGIN-BROKEN-REF`, `PLUGIN-MISSING-MANIFEST`, `MEMORY-DEAD-LINK`, `REF-CIRCULAR`, `HOOK-FAILING`, `EMBEDDED-SECRET`, `BAD-NAME`, `RESERVED-NAME`, `OUTPUTSTYLE-MISSING`, `SETTINGS-BYPASS-MODE`, `AGENT-BAD-SCHEMA`, `AGENT-BYPASS-PERMS`, `PLUGIN-MISPLACED-DIR`, `MARKETPLACE-DEAD-SOURCE`, `CLAUDEMD-DEAD-IMPORT`, `CLAUDEMD-DEAD-SCRIPT`, `MARKETPLACE-BLOCKED`
 
 **Structural** (works but should be reorganised)
-`UNDER-TRIGGER`, `OVER-TRIGGER`, `MISSING-TRIGGER`, `MISSING-AGENT-TRIGGER`, `OVERLAPPING-AGENT`, `DUPLICATE-LOGIC`, `MISSING-ENFORCEMENT`, `NEEDS-REFERENCES`, `RULE-CONFLICT`, `BURIED-CRITICAL`, `WEAK-DESC`, `NAME-MISMATCH`, `BAD-RULE-FRONTMATTER`, `ORPHAN-GUIDE`, `ORPHAN-PATTERN`, `REPURPOSE`, `SKILL-LOW-RELEVANCE`, `SKILL-DUPLICATE-DOMAIN`, `CLAUDEMD-STALE`, `CLAUDEMD-GENERIC`, `CLAUDEMD-THIN`, `SKILL-NEVER-FIRED`, `SKILL-DORMANT`, `SKILL-MISFIRING`, `RECURRING-DENIAL`, `SKILL-TOOL-UNDECLARED`, `HOOK-EVENT-MISMATCH`, `AGENT-NEVER-SPAWNED`, `AGENT-DUP-NAME`, `AGENT-PLUGIN-FORBIDDEN-FIELD`, `HOOK-EXIT-NONBLOCKING`, `HOOK-UNSAFE-SHELL`, `HOOK-ENV-LEAK`, `REF-TOO-DEEP`, `CONTEXT-BLOAT`, `PLUGIN-VERSION-DRIFT`, `PLUGIN-BAD-VERSION`, `PLUGIN-ABS-PATH`, `MCP-BAD-DEF`, `MODEL-NOT-AVAILABLE`, `IMPORT-TOO-DEEP`, `DESCRIPTION-TOO-LONG`, `OVER-500-LINES`, `CHAINED-REF`, `NO-PROGRESSIVE-DISCLOSURE`, `DESCRIPTION-TRUNCATED`, `MEMORY-STALE-CONTENT`, `HOOK-HTTP-BLOCKED`, `PLUGIN-USERCONFIG-IN-SHELL`, `PLUGIN-MISSING-DEPENDENCY`
+`UNDER-TRIGGER`, `OVER-TRIGGER`, `MISSING-TRIGGER`, `MISSING-AGENT-TRIGGER`, `OVERLAPPING-AGENT`, `DUPLICATE-LOGIC`, `MISSING-ENFORCEMENT`, `NEEDS-REFERENCES`, `RULE-CONFLICT`, `BURIED-CRITICAL`, `WEAK-DESC`, `NAME-MISMATCH`, `BAD-RULE-FRONTMATTER`, `ORPHAN-GUIDE`, `ORPHAN-PATTERN`, `REPURPOSE`, `SKILL-LOW-RELEVANCE`, `SKILL-DUPLICATE-DOMAIN`, `CLAUDEMD-STALE`, `CLAUDEMD-GENERIC`, `CLAUDEMD-THIN`, `SKILL-NEVER-FIRED`, `SKILL-DORMANT`, `SKILL-MISFIRING`, `RECURRING-DENIAL`, `SKILL-TOOL-UNDECLARED`, `HOOK-EVENT-MISMATCH`, `AGENT-NEVER-SPAWNED`, `AGENT-DUP-NAME`, `AGENT-PLUGIN-FORBIDDEN-FIELD`, `HOOK-EXIT-NONBLOCKING`, `HOOK-UNSAFE-SHELL`, `HOOK-ENV-LEAK`, `REF-TOO-DEEP`, `CONTEXT-BLOAT`, `PLUGIN-VERSION-DRIFT`, `PLUGIN-BAD-VERSION`, `PLUGIN-ABS-PATH`, `MCP-BAD-DEF`, `MODEL-NOT-AVAILABLE`, `IMPORT-TOO-DEEP`, `DESCRIPTION-TOO-LONG`, `OVER-500-LINES`, `CHAINED-REF`, `NO-PROGRESSIVE-DISCLOSURE`, `DESCRIPTION-TRUNCATED`, `MEMORY-STALE-CONTENT`, `HOOK-HTTP-BLOCKED`, `PLUGIN-USERCONFIG-IN-SHELL`, `PLUGIN-MISSING-DEPENDENCY`, `NO-UNIQUE-ANCHOR`, `ANCHOR-COLLISION`, `SKILL-LOW-OBSERVED-RECALL`
 
 **Hygiene** (cosmetic / token efficiency)
-`BROAD-PATTERN`, `SUSPICIOUS-TIMEOUT`, `STALE-REMINDER`, `DUPLICATE-ENTRY`, `RULE-OVERSIZED`, `BODY-FILLER-HIGH`, `BODY-COMPRESSED`, `BODY-COMPRESSION-REJECTED`, `UNKNOWN-FRONTMATTER-FIELD`, `RECURRING-CORRECTION`, `SKILL-TOOL-UNUSED`, `PERM-DEAD-ENTRY`, `PERM-OVERBROAD`, `HOOK-NEVER-FIRED`, `REF-ORPHAN`, `MEMORY-ORPHAN-FILE`, `MEMORY-DUP-ENTRY`, `MEMORY-STALE-DATE`, `LOW-CACHE-HIT`, `UNFLAGGED-DESTRUCTIVE`, `THIRD-PERSON`, `MISSING-TOC`, `MCP-DEPRECATED-TRANSPORT`, `MCP-PLAINTEXT-SECRET`, `SETTINGS-MCP-AUTOAPPROVE`, `HOOK-NO-SHEBANG`, `LOCAL-MD-TRACKED`, `PLUGIN-DISABLED`, `OVER-CONSTRAINED`, `INSTRUCTION-DUPLICATED`, `CLAUDEMD-OBVIOUS`, `CLAUDEMD-MEMORY-DRIFT`, `SETTINGS-SANDBOX-OFF`, `SETTINGS-AUTOMODE-BROAD`
+`BROAD-PATTERN`, `SUSPICIOUS-TIMEOUT`, `STALE-REMINDER`, `DUPLICATE-ENTRY`, `RULE-OVERSIZED`, `BODY-FILLER-HIGH`, `BODY-COMPRESSED`, `BODY-COMPRESSION-REJECTED`, `UNKNOWN-FRONTMATTER-FIELD`, `RECURRING-CORRECTION`, `SKILL-TOOL-UNUSED`, `PERM-DEAD-ENTRY`, `PERM-OVERBROAD`, `HOOK-NEVER-FIRED`, `REF-ORPHAN`, `MEMORY-ORPHAN-FILE`, `MEMORY-DUP-ENTRY`, `MEMORY-STALE-DATE`, `LOW-CACHE-HIT`, `UNFLAGGED-DESTRUCTIVE`, `THIRD-PERSON`, `MISSING-TOC`, `MCP-DEPRECATED-TRANSPORT`, `MCP-PLAINTEXT-SECRET`, `SETTINGS-MCP-AUTOAPPROVE`, `HOOK-NO-SHEBANG`, `LOCAL-MD-TRACKED`, `PLUGIN-DISABLED`, `OVER-CONSTRAINED`, `INSTRUCTION-DUPLICATED`, `CLAUDEMD-OBVIOUS`, `CLAUDEMD-MEMORY-DRIFT`, `SETTINGS-SANDBOX-OFF`, `SETTINGS-AUTOMODE-BROAD`, `ANCHOR-NOT-STATED`
 
 **Discovery** (from Phase 4, additive only)
 `NEW-RULE`, `NEW-PATTERN`, `NEW-TRIGGER`, `NEW-REFERENCE`, `SKILL-UPDATE`

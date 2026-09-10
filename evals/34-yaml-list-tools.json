@@ -5,12 +5,23 @@
     "kind": "claude-tree",
     "dir": "tests/fixtures/yaml-list-tools",
     "needs_home_override": false,
-    "scanners": ["validate-skills", "scan-graph"]
+    "scanners": [
+      "validate-skills",
+      "scan-graph"
+    ]
   },
-  "grader": { "method": "code" },
+  "grader": {
+    "method": "code"
+  },
   "success_criteria": {
     "must_detect": [],
-    "must_not_flag": ["BAD-FRONTMATTER-SCHEMA", "UNKNOWN-FRONTMATTER-FIELD"],
+    "must_not_flag": [
+      "ANCHOR-COLLISION",
+      "ANCHOR-NOT-STATED",
+      "BAD-FRONTMATTER-SCHEMA",
+      "NO-UNIQUE-ANCHOR",
+      "UNKNOWN-FRONTMATTER-FIELD"
+    ],
     "expect_clean": true
   },
   "expected_behavior": [

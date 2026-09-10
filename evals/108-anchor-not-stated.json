@@ -1,0 +1,21 @@
+{
+  "id": "108-anchor-not-stated",
+  "command": "claude-markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/embedded-secret",
+    "needs_home_override": false,
+    "scanners": ["validate-skills"]
+  },
+  "grader": { "method": "code" },
+  "success_criteria": {
+    "must_detect": [
+      { "tag": "ANCHOR-NOT-STATED", "path_substring": "leaky: owns unique anchor token(s) (api)" }
+    ],
+    "must_not_flag": ["NO-UNIQUE-ANCHOR", "ANCHOR-COLLISION"],
+    "expect_clean": false
+  },
+  "expected_behavior": [
+    "validate-skills.sh emits [ANCHOR-NOT-STATED] for skills/leaky: it uniquely owns the anchor token 'api' (from 'billing API') but its 'Use when ...' trigger sentence never names it"
+  ]
+}

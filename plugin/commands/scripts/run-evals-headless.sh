@@ -4,7 +4,8 @@
 # can't grade: weak descriptions, thin CLAUDE.md, autonomy-gate compliance).
 #
 # For each evals/*.json with grader.method == "llm-rubric", HEALTH_CHECK_EVAL_RUNS times:
-#   1. Build a throwaway $HOME whose .claude IS the fixture tree PLUS a copy of
+#   1. Build a throwaway $HOME whose .claude IS the fixture tree (stored on
+#      disk as dot-claude/, materialized here as .claude/) PLUS a copy of
 #      the command, its scripts and references (so /claude-markdown-health-check
 #      resolves and scans ONLY the fixture — never the dev's real ~/.claude).
 #   2. Snapshot the fixture tree (sha256, excluding the .cache carve-out).
@@ -19,6 +20,8 @@
 #   HEALTH_CHECK_EVAL_RUNS=N    runs per case (default 1; >=3 smooths LLM noise)
 #   HEALTH_CHECK_EVAL_EFFORT=L  pass --effort L (low|medium|high) — workaround for
 #                               a headless thinking-block API error at high effort
+#   HEALTH_CHECK_JUDGE_MODEL=M  model for the grading call (default haiku)
+#   HEALTH_CHECK_JUDGE_EFFORT=L effort for the grading call (default low)
 #
 # Prereqs: `claude` CLI on PATH and authenticated; `jq`. Uses
 # --dangerously-skip-permissions because every target is a throwaway fixture.
@@ -45,6 +48,13 @@ eff=()
 [ -n "${HEALTH_CHECK_EVAL_EFFORT:-}" ] && eff=(--effort "$HEALTH_CHECK_EVAL_EFFORT")
 runs=${HEALTH_CHECK_EVAL_RUNS:-1}
 
+# The judge only classifies one report against one rubric as PASS/FAIL — no tools,
+# no repo access — but it runs once per graded run per case, so it dominates call
+# count while contributing the least reasoning. Pin it small and cheap here rather
+# than inheriting whatever model the ambient session happens to use.
+judge_model="${HEALTH_CHECK_JUDGE_MODEL:-haiku}"
+judge_eff=(--effort "${HEALTH_CHECK_JUDGE_EFFORT:-low}")
+
 prompt='Run the /claude-markdown-health-check audit on this environment in DEEP mode (comprehensive — run every phase, including the skill semantic audit and the CLAUDE.md content-quality checks). Print ONLY the final health report (Phase 24). Do NOT run the Phase 25 post-report menu and do NOT call AskUserQuestion. Do NOT edit, write, move, or delete any file.'
 
 pass=0; fail=0; err=0
@@ -63,7 +73,10 @@ for f in "$EVALS"/*.json; do
     for ((r=1; r<=runs; r++)); do
         tmp=$(mktemp -d)
         mkdir -p "$tmp/.claude/commands/scripts" "$tmp/.claude/claude-markdown-health-check/references" "$tmp/.claude/.cache" "$tmp/work"
-        cp -r "$ROOT/$dir/.claude/." "$tmp/.claude/" 2>/dev/null
+        # Fixtures store their config tree on disk as dot-claude/ (not .claude/)
+        # so Claude Code's lazy nested-skills discovery never registers a
+        # fixture's SKILL.md as a live skill in this repo; materialize it here.
+        cp -r "$ROOT/$dir/dot-claude/." "$tmp/.claude/" 2>/dev/null
         cp "$CMD_MD" "$tmp/.claude/commands/" 2>/dev/null
         cp "$PLUGIN"/commands/scripts/*.sh "$tmp/.claude/commands/scripts/" 2>/dev/null
         # References go to the make-install location (top-level), NOT under
@@ -94,7 +107,8 @@ for f in "$EVALS"/*.json; do
         wrote=0; [ "$before" != "$after_pre" ] && wrote=1
 
         judge=$(printf 'You are grading an audit report against a rubric. Reason briefly, then on the LAST line output exactly PASS or FAIL.\n\n<rubric>\n%s\n</rubric>\n\n<report>\n%s\n</report>\n' \
-                    "$rubric" "$report" | claude -p --dangerously-skip-permissions 2>/dev/null)
+                    "$rubric" "$report" | claude -p --dangerously-skip-permissions \
+                        --model "$judge_model" "${judge_eff[@]}" 2>/dev/null)
         rubric_pass=0
         echo "$judge" | grep -qiE '\bPASS\b' && ! echo "$judge" | tail -1 | grep -qiE '\bFAIL\b' && rubric_pass=1
 

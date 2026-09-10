@@ -1,0 +1,22 @@
+{
+  "id": "117-anchor-comma-in-token",
+  "command": "claude-markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/anchor-comma-token",
+    "needs_home_override": false,
+    "scanners": ["validate-skills"]
+  },
+  "grader": { "method": "code" },
+  "success_criteria": {
+    "must_detect": [],
+    "must_not_flag": ["NO-UNIQUE-ANCHOR", "ANCHOR-NOT-STATED", "ANCHOR-COLLISION"],
+    "expect_clean": true
+  },
+  "expected_behavior": [
+    "regression for the --anchors JSON comma-split bug: the JSON export used to join tokens with `paste -sd, -` and let jq re-split on \",\", so a single backticked literal containing an internal comma (`mvn clean install, then deploy`) was corrupted into two array entries",
+    "skills/one's description ('Use for `mvn clean install, then deploy` invocations when the user asks about releases.') names one multi-word token that itself contains a comma; skills/two exists only to give the ownership table a second skill, anchored on the unrelated token `prettier`",
+    "`validate-skills.sh --anchors` on this fixture must report {\"one\": [\"mvn clean install, then deploy\"], \"two\": [\"prettier\"]} — one token, not two",
+    "because ownership is counted on the whole (unsplit) token, one's multi-word token is correctly unique and already named in its own 'Use for `...`' trigger sentence, so neither NO-UNIQUE-ANCHOR, ANCHOR-NOT-STATED, nor ANCHOR-COLLISION may fire for either skill"
+  ]
+}

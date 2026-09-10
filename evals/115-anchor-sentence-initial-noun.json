@@ -1,0 +1,23 @@
+{
+  "id": "115-anchor-sentence-initial-noun",
+  "command": "claude-markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/anchor-initial-noun",
+    "needs_home_override": false,
+    "scanners": ["validate-skills"]
+  },
+  "grader": { "method": "code" },
+  "success_criteria": {
+    "must_detect": [
+      { "tag": "ANCHOR-NOT-STATED", "path_substring": "wikitool: owns unique anchor token(s) (confluence)" }
+    ],
+    "must_not_flag": ["NO-UNIQUE-ANCHOR", "ANCHOR-COLLISION"],
+    "expect_clean": false
+  },
+  "expected_behavior": [
+    "regression for the sentence-initial proper-noun bug: ANCHOR_PROPER_NOUN_RE required a lowercase word + whitespace before the capital, so a description that LEADS with a product name never captured it",
+    "skills/wikitool's description ('Confluence page operations for the team wiki.') leads with the product name 'Confluence' and states no trigger sentence",
+    "`--anchors` must report wikitool owning 'confluence' (previously []), and the scan must emit [ANCHOR-NOT-STATED] (hygiene: it owns a real anchor but never states it in a trigger sentence) rather than the wrong [ERROR] [NO-UNIQUE-ANCHOR] (structural: it owns nothing) the bug used to produce"
+  ]
+}

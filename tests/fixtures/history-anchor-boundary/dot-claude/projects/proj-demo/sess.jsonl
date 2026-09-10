@@ -1,0 +1,9 @@
+{"sessionId":"sess-ci-decoy","timestamp":"__TS_RECENT__","type":"user","message":{"content":"we should diff pom.xmlbackup against head"}}
+{"sessionId":"sess-ci-hit","timestamp":"__TS_RECENT__","type":"user","message":{"content":"please check pom.xml before merging"}}
+{"sessionId":"sess-ci-hit","timestamp":"__TS_RECENT_PLUS10__","type":"assistant","message":{"content":[{"type":"tool_use","name":"Skill","input":{"skill":"ci-skill","args":""}}]}}
+{"sessionId":"sess-ext-decoy","timestamp":"__TS_RECENT__","type":"user","message":{"content":"the export is my.logxx file"}}
+{"sessionId":"sess-ext-hit","timestamp":"__TS_RECENT__","type":"user","message":{"content":"please decrypt call.logx now"}}
+{"sessionId":"sess-ext-hit","timestamp":"__TS_RECENT_PLUS10__","type":"assistant","message":{"content":[{"type":"tool_use","name":"Skill","input":{"skill":"ext-skill","args":""}}]}}
+{"sessionId":"sess-hyphen-decoy","timestamp":"__TS_RECENT__","type":"user","message":{"content":"we should ng builder this project"}}
+{"sessionId":"sess-hyphen-hit","timestamp":"__TS_RECENT__","type":"user","message":{"content":"please run ng build now"}}
+{"sessionId":"sess-hyphen-hit","timestamp":"__TS_RECENT_PLUS10__","type":"assistant","message":{"content":[{"type":"tool_use","name":"Skill","input":{"skill":"hyphen-skill","args":""}}]}}

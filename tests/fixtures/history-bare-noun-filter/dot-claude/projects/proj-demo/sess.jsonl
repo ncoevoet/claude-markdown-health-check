@@ -1,0 +1,4 @@
+{"sessionId":"sess-noun","timestamp":"__TS_RECENT__","type":"user","message":{"content":"please check the gadget settings"}}
+{"sessionId":"sess-noun","timestamp":"__TS_RECENT_PLUS10__","type":"assistant","message":{"content":[{"type":"tool_use","name":"Skill","input":{"skill":"noun-skill","args":""}}]}}
+{"sessionId":"sess-artifact","timestamp":"__TS_RECENT__","type":"user","message":{"content":"please handle the export.bpmn workflow"}}
+{"sessionId":"sess-artifact","timestamp":"__TS_RECENT_PLUS10__","type":"assistant","message":{"content":[{"type":"tool_use","name":"Skill","input":{"skill":"artifact-skill","args":""}}]}}

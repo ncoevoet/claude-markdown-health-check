@@ -1,0 +1,22 @@
+{
+  "id": "112-anchor-multiword-unique",
+  "command": "claude-markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/anchor-multiword-unique",
+    "needs_home_override": false,
+    "scanners": ["validate-skills"]
+  },
+  "grader": { "method": "code" },
+  "success_criteria": {
+    "must_detect": [],
+    "must_not_flag": ["NO-UNIQUE-ANCHOR", "ANCHOR-COLLISION", "ANCHOR-NOT-STATED"],
+    "expect_clean": true
+  },
+  "expected_behavior": [
+    "regression for the ownership-count bug where uniq -c's own leading 'COUNT TOKEN' output was re-split on bare whitespace: a multi-word backticked token (`mvn clean install`) smeared across awk fields ($2 became only 'mvn'), so its true owner count of 1 was never matched and the token fell through to the shared bucket",
+    "skills/one's description names `mvn clean install` in a 'Use for ...' trigger sentence and no other skill claims that token; skills/two exists solely to give the ownership table a second skill to compare against, anchored on the unrelated single-word token `prettier`",
+    "`validate-skills.sh --anchors` on this fixture must report {\"one\": [\"mvn clean install\"], \"two\": [\"prettier\"]} — the multi-word token is correctly attributed to its sole owner",
+    "because ownership is now counted correctly, one's unique multi-word token must NOT trigger NO-UNIQUE-ANCHOR (it is not structurally un-anchorable) or ANCHOR-COLLISION (its trigger sentence's token is not shared); the token is also already named in the trigger sentence, so ANCHOR-NOT-STATED must not fire either"
+  ]
+}
