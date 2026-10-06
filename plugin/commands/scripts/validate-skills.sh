@@ -168,8 +168,7 @@ LISTING_BUDGET_FRACTION_DEFAULT="0.01"
 # (e.g. "scans ~/.claude/projects/*.jsonl", "reads .claude/plugins/installed_plugins.json").
 # These are not chained skill references, so they are exempt from CHAINED-REF; genuine
 # cross-component links (.claude/skills/<other>/…, .claude/commands/<other>) still fire.
-# shellcheck disable=SC2088  # the leading ~ is a literal regex char (matches "~/.claude/"), not a path to expand
-CLAUDE_RUNTIME_PATHS_RE='~/\.claude/|\.claude/(projects|plugins|\.?cache|telemetry|usage-data|logs|statsig|todos|shell-snapshots|backups|ide)|\.claude/\.(credentials|claude)|\.claude\.json'
+CLAUDE_RUNTIME_PATHS_RE='[~]/\.claude/|\.claude/(projects|plugins|\.?cache|telemetry|usage-data|logs|statsig|todos|shell-snapshots|backups|ide)|\.claude/\.(credentials|claude)|\.claude\.json'
 
 red()    { printf '\033[0;31m%s\033[0m\n' "$1"; }
 yellow() { printf '\033[0;33m%s\033[0m\n' "$1"; }
@@ -906,9 +905,8 @@ check_json_valid() {
 # Resolve a ".claude/<rest>" or "~/.claude/<rest>" reference to its on-disk path.
 # A bare .claude/ is scope-relative ($CLAUDE_DIR); a ~/.claude/ is the user tree.
 _resolve_dotclaude() {
-    # shellcheck disable=SC2088  # the "~/.claude/" pattern is a literal tilde (as written in a settings file), not an expansion
     case "$1" in
-        "~/.claude/"*) printf '%s/%s\n' "$HOME/.claude" "${1#\~/.claude/}" ;;
+        \~/.claude/*)   printf '%s/%s\n' "$HOME/.claude" "${1#\~/.claude/}" ;;
         ".claude/"*)   printf '%s/%s\n' "$CLAUDE_DIR"   "${1#.claude/}" ;;
         *)             printf '%s/%s\n' "$CLAUDE_DIR"   "$1" ;;
     esac
@@ -1010,9 +1008,8 @@ walk_imports() {
     base_dir=$(dirname "$file")
     while IFS= read -r tok; do
         [ -z "$tok" ] && continue
-        # shellcheck disable=SC2088  # the "~/" pattern is a literal tilde from the @import token text, matched not expanded
         case "$tok" in
-            '~/'*) resolved="$HOME/${tok#\~/}" ;;
+            \~/*) resolved="$HOME/${tok#\~/}" ;;
             /*)    resolved="$tok" ;;
             ./*)   resolved="$base_dir/${tok#./}" ;;
             *)     resolved="$base_dir/$tok" ;;
@@ -1213,8 +1210,7 @@ check_memory_stale_refs() {
     while IFS= read -r memf; do
         [ -f "$memf" ] || continue
         disp="projects/${memf#"$CLAUDE_DIR"/projects/}"
-        # shellcheck disable=SC2088  # the "~/.claude/" here is a literal regex matched in the file body, not a path to expand
-        cites=$(grep -oE '~/\.claude/[A-Za-z0-9._/-]+\.(md|sh|json|ts|js)' "$memf" 2>/dev/null | sort -u || true)
+        cites=$(grep -oE '[~]/\.claude/[A-Za-z0-9._/-]+\.(md|sh|json|ts|js)' "$memf" 2>/dev/null | sort -u || true)
         [ -z "$cites" ] && continue
         while IFS= read -r p; do
             [ -z "$p" ] && continue

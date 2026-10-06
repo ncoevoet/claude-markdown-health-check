@@ -94,8 +94,7 @@ log() { printf '[scan-history] %s\n' "$1" >&2; }
 elapsed() { echo $(( $(date +%s) - START_TS )); }
 over_budget() { [ "$(elapsed)" -ge "$TIME_BUDGET" ]; }
 
-# shellcheck disable=SC2089  # this is a jq program (a string literal), not shell
-PER_FILE_FILTER='
+IFS= read -r -d '' PER_FILE_FILTER <<'PER_FILE_FILTER_EOF' || true
 def epoch_of:
     # Real Claude Code transcripts carry millisecond precision
     # ("...SS.mmmZ"), which the builtin fromdateiso8601 cannot parse at all
@@ -121,7 +120,7 @@ def epoch_of:
       end;
 def rejected_text:
     (.content // "") | tostring | ascii_downcase
-    | test("user (doesn'\''t|did not|did not want) (to|).*(proceed|continue)|tool use was rejected|user rejected|permission denied");
+    | test("user (doesn't|did not|did not want) (to|).*(proceed|continue)|tool use was rejected|user rejected|permission denied");
 # Anchor tokens are literal text, not regexes, and some contain regex
 # metacharacters ("." in ".logx"/"pom.xml", "-" in "my-file.txt"). Escape
 # every Oniguruma metacharacter so the token is matched as itself.
@@ -231,7 +230,7 @@ select(. != null) | (epoch_of) as $ts
         )
     else empty end
   else empty end
-'
+PER_FILE_FILTER_EOF
 
 # The caller passes the FULL output path, never a directory: two transcripts can
 # share a basename under different project dirs (a resumed/forked session, a
@@ -256,7 +255,6 @@ if [ -n "$ANCHORS_FILE" ] && [ -f "$ANCHORS_FILE" ]; then
 fi
 
 export -f process_jsonl
-# shellcheck disable=SC2090  # PER_FILE_FILTER is a jq program string, exported intentionally
 export PER_FILE_FILTER T_CUTOFF MAX_LINE_BYTES ANCHORS_JSON
 
 collect_jsonl_events() {
@@ -427,12 +425,13 @@ collect_telemetry() {
     [ "$total" = 0 ] && { echo '{}'; return 0; }
     log "scanning $total telemetry files"
 
-    # shellcheck disable=SC2046  # intentional word-split: session jsonl paths have no spaces
+    local tel_files
+    mapfile -t tel_files <"$files_list"
     jq -s '
         [ .[] | .[]? | select(.event_data? != null) | .event_data.event_name ]
         | group_by(.) | map({key:.[0], value:length}) | from_entries
         | {eventCounts:.}
-    ' $(cat "$files_list") 2>/dev/null || echo '{}'
+    ' "${tel_files[@]}" 2>/dev/null || echo '{}'
 }
 
 collect_skill_usage_ledger() {
