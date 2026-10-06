@@ -1,0 +1,6 @@
+{
+  "env": {
+    "OTEL_LOG_USER_PROMPTS": "0",
+    "FOO": "x\nCLAUDE_CONFIG_DIR\t/x"
+  }
+}

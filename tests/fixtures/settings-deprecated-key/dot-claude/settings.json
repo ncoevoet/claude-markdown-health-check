@@ -1,0 +1,7 @@
+{
+  "includeCoAuthoredBy": false,
+  "disableArtifact": true,
+  "keybindingFlavor": "emacs",
+  "voiceEnabled": true,
+  "taskOutputMaxChars": 20000
+}

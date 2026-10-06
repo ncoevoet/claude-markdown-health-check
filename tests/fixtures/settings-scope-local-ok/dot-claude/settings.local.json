@@ -1,0 +1,10 @@
+{
+  "skipDangerousModePermissionPrompt": true,
+  "useAutoModeDuringPlan": true,
+  "env": {
+    "FOO": "1",
+    "OTEL_METRICS_EXPORTER": "none",
+    "OTEL_LOG_USER_PROMPTS": "0",
+    "OTEL_LOG_TOOL_DETAILS": "OFF"
+  }
+}

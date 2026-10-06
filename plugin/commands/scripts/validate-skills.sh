@@ -1111,7 +1111,12 @@ check_settings_security() {
     command -v jq >/dev/null 2>&1 || return 0
     mode=$(jq -r '(.permissions.defaultMode // .defaultMode) // empty' "$json_file" 2>/dev/null)
     if [ "$mode" = "bypassPermissions" ]; then
-        error "[SETTINGS-BYPASS-MODE] $display: defaultMode is \"bypassPermissions\" — every tool call is auto-approved with no prompt"
+        # Since v2.1.257 only user or managed settings can switch it on.
+        if [ "$(_settings_file_scope "$json_file")" = "user" ]; then
+            error "[SETTINGS-BYPASS-MODE] $display: defaultMode is \"bypassPermissions\" — every tool call is auto-approved with no prompt"
+        else
+            warning "[SETTINGS-BYPASS-MODE] $display: defaultMode \"bypassPermissions\" in a project or local file is ignored since v2.1.257 (the session starts in Manual mode) — set it in user or managed settings, or pass --permission-mode"
+        fi
     fi
     if [ "$(jq -r '.enableAllProjectMcpServers // false' "$json_file" 2>/dev/null)" = "true" ]; then
         warning "[SETTINGS-MCP-AUTOAPPROVE] $display: enableAllProjectMcpServers is true — every project MCP server is trusted without review"
@@ -1119,13 +1124,209 @@ check_settings_security() {
     if [ "$(jq -r '.sandbox.disabled // false' "$json_file" 2>/dev/null)" = "true" ]; then
         warning "[SETTINGS-SANDBOX-OFF] $display: sandbox.disabled is true — tool calls run unsandboxed with full filesystem and network access"
     fi
-    if [ "$(jq -r '.permissions.disableAutoMode // false' "$json_file" 2>/dev/null)" != "true" ]; then
+    # autoMode is a user-or-managed key: a project/local autoMode.allow is inert
+    if [ "$(_settings_file_scope "$json_file")" = "user" ] && [ "$(jq -r '.permissions.disableAutoMode // false' "$json_file" 2>/dev/null)" != "true" ]; then
         broad=$(jq -r '(.autoMode.allow // []) | if type=="array" then .[] else empty end' "$json_file" 2>/dev/null \
                 | grep -xE '\*|Bash|Bash\(\*\)' | head -1 || true)
         if [ -n "$broad" ]; then
             warning "[SETTINGS-AUTOMODE-BROAD] $display: autoMode.allow contains '$broad' — auto mode then runs every matching command with no prompt"
         fi
     fi
+}
+
+# --- settings scope (source: settings-reference "Scope" column; refresh recipe in
+# references/permission-hygiene.md "Settings scope table") -----------------------
+# Dotted entries are nested paths. A parent already listed makes its children redundant.
+# Scope "Managed": ignored in user, project and local files (38 keys + the alias allowedMarketplaces = 39 entries)
+SETTINGS_KEYS_MANAGED_ONLY=(allowAllClaudeAiMcps allowClaudeInChromeWithManagedMcp allowedChannelPlugins allowedProviders allowManagedHooksOnly allowManagedMcpServersOnly allowManagedPermissionRulesOnly availableModelsMatch blockedMarketplaces browserExternalPageTools channelsEnabled claudeMd deniedModels disableBrowserExternalNavigation disableCommandPluginSources disableDesktopLocalSessions disableMobileSimulatorTools disableSideloadFlags forceLoginGatewayUrl forceRemoteSettingsRefresh gatewayInternalNetworks managedMcpServers managedSourcesBehavior modelPricing parentSettingsBehavior pluginSuggestionMarketplaces pluginTrustMessage policyHelper requiredMaximumVersion requiredMinimumVersion sandbox.bwrapPath sandbox.filesystem.allowManagedReadPathsOnly sandbox.network.allowManagedDomainsOnly sandbox.socatPath sshHostAllowlist strictKnownMarketplaces allowedMarketplaces strictPluginOnlyCustomization wslInheritsWindowsSettings)
+# Scope "User or managed": ignored in project and local files (25)
+SETTINGS_KEYS_USER_OR_MANAGED=(askUserQuestionTimeout appendPlugins autoContinueAtUsageLimit autoMode bashEditDiffEnabled desktopSessionCleanupPeriodDays dialogExpiry feedbackDrafts footerLinksRegexes modelPicker pluginConfigs prependPlugins processWrapper sandbox.allowAppleEvents sandbox.credentials.allowPlaintextInject sandbox.credentials.awsPairs sandbox.credentials.sigv4 sandbox.filesystem.disabled sandbox.network.strictAllowlist sandbox.network.tlsTerminate sandbox.ripgrep skipAutoPermissionPrompt spellcheck sshConfigs vimInsertModeRemaps)
+# Scope "User, local, or managed": ignored in project files only (4)
+SETTINGS_KEYS_USER_LOCAL_MANAGED=(skipDangerousModePermissionPrompt syncClaudeAiPlugins syncClaudeAiSkills useAutoModeDuringPlan)
+# env variables (matched on the NAME) that project and local settings may not set
+SETTINGS_ENV_DROPPED_PROJECT_RE='^(CLAUDE_CONFIG_DIR|CLAUDE_CODE_TMPDIR|HOME|TMPDIR|TMP|TEMP|XDG_[A-Z0-9_]+|OTEL_LOG_RAW_API_BODIES|ENABLE_BETA_TRACING_DETAILED|BETA_TRACING_ENDPOINT|CLAUDE_CODE_ENABLE_TELEMETRY|CLAUDE_CODE_ENHANCED_TELEMETRY_BETA|ENABLE_ENHANCED_TELEMETRY_BETA|OTEL_(LOGS|METRICS|TRACES)_EXPORTER|OTEL_LOG_(USER_PROMPTS|ASSISTANT_RESPONSES|TOOL_CONTENT|TOOL_DETAILS)|OTEL_EXPORTER_OTLP(_[A-Z0-9]+)*_(ENDPOINT|HEADERS|PROTOCOL|CERTIFICATE|CLIENT_KEY|INSECURE)|OTEL_EXPORTER_PROMETHEUS_(HOST|PORT)|CLAUDE_CODE_PROCESS_WRAPPER|CLAUDE_CODE_SYNC_SKILLS|CLAUDE_CODE_SYNC_PLUGINS|CLAUDE_CODE_PLUGIN_CACHE_DIR|CLAUDE_CODE_PLUGIN_SEED_DIR)$'
+# Windows variable names are case-insensitive: matched with grep -i
+SETTINGS_ENV_DROPPED_WINDOWS_RE='^(SystemRoot|ComSpec|ProgramData|LOCALAPPDATA|PATHEXT|PSModulePath|ProgramFiles([A-Za-z0-9()]*)?)$'
+# ignored from EVERY settings file (user too)
+SETTINGS_ENV_DROPPED_ALL_RE='^(CLAUDE_CODE_REMOTE|CLAUDE_CODE_ACCOUNT_UUID|CLAUDE_CODE_MESSAGING_SOCKET|CLAUDE_CODE_MESSAGING_TOKEN|CLAUDE_CODE_PROJECT_DIR_NAME|CLAUDE_CODE_RESTRICTED|CLAUDE_CODE_DISABLE_POWERSHELL_CMD_RM_DENY|CLAUDE_CODE_DISABLE_DANGEROUS_RM_TIMEOUT|CLAUDE_CODE_DISABLE_SUBSTITUTION_RM_PROMPT|CLAUDE_CODE_DISABLE_INLINE_SHELL_RM_PROMPT)$'
+# The only values project/local settings may still set, because they turn something off
+# (settings-reference "Variables Claude Code ignores in env"; env-vars.md defines off):
+# the three exporter selectors accept exactly `none`; the three OTEL_LOG_* accept 0/false/no/off in any casing.
+SETTINGS_ENV_EXPORTER_RE='^OTEL_(LOGS|METRICS|TRACES)_EXPORTER$'
+SETTINGS_ENV_LOG_RE='^OTEL_LOG_(USER_PROMPTS|TOOL_CONTENT|TOOL_DETAILS)$'
+# Keys that no longer do anything: key<TAB>message, checked in every settings file
+SETTINGS_KEYS_REMOVED='includeCoAuthoredBy	deprecated since v2.0.62 — use attribution (attribution.commit / attribution.pr)
+disableArtifact	deprecated — use enableArtifact (enableArtifact: false replaces disableArtifact: true)
+keybindingFlavor	deprecated since v2.1.261 and has no effect — remove it
+voiceEnabled	deprecated since v2.1.92 — use voice.enabled
+permissionExplainerEnabled	removed in v2.1.257 and has no effect — remove it
+taskOutputMaxChars	removed in v2.1.277 and has no effect — remove it
+teammateDefaultModel	removed in v2.1.234 and has no effect — remove it'
+# Of those, the "Global config" keys also live in ~/.claude.json
+SETTINGS_KEYS_GLOBAL_CONFIG_REMOVED=(permissionExplainerEnabled teammateDefaultModel)
+
+# user | project | local — how the file relates to the tree being audited.
+_settings_file_scope() {
+    local f="$1"
+    if [ "$(readlink -f "$(dirname "$f")" 2>/dev/null)" = "$(readlink -f "$HOME/.claude" 2>/dev/null)" ]; then
+        echo user
+    elif [ "$(basename "$f")" = "settings.local.json" ]; then
+        echo local
+    else
+        echo project
+    fi
+    return 0
+}
+
+# Warn for each dotted key of the given list present in a settings file.
+_settings_scan_keys() { # <file> <display> <scope> <allowed-from label> <key>...
+    local json_file="$1" display="$2" scope="$3" from="$4" k
+    shift 4
+    for k in "$@"; do
+        if jq -e --arg k "$k" 'getpath($k | split(".")) != null' "$json_file" >/dev/null 2>&1; then
+            warning "[SETTINGS-SCOPE-IGNORED] $display: '$k' is ignored in $scope settings — Claude Code reads it only from $from"
+        fi
+    done
+    return 0
+}
+
+check_settings_scope_ignored() {
+    local json_file="$1" display="$2" scope ev val
+    [ -f "$json_file" ] || return 0
+    command -v jq >/dev/null 2>&1 || return 0
+    scope=$(_settings_file_scope "$json_file")
+    _settings_scan_keys "$json_file" "$display" "$scope" "managed settings" "${SETTINGS_KEYS_MANAGED_ONLY[@]}"
+    if [ "$scope" != user ]; then _settings_scan_keys "$json_file" "$display" "$scope" "user or managed settings" "${SETTINGS_KEYS_USER_OR_MANAGED[@]}"; fi
+    if [ "$scope" = project ]; then _settings_scan_keys "$json_file" "$display" "$scope" "user, local or managed settings" "${SETTINGS_KEYS_USER_LOCAL_MANAGED[@]}"; fi
+    # env: variables a checked-out repository may not set (project/local) or nobody may set (all).
+    # Tab/newline in a value would forge extra records, and a key outside the identifier
+    # alphabet (parentheses allowed for ProgramFiles(x86)) is not a variable name at all.
+    while IFS=$'\t' read -r ev val; do
+        [ -z "$ev" ] && continue
+        if printf '%s' "$ev" | grep -qE "$SETTINGS_ENV_DROPPED_ALL_RE"; then
+            warning "[SETTINGS-SCOPE-IGNORED] $display: env.$ev is ignored in every settings file — Claude Code reads it from its launch environment only"
+        elif [ "$scope" != user ] && { printf '%s' "$ev" | grep -qE "$SETTINGS_ENV_DROPPED_PROJECT_RE" || printf '%s' "$ev" | grep -qiE "$SETTINGS_ENV_DROPPED_WINDOWS_RE"; }; then
+            if printf '%s' "$ev" | grep -qE "$SETTINGS_ENV_EXPORTER_RE" && [ "$val" = "none" ]; then
+                continue
+            fi
+            if printf '%s' "$ev" | grep -qE "$SETTINGS_ENV_LOG_RE" && printf '%s' "$val" | grep -qiE '^(0|false|no|off)$'; then
+                continue
+            fi
+            warning "[SETTINGS-SCOPE-IGNORED] $display: env.$ev is dropped in $scope settings — set it in user or managed settings instead"
+        fi
+    done < <(jq -r '(.env // {}) | if type=="object" then to_entries[] | select(.key | test("^[A-Za-z_][A-Za-z0-9_()]*$")) | "\(.key)\t\(.value|tostring|gsub("[\\n\\r\\t]";" "))" else empty end' "$json_file" 2>/dev/null || true)
+    # defaultMode auto only counts from user/managed (bypassPermissions: see check_settings_security)
+    if [ "$scope" != user ]; then
+        val=$(jq -r '(.permissions.defaultMode // .defaultMode) // empty' "$json_file" 2>/dev/null || true)
+        if [ "$val" = "auto" ]; then
+            warning "[SETTINGS-SCOPE-IGNORED] $display: defaultMode \"auto\" does not take effect from $scope settings — set it in ~/.claude/settings.json"
+        fi
+    fi
+    return 0
+}
+
+# --- deprecated / removed keys --------------------------------------------
+check_settings_deprecated_keys() {
+    local json_file="$1" display="$2" k msg
+    [ -f "$json_file" ] || return 0
+    command -v jq >/dev/null 2>&1 || return 0
+    while IFS=$'\t' read -r k msg; do
+        if jq -e --arg k "$k" 'has($k)' "$json_file" >/dev/null 2>&1; then
+            warning "[SETTINGS-DEPRECATED-KEY] $display: '$k' is $msg"
+        fi
+    done <<<"$SETTINGS_KEYS_REMOVED"
+    return 0
+}
+
+# The "Global config" keys live in ~/.claude.json, which is not a settings file: look
+# there too, user tree only (the only tree that reads it).
+check_global_config_removed() {
+    local gc="$HOME/.claude.json" k msg
+    [ -f "$gc" ] || return 0
+    command -v jq >/dev/null 2>&1 || return 0
+    [ "$(readlink -f "$CLAUDE_DIR" 2>/dev/null)" = "$(readlink -f "$HOME/.claude" 2>/dev/null)" ] || return 0
+    while IFS=$'\t' read -r k msg; do
+        case " ${SETTINGS_KEYS_GLOBAL_CONFIG_REMOVED[*]} " in *" $k "*) ;; *) continue ;; esac
+        if jq -e --arg k "$k" 'has($k)' "$gc" >/dev/null 2>&1; then
+            warning "[SETTINGS-DEPRECATED-KEY] .claude.json: '$k' is $msg"
+        fi
+    done <<<"$SETTINGS_KEYS_REMOVED"
+    return 0
+}
+
+# --- claudeMdExcludes -----------------------------------------------------
+# Patterns match absolute paths (memory.md); no tilde expansion is documented, so only
+# `/...` and `**...` are anchored. `**`-leading / absolute globs must also be able to match
+# some CLAUDE.md on disk (project/local files only: a user-scope exclude may target another repo).
+check_claudemd_excludes() {
+    local json_file="$1" display="$2" pat scope root cand d hit have_cands=0
+    local -a cands=()
+    [ -f "$json_file" ] || return 0
+    command -v jq >/dev/null 2>&1 || return 0
+    scope=$(_settings_file_scope "$json_file")
+    while IFS= read -r pat; do
+        [ -z "$pat" ] && continue
+        case "$pat" in
+            /*|'**'*) ;;
+            *) warning "[CLAUDEMD-EXCLUDE-DEAD] $display: claudeMdExcludes pattern '$pat' is relative — patterns match absolute paths, so it never matches (prefix it with **/)"; continue ;;
+        esac
+        case "$pat" in
+            *[\*\?\[]*)
+                [ "$scope" = user ] && continue
+                # brace expansion is not evaluated here: skip rather than guess
+                case "$pat" in *'{'*) continue ;; esac
+                if [ "$have_cands" -eq 0 ]; then
+                    have_cands=1
+                    root=$(git -C "$(dirname "$CLAUDE_DIR")" rev-parse --show-toplevel 2>/dev/null || true)
+                    [ -n "$root" ] || root=$(dirname "$CLAUDE_DIR")
+                    while IFS= read -r cand; do
+                        [ -n "$cand" ] && cands+=("$cand")
+                    done < <(find "$root" -maxdepth 8 \( -name node_modules -o -name .git \) -prune -o -name CLAUDE.md -type f -print 2>/dev/null || true)
+                    d=$(cd "$root" 2>/dev/null && pwd -P || true)
+                    while [ -n "$d" ] && [ "$d" != "/" ]; do
+                        [ -f "$d/CLAUDE.md" ] && cands+=("$d/CLAUDE.md")
+                        d=$(dirname "$d")
+                    done
+                    [ -f "/CLAUDE.md" ] && cands+=("/CLAUDE.md")
+                    [ -f "$HOME/.claude/CLAUDE.md" ] && cands+=("$HOME/.claude/CLAUDE.md")
+                fi
+                # bash `==` lets `*` cross `/`: deliberately more permissive than the real glob,
+                # so a warning means no file could match
+                hit=0
+                for cand in ${cands[@]+"${cands[@]}"}; do
+                    # the longest-prefix strip leaves nothing only when the whole path matches the glob
+                    if [ -z "${cand##$pat}" ]; then hit=1; break; fi
+                done
+                [ "$hit" -eq 1 ] || warning "[CLAUDEMD-EXCLUDE-DEAD] $display: claudeMdExcludes pattern '$pat' matches no CLAUDE.md on disk"
+                ;;
+            *)
+                [ -e "$pat" ] || warning "[CLAUDEMD-EXCLUDE-DEAD] $display: claudeMdExcludes path '$pat' does not exist on disk"
+                ;;
+        esac
+    done < <(jq -r '(.claudeMdExcludes // []) | if type=="array" then .[] else empty end | select(type=="string")' "$json_file" 2>/dev/null || true)
+    return 0
+}
+
+# --- worktree.sparsePaths -------------------------------------------------
+# sparsePaths entries are repo-root-relative (large-codebases.md). A sparse worktree checks
+# out only the listed directories plus root-level files, so a committed repo-root .claude/
+# vanishes unless listed. Only the tree the worktree actually reads is judged: the repo-root
+# .claude, and only when it is committed.
+check_worktree_sparse() {
+    local json_file="$1" display="$2" root has_claude
+    [ -f "$json_file" ] || return 0
+    command -v jq >/dev/null 2>&1 || return 0
+    [ "$(_settings_file_scope "$json_file")" = user ] && return 0
+    jq -e '(.worktree.sparsePaths // []) | type == "array" and length > 0' "$json_file" >/dev/null 2>&1 || return 0
+    root=$(git -C "$(dirname "$CLAUDE_DIR")" rev-parse --show-toplevel 2>/dev/null || true)
+    [ -n "$root" ] || return 0
+    [ "$(readlink -f "$CLAUDE_DIR" 2>/dev/null)" = "$(readlink -f "$root/.claude" 2>/dev/null)" ] || return 0
+    [ -n "$(git -C "$root" ls-files -- .claude 2>/dev/null | head -n 1 || true)" ] || return 0
+    has_claude=$(jq -r '[.worktree.sparsePaths[] | select(type=="string") | sub("^\\./";"") | sub("/+$";"")] | any(. == ".claude")' "$json_file" 2>/dev/null || echo false)
+    if [ "$has_claude" != "true" ]; then
+        warning "[WORKTREE-SPARSE-NO-CLAUDE] $display: worktree.sparsePaths omits '.claude': sparse worktrees check out only the listed directories plus root-level files, so the committed .claude/settings.json and .claude/rules/ are missing there (large-codebases: include .claude in the list); untracked skills, agents and commands are still read through from the main checkout"
+    fi
+    return 0
 }
 
 # Audit .claude/rules/ path-scoped rule files. A rule with a `paths:` key that
@@ -1932,8 +2133,13 @@ for settings_file in "$CLAUDE_DIR/settings.json" "$CLAUDE_DIR/settings.local.jso
         check_http_hook_env          "$settings_file" "$sdisp"
         check_http_hook_allowlist    "$settings_file" "$sdisp"
         check_settings_security      "$settings_file" "$sdisp"
+        check_settings_scope_ignored   "$settings_file" "$sdisp"
+        check_settings_deprecated_keys "$settings_file" "$sdisp"
+        check_claudemd_excludes        "$settings_file" "$sdisp"
+        check_worktree_sparse          "$settings_file" "$sdisp"
     fi
 done
+check_global_config_removed
 # hooks/hooks.json holds hook definitions but no allowlist of its own, so it is
 # checked against the allowlist merged from the settings files above.
 check_http_hook_allowlist "$CLAUDE_DIR/hooks/hooks.json" "hooks/hooks.json"

@@ -1,0 +1,23 @@
+{
+  "id": "141-settings-scope-local-ok",
+  "command": "claude-markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/settings-scope-local-ok",
+    "needs_home_override": false,
+    "scanners": [
+      "validate-skills"
+    ]
+  },
+  "grader": {
+    "method": "code"
+  },
+  "success_criteria": {
+    "must_detect": [],
+    "must_not_flag": [],
+    "expect_clean": true
+  },
+  "expected_behavior": [
+    "keys allowed in local settings and the documented off values (none for an exporter selector, 0 or OFF for an OTEL_LOG_* variable) are not flagged"
+  ]
+}
