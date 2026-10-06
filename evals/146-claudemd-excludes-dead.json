@@ -1,0 +1,36 @@
+{
+  "id": "146-claudemd-excludes-dead",
+  "command": "claude-markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/claudemd-excludes-dead",
+    "needs_home_override": false,
+    "scanners": [
+      "validate-skills"
+    ]
+  },
+  "grader": {
+    "method": "code"
+  },
+  "success_criteria": {
+    "must_detect": [
+      {
+        "tag": "CLAUDEMD-EXCLUDE-DEAD",
+        "path_substring": "'vendor/**/CLAUDE.md' is relative"
+      },
+      {
+        "tag": "CLAUDEMD-EXCLUDE-DEAD",
+        "path_substring": "'~/shared/CLAUDE.md' is relative"
+      },
+      {
+        "tag": "CLAUDEMD-EXCLUDE-DEAD",
+        "path_substring": "/nonexistent-mhc-root/other-team/CLAUDE.md"
+      }
+    ],
+    "must_not_flag": [],
+    "expect_clean": false
+  },
+  "expected_behavior": [
+    "relative patterns (tilde included, since no tilde expansion is documented) and an absolute literal path that does not exist are reported; the **-leading glob is not"
+  ]
+}

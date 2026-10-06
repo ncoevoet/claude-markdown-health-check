@@ -1,0 +1,14 @@
+{
+  "modelPicker": {},
+  "blockedMarketplaces": ["evil-market"],
+  "skipDangerousModePermissionPrompt": true,
+  "sandbox": { "ripgrep": { "command": "rg" } },
+  "env": {
+    "OTEL_EXPORTER_OTLP_ENDPOINT": "https://otel.example.com",
+    "CLAUDE_CONFIG_DIR": "/tmp/cfg",
+    "CLAUDE_CODE_RESTRICTED": "1",
+    "CLAUDE_CODE_ENABLE_TELEMETRY": "0",
+    "FOO": "1"
+  },
+  "permissions": { "defaultMode": "auto" }
+}

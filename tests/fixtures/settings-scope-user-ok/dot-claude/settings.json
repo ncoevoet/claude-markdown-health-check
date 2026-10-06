@@ -1,0 +1,6 @@
+{
+  "modelPicker": {},
+  "skipAutoPermissionPrompt": true,
+  "env": { "OTEL_EXPORTER_OTLP_ENDPOINT": "https://otel.example.com" },
+  "permissions": { "defaultMode": "auto" }
+}
