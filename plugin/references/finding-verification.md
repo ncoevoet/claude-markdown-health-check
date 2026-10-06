@@ -69,6 +69,8 @@ verified, not fast-pathed), `STALE-THRESHOLD`, `GUIDANCE-FETCH-FAILED`,
 `NO-UNIQUE-ANCHOR`, `ANCHOR-COLLISION`, `ANCHOR-NOT-STATED` (`--anchors` token
 extraction; the tokenizer is the proof, don't re-derive the keyword set here),
 `DESC-XML-TAG`, `WINDOWS-PATH`, `TIME-SENSITIVE`, `VAGUE-NAME`,
+`AGENT-BAD-SCHEMA`, `AGENT-BYPASS-PERMS`, `AGENT-DUP-NAME`, `AGENT-PLUGIN-FORBIDDEN-FIELD`, `AGENT-YAML-UNPARSED`, `CLAUDEIGNORE-NO-EFFECT`, `CLAUDEMD-DEAD-IMPORT`, `CLAUDEMD-EXCLUDE-DEAD`, `HOOK-ENV-LEAK`, `HOOK-EXIT-NONBLOCKING`,
+`HOOK-MATCHER-ARRAY`, `HOOK-MATCHER-BARE-MCP`, `HOOK-MATCHER-CASE`, `HOOK-NO-SHEBANG`, `HOOK-UNSAFE-SHELL`, `IMPORT-TOO-DEEP`, `LOCAL-MD-TRACKED`, `PERM-INERT-RULE`, `RULE-PATH-LOST-ON-COMPACT`, `SETTINGS-DEPRECATED-KEY`, `SETTINGS-SCOPE-IGNORED`, `SKILL-COMPACTION-TRUNCATED`, `SKILL-HIDDEN-BEHAVIOR`, `SKILL-MCP-REFERENCE`, `SKILL-NETWORK-SURFACE`, `WORKTREE-SPARSE-NO-CLAUDE`,
 `RESERVED-WORD-PORTABILITY` (regex checks on skill name, description and prose).
 
 **`scan-graph.sh` (Phase 2 / 11 / 20 / 26 — read from `graph-scan.json`):**
@@ -76,6 +78,11 @@ extraction; the tokenizer is the proof, don't re-derive the keyword set here),
 `MCP-DEPRECATED-TRANSPORT`, `MCP-BAD-DEF`, `MCP-PLAINTEXT-SECRET`, `REF-CIRCULAR`, `REF-TOO-DEEP`, `REF-ORPHAN`,
 `MEMORY-DEAD-LINK`, `MEMORY-ORPHAN-FILE`, `MEMORY-DUP-ENTRY`, `MEMORY-STALE-DATE`,
 `PLUGIN-USERCONFIG-IN-SHELL`, `PLUGIN-MISSING-DEPENDENCY`, `MARKETPLACE-BLOCKED`,
+`EVAL-CASE-NO-GRADER`, `EVAL-NO-SKILL-GRADER`, `MARKETPLACE-DEAD-SOURCE`,
+`MARKETPLACE-NAME-FORMAT`, `MARKETPLACE-NAME-RESERVED`, `MARKETPLACE-UNKNOWN-KEY`, `MCP-MISPLACED`, `MCP-RELATIVE-PATH`, `OUTPUTSTYLE-BAD-YAML`,
+`OUTPUTSTYLE-CASE`, `OUTPUTSTYLE-FORCE-OUTSIDE-PLUGIN`, `OUTPUTSTYLE-UNKNOWN-FIELD`, `PLUGIN-ABS-PATH`, `PLUGIN-BAD-VERSION`, `PLUGIN-DEFAULT-DIR-SHADOWED`,
+`PLUGIN-DISABLED`, `PLUGIN-MISPLACED-DIR`, `PLUGIN-NAME-FORMAT`, `PLUGIN-NAME-LOOKALIKE`, `PLUGIN-NAME-NOT-KEBAB`, `PLUGIN-NO-EVALS`, `PLUGIN-PATH-ESCAPE`,
+`PLUGIN-RESERVED-NAME`, `PLUGIN-STRICT-OBJECT-UNKNOWN-KEY`, `PLUGIN-UNKNOWN-KEY`,
 `OUTPUTSTYLE-MISSING`.
 
 **`scan-history.sh` (Phase 7 / 9 / 15 / 16 / 19 / 22 / 23 — metric-derived):**
@@ -126,7 +133,7 @@ re-grepped and saw it — not that it seems true.
 | `STALE-REMINDER` | 14 | Quote the `reminders` entry AND show the skill instruction it contradicts, OR show the file it names no longer resolves. |
 | `SKILL-LOW-RELEVANCE` | 6 | Show the description-keyword grep against the project tree returned zero hits (advisory — tolerate FPs, but still cite the zero). |
 | `SKILL-DUPLICATE-DOMAIN` | 6 | Cite the keyword-set Jaccard ≥ 0.6 between the two named skills. |
-| `NEW-RULE` / `NEW-PATTERN` / `NEW-TRIGGER` / `NEW-REFERENCE` / `SKILL-UPDATE` | 4 | Additive Discovery items grounded in the **session transcript**, not the tree. Keep only if you can quote the session turn (the user correction, the repeated request, the applied external lookup). No transcript evidence → drop; never invent a Discovery item from the tree alone. |
+| `NEW-RULE` / `NEW-PATTERN` / `NEW-TRIGGER` / `NEW-REFERENCE` / `SKILL-UPDATE` | 4 | Additive Discovery items grounded in the **session transcript**, not the tree. Keep only if you can quote the session turn (the user correction, the repeated request, the applied external lookup). No transcript evidence → drop; never invent a Discovery item from the tree alone. **Exempt:** the script-emitted Discovery tags `SKILL-NETWORK-SURFACE`, `SKILL-HIDDEN-BEHAVIOR`, `SKILL-MCP-REFERENCE`, `RULE-PATH-LOST-ON-COMPACT` and `PLUGIN-NO-EVALS` are deterministic (fast-path above): they need no transcript evidence, are never dropped for lacking it, and are reported in the trailing Suggestions section as `🔵 idea`. |
 
 `SKILL-BUDGET-OVERFLOW` straddles: the char total is script-derived
 (`validate-skills.sh --listing-cost`) → fast-path the **number**; but if the finding

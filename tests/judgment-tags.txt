@@ -1,0 +1,4 @@
+# Tags emitted by a deterministic script but intentionally verified by the orchestrator
+# rather than fast-pathed in plugin/references/finding-verification.md.
+# One tag per line. Adding a tag requires a `# reason` comment line directly above it.
+# Empty on purpose: every emitted tag is fast-pathed. The gate fails on an entry no script emits.

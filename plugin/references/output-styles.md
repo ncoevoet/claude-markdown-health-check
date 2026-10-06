@@ -26,7 +26,7 @@ Filter the findings array on `.phase == 26`.
 | Tag | Condition | Tier |
 |---|---|---|
 | `OUTPUTSTYLE-MISSING` | `settings.json#outputStyle` names no style: not a built-in and no `output-styles/*.md` with that file name or frontmatter `name:` | Critical |
-| `OUTPUTSTYLE-CASE` | the value equals a built-in or a style name only case-insensitively (`explanatory`): Claude Code falls back to Default | Structural |
+| `OUTPUTSTYLE-CASE` | the value equals a built-in or a style name except for letter case (`explanatory`): Claude Code falls back to Default | Structural |
 | `OUTPUTSTYLE-BAD-YAML` | frontmatter never closes, has a tab-indented line, or an unquoted value containing `: `; the style loads under its file name with no fields (heuristic, not a YAML parser) | Structural |
 | `OUTPUTSTYLE-UNKNOWN-FIELD` | a frontmatter key outside `name`, `description`, `keep-coding-instructions`, `force-for-plugin`; ignored silently (did-you-mean for `keep_coding_instructions`) | Hygiene |
 | `OUTPUTSTYLE-FORCE-OUTSIDE-PLUGIN` | `force-for-plugin` in a style of a tree that is not a plugin root: inert | Hygiene |

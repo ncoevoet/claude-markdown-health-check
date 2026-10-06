@@ -5,7 +5,9 @@
 # portability; thresholds
 # re-checked against the live docs with no drift — name 64 / desc 1024 / skill
 # 500 lines / memory 200 lines+25600 bytes / listing 1% & 8000 floor & 1536 entry /
-# hook timeouts 600/30/60 + UserPromptSubmit 30):
+# hook timeouts per event: command/http/mcp_tool 600, but 30 on UserPromptSubmit/
+# PreModelSwitch/PostModelSwitch and 10 on MessageDisplay; prompt 30; agent 60;
+# SessionEnd capped at 60):
 #   https://platform.claude.com/docs/en/agents-and-tools/agent-skills/best-practices
 #   https://code.claude.com/docs/en/skills
 #   https://code.claude.com/docs/en/memory
@@ -1361,8 +1363,9 @@ check_http_hook_allowlist() {
         matched=0
         while IFS= read -r pat; do
             [ -z "$pat" ] && continue
-            # shellcheck disable=SC2254  # the allowlist entry IS a glob — * is the documented wildcard
-            case "$url" in $pat) matched=1; break ;; esac
+            # the allowlist entry IS a glob (* is the documented wildcard): stripping the whole
+            # URL with it leaves nothing exactly when it matches
+            [ -z "${url##$pat}" ] && { matched=1; break; }
         done <<<"$HTTP_URL_ALLOWLIST"
         [ "$matched" -eq 1 ] && continue
         warning "[HOOK-HTTP-BLOCKED] $display: http hook url '$url' matches no allowedHttpHookUrls pattern — Claude Code blocks it, so the hook never runs"

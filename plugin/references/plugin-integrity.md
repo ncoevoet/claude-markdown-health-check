@@ -63,6 +63,12 @@ Emit nothing when X=Y=Z=0.
 8. `PLUGIN-MISSING-DEPENDENCY` → `/plugin install <dependency>`, or drop the entry if the plugin no longer needs it.
 9. `PLUGIN-USERCONFIG-IN-SHELL` → read the value from `CLAUDE_PLUGIN_OPTION_<KEY>` in the script, or move the command to the exec form and pass the value through `args`.
 10. `PLUGIN-DISABLED` → `/plugin uninstall <name>` to reclaim disk if the plugin is unused, or `/plugin enable <name>` if it was parked by mistake. Intentionally-disabled plugins are a legitimate state — this is a polish-tier nudge, not a defect.
+11. `MCP-MISPLACED` → move the servers into a project-root `.mcp.json` (under `mcpServers`), or into the plugin's own `.mcp.json`; Claude Code never reads the misplaced file.
+12. `PLUGIN-RESERVED-NAME` → rename the plugin; names that pass as Anthropic's own are reserved.
+13. `PLUGIN-NAME-FORMAT` → rename the plugin to lower-case letters, digits and hyphens, with no spaces, `@`, `:`, path separators or control characters.
+14. `MARKETPLACE-NAME-FORMAT` → rename the marketplace (letters, digits, `.`, `_`, `-`; start alphanumeric; no `..`), then update every `plugin@marketplace` reference.
+15. `MARKETPLACE-NAME-RESERVED` → rename the marketplace off the reserved list, then update every `plugin@marketplace` reference.
+16. `EVAL-CASE-NO-GRADER` → add a `graders/*.md` file or a non-empty `graders:` list in `case.yaml` to the case; `claude plugin eval` cannot load it otherwise.
 
 ## Refreshing the manifest key sets
 

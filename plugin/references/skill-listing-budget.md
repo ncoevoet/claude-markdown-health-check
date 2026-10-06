@@ -46,6 +46,10 @@ When `SKILL-BUDGET-OVERFLOW` fires, the report's "Skill Listing Budget" block MU
 
 When `SKILL-DUPLICATE-DOMAIN` fires, propose merging or deleting one of the pair instead of disabling — duplicates are a design issue, not a budget issue. Overlapping siblings are a recall tax independent of budget: merging two has been measured to raise combined observed recall 0.68 → 0.84 with neither description getting smarter. Prefer merge over delete when both have real usage history (`skill-usage-metrics.md`) — deleting the less-used one discards capability instead of consolidating it.
 
+## Cross-check at runtime
+
+The script's cost is a static estimate. To compare it with what Claude Code itself measures, run `claude plugin details <name>` ("Show a plugin's component inventory and projected token cost") for a plugin, or `/skill-doctor` inside a session ("Show what each of your skills costs in context and how often it gets used"). `/skill-doctor` needs Claude Code v2.1.252 or later and is unavailable in sessions that skip feature-flag fetching. Treat a large gap between the two as a reason to re-check the script's assumptions, not as a finding.
+
 ## Report block (emitted from Phase 24)
 
 ```
