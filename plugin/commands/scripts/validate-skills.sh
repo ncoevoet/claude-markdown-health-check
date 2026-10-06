@@ -16,6 +16,10 @@
 
 set -euo pipefail
 
+# Shared helpers (path normalisers, manifest walker) — ships beside this script.
+# shellcheck source=lib-common.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib-common.sh"
+
 # Target a `.claude/`-style directory. Resolution order:
 #   1) explicit first positional arg (`validate-skills.sh /path/to/.claude`)
 #   2) $CLAUDE_DIR env var
@@ -394,23 +398,6 @@ _skill_body_bytes() {
     _md_body "$1" | wc -c | tr -d '[:space:]'
 }
 
-# Lexical path normalisation, pure bash (realpath is not portable to macOS). Splits on /,
-# skips "." and empty segments, ".." pops one; never touches the filesystem.
-_mhc_lexpath() {
-    local seg out=""
-    local -a parts=()
-    IFS=/ read -ra parts <<< "$1" || true
-    for seg in "${parts[@]+"${parts[@]}"}"; do
-        case "$seg" in
-            ""|.) ;;
-            ..) out="${out%/*}" ;;
-            *) out="$out/$seg" ;;
-        esac
-    done
-    printf '%s\n' "${out:-/}"
-    return 0
-}
-
 # Prints a short reason when the frontmatter of $1 cannot parse as YAML, else nothing.
 frontmatter_unparsed_reason() {
     awk '
@@ -469,23 +456,6 @@ _plugin_net_risk() {
     return 0
 }
 
-# Manifest entries (string or array) of <key> in plugin.json, relative and inside the plugin:
-# "./x" -> x, "." -> "." ; absolute or ".." entries are skipped (PLUGIN-PATH-ESCAPE territory).
-_plugin_manifest_entries() {
-    local manifest="$1/.claude-plugin/plugin.json" e
-    [ -f "$manifest" ] || return 0
-    while IFS= read -r e; do
-        e="${e#./}"
-        e="${e%/}"
-        case "$e" in
-            /*|..|../*|*/..|*/../*) continue ;;
-            "") e="." ;;
-        esac
-        printf '%s\n' "$e"
-    done < <(jq -r --arg k "$2" '(.[$k] // empty) | if type == "string" then [.] elif type == "array" then . else [] end | .[] | strings' "$manifest" 2>/dev/null || true)
-    return 0
-}
-
 # One installed plugin: its skills (default skills/ plus manifest `skills` roots) and commands.
 # Args: <plugin-name> <physical-root>
 _plugin_skill_risk_scan() {
@@ -533,7 +503,7 @@ _plugin_skill_risk_scan() {
 # reach (Discovery). User tree only: the user's own skills are exempt, installed plugins are not.
 check_plugin_skill_risk() {
     local ip_file="$HOME/.claude/plugins/installed_plugins.json" pname ip root
-    [ "$(readlink -f "$CLAUDE_DIR" 2>/dev/null)" = "$(readlink -f "$HOME/.claude" 2>/dev/null)" ] || return 0
+    _mhc_same_path "$CLAUDE_DIR" "$HOME/.claude" || return 0
     [ -f "$ip_file" ] || return 0
     command -v jq >/dev/null 2>&1 || return 0
     while IFS=$'\t' read -r pname ip; do
@@ -1104,7 +1074,7 @@ check_settings_guide_refs() {
 check_mcp_preapproved_live() {
     local mcp_file display keys="" strs="" f srv
     command -v jq >/dev/null 2>&1 || return 0
-    if [ "$(readlink -f "$CLAUDE_DIR" 2>/dev/null)" = "$(readlink -f "$HOME/.claude" 2>/dev/null)" ]; then
+    if _mhc_same_path "$CLAUDE_DIR" "$HOME/.claude"; then
         mcp_file="$HOME/.claude.json"; display=".claude.json"
     else
         mcp_file="$(dirname "$(readlink -f "$CLAUDE_DIR")")/.mcp.json"; display=".mcp.json"
@@ -1157,7 +1127,7 @@ check_inert_permission_rules() {
 # its entries into `Read` deny rules." Project tree only: the user tree is skipped.
 check_claudeignore() {
     local root
-    [ "$(readlink -f "$CLAUDE_DIR" 2>/dev/null)" = "$(readlink -f "$HOME/.claude" 2>/dev/null)" ] && return 0
+    _mhc_same_path "$CLAUDE_DIR" "$HOME/.claude" && return 0
     root=$(dirname "$(readlink -f "$CLAUDE_DIR")")
     if [ -f "$root/.claudeignore" ]; then
         warning "[CLAUDEIGNORE-NO-EFFECT] .claudeignore: Claude Code does not read a .claudeignore file — move its entries into permissions.deny Read(...) rules"
@@ -1441,7 +1411,7 @@ SETTINGS_KEYS_GLOBAL_CONFIG_REMOVED=(permissionExplainerEnabled teammateDefaultM
 # user | project | local — how the file relates to the tree being audited.
 _settings_file_scope() {
     local f="$1"
-    if [ "$(readlink -f "$(dirname "$f")" 2>/dev/null)" = "$(readlink -f "$HOME/.claude" 2>/dev/null)" ]; then
+    if _mhc_same_path "$(dirname "$f")" "$HOME/.claude"; then
         echo user
     elif [ "$(basename "$f")" = "settings.local.json" ]; then
         echo local
@@ -1517,7 +1487,7 @@ check_global_config_removed() {
     local gc="$HOME/.claude.json" k msg
     [ -f "$gc" ] || return 0
     command -v jq >/dev/null 2>&1 || return 0
-    [ "$(readlink -f "$CLAUDE_DIR" 2>/dev/null)" = "$(readlink -f "$HOME/.claude" 2>/dev/null)" ] || return 0
+    _mhc_same_path "$CLAUDE_DIR" "$HOME/.claude" || return 0
     while IFS=$'\t' read -r k msg; do
         case " ${SETTINGS_KEYS_GLOBAL_CONFIG_REMOVED[*]} " in *" $k "*) ;; *) continue ;; esac
         if jq -e --arg k "$k" 'has($k)' "$gc" >/dev/null 2>&1; then
@@ -1600,7 +1570,7 @@ check_worktree_sparse() {
     jq -e '(.worktree.sparsePaths // []) | type == "array" and length > 0' "$json_file" >/dev/null 2>&1 || return 0
     root=$(git -C "$(dirname "$CLAUDE_DIR")" rev-parse --show-toplevel 2>/dev/null || true)
     [ -n "$root" ] || return 0
-    [ "$(readlink -f "$CLAUDE_DIR" 2>/dev/null)" = "$(readlink -f "$root/.claude" 2>/dev/null)" ] || return 0
+    _mhc_same_path "$CLAUDE_DIR" "$root/.claude" || return 0
     [ -n "$(git -C "$root" ls-files -- .claude 2>/dev/null | head -n 1 || true)" ] || return 0
     has_claude=$(jq -r '[.worktree.sparsePaths[] | select(type=="string") | sub("^\\./";"") | sub("/+$";"")] | any(. == ".claude")' "$json_file" 2>/dev/null || echo false)
     if [ "$has_claude" != "true" ]; then
