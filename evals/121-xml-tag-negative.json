@@ -1,0 +1,28 @@
+{
+  "id": "121-xml-tag-negative",
+  "command": "claude-markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/desc-xml-tag-negative",
+    "needs_home_override": false,
+    "scanners": [
+      "validate-skills"
+    ]
+  },
+  "grader": {
+    "method": "code"
+  },
+  "success_criteria": {
+    "must_detect": [],
+    "must_not_flag": [
+      "DESC-XML-TAG"
+    ],
+    "expect_clean": false
+  },
+  "expected_behavior": [
+    "comparison operators such as x<y and y>z or a < b > c in a description are not XML tags",
+    "validate-skills.sh does not emit [DESC-XML-TAG]",
+    "a commands/<x>.md description containing <arg> is exempt: the check is skill-only",
+    "x<y, z>w (comparison operators, not a generic type) is not a tag"
+  ]
+}

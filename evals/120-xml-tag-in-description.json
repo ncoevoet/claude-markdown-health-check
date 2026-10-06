@@ -1,0 +1,58 @@
+{
+  "id": "120-xml-tag-in-description",
+  "command": "claude-markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/desc-xml-tag",
+    "needs_home_override": false,
+    "scanners": [
+      "validate-skills"
+    ]
+  },
+  "grader": {
+    "method": "code"
+  },
+  "success_criteria": {
+    "must_detect": [
+      {
+        "tag": "DESC-XML-TAG",
+        "path_substring": "demo/SKILL.md"
+      },
+      {
+        "tag": "DESC-XML-TAG",
+        "path_substring": "breaks/SKILL.md"
+      },
+      {
+        "tag": "DESC-XML-TAG",
+        "path_substring": "example/SKILL.md"
+      },
+      {
+        "tag": "DESC-XML-TAG",
+        "path_substring": "mapk/SKILL.md"
+      },
+      {
+        "tag": "DESC-XML-TAG",
+        "path_substring": "mapk-spaced/SKILL.md"
+      },
+      {
+        "tag": "DESC-XML-TAG",
+        "path_substring": "folded/SKILL.md"
+      }
+    ],
+    "must_not_flag": [
+      "WINDOWS-PATH",
+      "TIME-SENSITIVE",
+      "VAGUE-NAME",
+      "RESERVED-WORD-PORTABILITY",
+      "DESC-TOO-SHORT",
+      "THIRD-PERSON"
+    ],
+    "expect_clean": false
+  },
+  "expected_behavior": [
+    "validate-skills.sh emits [DESC-XML-TAG] as an error when a skill description contains an XML-style tag",
+    "the finding names the skill",
+    "self-closing tags with whitespace (<br />), tags with name=\"value\" attributes, and generic types (Map<K,V>, Map<K, V>) are tags",
+    "a tag that sits on a plain-scalar continuation line of the description is still found"
+  ]
+}

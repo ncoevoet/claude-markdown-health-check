@@ -1,0 +1,20 @@
+{
+  "id": "124-windows-path",
+  "command": "claude-markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/windows-path",
+    "needs_home_override": false,
+    "scanners": ["validate-skills"]
+  },
+  "grader": { "method": "code" },
+  "success_criteria": {
+    "must_detect": [{ "tag": "WINDOWS-PATH", "path_substring": "SKILL.md" }],
+    "must_not_flag": ["VAGUE-NAME", "TIME-SENSITIVE"],
+    "expect_clean": false
+  },
+  "expected_behavior": [
+    "validate-skills.sh emits [WINDOWS-PATH] for a backslash path such as scripts\\helper.py in prose",
+    "escapes like a\\nb.txt in prose can also match; this is an accepted rare false positive"
+  ]
+}

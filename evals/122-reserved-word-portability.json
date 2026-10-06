@@ -1,0 +1,20 @@
+{
+  "id": "122-reserved-word-portability",
+  "command": "claude-markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/reserved-word-portability",
+    "needs_home_override": false,
+    "scanners": ["validate-skills"]
+  },
+  "grader": { "method": "code" },
+  "success_criteria": {
+    "must_detect": [{ "tag": "RESERVED-WORD-PORTABILITY", "path_substring": "claude-formatter" }],
+    "must_not_flag": ["RESERVED-NAME", "BAD-NAME", "NAME-MISMATCH", "VAGUE-NAME"],
+    "expect_clean": false
+  },
+  "expected_behavior": [
+    "validate-skills.sh emits a Hygiene [RESERVED-WORD-PORTABILITY] warning for a skill name containing claude or anthropic (case-insensitive substring)",
+    "the legal name is not an error: RESERVED-NAME and BAD-NAME stay silent"
+  ]
+}

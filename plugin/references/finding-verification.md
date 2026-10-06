@@ -67,7 +67,9 @@ script-owned — the orchestrator only relays them; never re-ground them here:
 missing `.claude/…` path; the judgment behaviour-contradiction slice below is
 verified, not fast-pathed), `STALE-THRESHOLD`, `GUIDANCE-FETCH-FAILED`,
 `NO-UNIQUE-ANCHOR`, `ANCHOR-COLLISION`, `ANCHOR-NOT-STATED` (`--anchors` token
-extraction; the tokenizer is the proof, don't re-derive the keyword set here).
+extraction; the tokenizer is the proof, don't re-derive the keyword set here),
+`DESC-XML-TAG`, `WINDOWS-PATH`, `TIME-SENSITIVE`, `VAGUE-NAME`,
+`RESERVED-WORD-PORTABILITY` (regex checks on skill name, description and prose).
 
 **`scan-graph.sh` (Phase 2 / 11 / 20 / 26 — read from `graph-scan.json`):**
 `PLUGIN-BROKEN-REF`, `PLUGIN-MISSING-MANIFEST`, `PLUGIN-VERSION-DRIFT`,

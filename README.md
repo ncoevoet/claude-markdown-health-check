@@ -1,7 +1,7 @@
 # /claude-markdown-health-check
 
 [![CI](https://github.com/ncoevoet/claude-markdown-health-check/actions/workflows/ci.yml/badge.svg)](https://github.com/ncoevoet/claude-markdown-health-check/actions/workflows/ci.yml)
-[![version](https://img.shields.io/badge/version-0.18.0-blue)](plugin/.claude-plugin/plugin.json)
+[![version](https://img.shields.io/badge/version-0.19.0-blue)](plugin/.claude-plugin/plugin.json)
 [![license](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Claude Code plugin](https://img.shields.io/badge/Claude%20Code-plugin-8A2BE2)](https://code.claude.com/docs/en/plugins)
 
@@ -23,7 +23,7 @@ A scorecard with a letter grade, an always-on per-file CLAUDE.md score, and find
 
 | Area | Examples of findings |
 |---|---|
-| **Skills** | missing or oversized `description`, frontmatter `name` ≠ directory, triggers that don't match real usage, oversized `SKILL.md` with no `references/`, dead internal paths |
+| **Skills** | missing or oversized `description`, frontmatter `name` ≠ directory, triggers that don't match real usage, oversized `SKILL.md` with no `references/`, dead internal paths, XML tags / reserved words in names, Windows paths, time-sensitive wording, vague names |
 | **Context engineering** | prose that is mostly shouted absolutes (`NEVER` / `MUST` / `DO NOT`) where judgement would do, the same directive repeated verbatim across CLAUDE.md and a skill, and directives that contradict each other across files |
 | **Skill-listing budget** | cumulative `description` + `when_to_use` block exceeding Claude Code's 1%-of-context budget; low-relevance and duplicate-domain skills |
 | **Skill usage** | dormant skills (no fires in 30d), never-fired skills, misfiring skills (loaded but no follow-through), orphan ledger entries |
@@ -235,7 +235,7 @@ Two layers, following Anthropic's [develop-tests](https://platform.claude.com/do
   HEALTH_CHECK_EVAL_RUNS=3 make evals   # majority vote to smooth LLM noise
   ```
 
-Cases live in `evals/*.json` (104 cases: 92 `grader.method: code` + 12 `llm-rubric`; numbered 01–105 with 43 & 50 retired and 91 used twice); fixtures in `tests/fixtures/`. 
+Cases live in `evals/*.json` (126 cases: 114 `grader.method: code` + 12 `llm-rubric`; numbered 01–128 with 43, 50 & 113 unused and 91 used twice); fixtures in `tests/fixtures/`. 
 
 Tags are the stable machine contract, so the code-graded cases are immune to report-format changes. CI (`.github/workflows/ci.yml`) runs shellcheck + `bash -n` + the anonymization gate + eval-schema validation + the deterministic suite + the history aggregation suite on every push; it does **not** run the token-spending LLM evals. Every real-world miss or false positive should become a new case.
 
@@ -317,7 +317,9 @@ project by Ásgeir Thor Johnson, found four defects that are fixed here:
   budget even though Claude Code keeps their description out of context entirely
   (backported as-is, so the commit carries their authorship)
 - `RESERVED-NAME` matched `anthropic` and `claude` as substrings of a skill name, which
-  the docs do not reserve — it now matches the one name they do, the `synced` folder
+  the docs do not reserve — it now matches the one name they do, the `synced` folder; the portability concern
+  (the API / claude.ai upload rejects these words) has its own Hygiene tag,
+  `RESERVED-WORD-PORTABILITY`
 - the 40-char `description` floor was reported as a schema violation; the docs set no
   minimum, so it is now a Hygiene advisory
 - the plugin shipped its whole repository to every user cache, and `references/` nested

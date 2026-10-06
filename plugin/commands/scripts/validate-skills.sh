@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # validate-skills.sh — Deterministic compliance checks for .claude/ ecosystem
-# Based on Anthropic's official best practices (verified 2026-05-28; thresholds
+# Based on Anthropic's official best practices (verified 2026-10-06; adds XML tags in
+# descriptions, Windows paths, time-sensitive wording, vague names and reserved-word
+# portability; thresholds
 # re-checked against the live docs with no drift — name 64 / desc 1024 / skill
 # 500 lines / memory 200 lines+25600 bytes / listing 1% & 8000 floor & 1536 entry /
 # hook timeouts 600/30/60 + UserPromptSubmit 30):
@@ -61,6 +63,27 @@ REF_TOC_THRESHOLD=100
 CLAUDE_MD_MAX_LINES=200
 IMPORT_MAX_DEPTH=4
 RESERVED_SKILL_DIR="synced"
+# Agent Skills best-practices checks. Skill-only (is_skill_md=1): command files
+# legitimately carry <arg> placeholders and are not uploadable skills.
+# Generic skill names / non-descriptive reference filenames (digits required so
+# notes.md and misc.md stay out of scope).
+VAGUE_SKILL_NAME_RE='^(helpers?|utils?|tools?|documents?|data|files?)$'
+VAGUE_REF_NAME_RE='^(doc|file)[0-9]+\.md$'
+# Case-insensitive SUBSTRING (grep -Ei): the docs say a name may not "contain" these.
+RESERVED_WORD_RE='anthropic|claude'
+# Tags: bare (<b>, </b>), self-closing with optional whitespace (<br />), with
+# name="v" / name='v' / name=v attributes (<example name="a">), and generic types
+# with a comma list (Map<K,V>, Map<K, V>; not followed by an identifier char so
+# `x<y, z>w` stays out). `x<y and y>z` and `a < b > c` do not match.
+DESC_XML_TAG_RE="</?[A-Za-z][A-Za-z0-9_:-]*([[:space:]]+[A-Za-z_:][A-Za-z0-9_:.-]*=(\"[^\"]*\"|'[^']*'|[^[:space:]\"'<>=/]+))*[[:space:]]*/?>"
+DESC_GENERIC_RE='[A-Za-z_][A-Za-z0-9_]*<[A-Za-z_][A-Za-z0-9_.]*(,[[:space:]]*[A-Za-z_][A-Za-z0-9_.]*)+>([^A-Za-z0-9_]|$)'
+# A backslash path with a file extension (scripts\helper.py). Segment 2 must start
+# alphanumeric so markdown escapes like snake\_case.py do not match.
+WINDOWS_PATH_RE='[A-Za-z0-9_.-]+\\[A-Za-z0-9][A-Za-z0-9_.-]*\.[A-Za-z0-9]{1,5}\b'
+# before/after/until/as of/since <Month> [day,] <YYYY>, or day-first. Used with grep -Ei.
+# Exact full month names or the 3-letter abbreviations, optional dot ("Marching" is no month).
+TIME_MONTH='(jan(uary)?|feb(ruary)?|mar(ch)?|apr(il)?|may|june?|july?|aug(ust)?|sep(tember)?|oct(ober)?|nov(ember)?|dec(ember)?)\.?'
+TIME_SENSITIVE_RE='\b(before|after|until|as +of|since) +('"$TIME_MONTH"' +([0-9]{1,2},? +)?[0-9]{4}|[0-9]{1,2} +'"$TIME_MONTH"' +[0-9]{4})\b'
 KNOWN_FRONTMATTER_FIELDS=("name" "description" "when_to_use" "allowed-tools" "disallowed-tools" "argument-hint" "arguments" "model" "color" "user-invocable" "disable-model-invocation" "effort" "context" "agent" "hooks" "paths" "shell" "hide-from-slash-command-tool" "background" "metadata" "license" "compatibility")
 MODEL_WHITELIST_RE='^(opus|sonnet|haiku|fable|inherit|claude-(opus|sonnet|haiku|fable)-[0-9])'
 # enforceAvailableModels (settings.json, then settings.local.json overriding): when
@@ -164,7 +187,8 @@ ok()      { printf '  [OK]  %s\n' "$1"; }
 
 extract_field() {
     # extract_field <file> <field-name> -> prints the value. Joins a multi-line
-    # YAML block scalar / wrapped value with spaces; prints "" when absent.
+    # YAML block scalar / wrapped value with spaces, and folds the indented
+    # continuation lines of a plain scalar; prints "" when absent.
     local file="$1" field="$2"
     awk -v key="$field" '
         /^---[[:space:]]*$/ { if (infm) { if (cap) print val; exit } infm = 1; next }
@@ -183,7 +207,7 @@ extract_field() {
             if (v == "" || v == "|" || v == ">" || v == "|-" || v == ">-" || v == "|+" || v == ">+") {
                 cap = 1; val = ""; next
             }
-            print v; exit
+            cap = 1; val = v; next
         }
     ' "$file"
 }
@@ -394,6 +418,12 @@ validate_skill_md() {
         if echo "$desc" | grep -Eq '(\bI\b|\bI'\''ll\b|\bI can\b|\b[Yy]ou can\b|\b[Yy]our\b)'; then
             warning "[THIRD-PERSON] $skill_name: description appears to use first/second person; docs require third person"
         fi
+        # Check: XML-style tags in the description. The docs forbid them: the
+        # description is injected into the system prompt. Any bare tag counts,
+        # including backticked placeholders such as <iid>.
+        if [ "$is_skill_md" = 1 ] && { printf '%s' "$desc" | grep -Eq "$DESC_XML_TAG_RE" || printf '%s' "$desc" | grep -Eq "$DESC_GENERIC_RE"; }; then
+            error "[DESC-XML-TAG] $skill_name: description contains an XML-style tag — the docs forbid XML tags in description (it is injected into the system prompt)"
+        fi
     elif [ "$is_skill_md" = 1 ]; then
         error "[MISSING-DESC] $skill_name: no 'description' in frontmatter (required — without it the skill cannot be auto-routed)"
     fi
@@ -460,12 +490,22 @@ validate_skill_md() {
     # Check: reserved skill directory. The docs reserve exactly one name —
     # the folder `synced`, in any capitalization, in the enterprise, personal
     # and project skill locations. It is the directory that is reserved, not
-    # the frontmatter name, and nothing forbids `anthropic` or `claude`.
+    # the frontmatter name; `anthropic`/`claude` in a name is only a portability
+    # hint (RESERVED-WORD-PORTABILITY, below).
     if [ "$is_skill_md" = 1 ]; then
         local dir_lc
         dir_lc=$(printf '%s' "$dir_name" | tr '[:upper:]' '[:lower:]')
         if [ "$dir_lc" = "$RESERVED_SKILL_DIR" ]; then
             error "[RESERVED-NAME] $skill_name: directory '$dir_name' uses the reserved skill folder name '$RESERVED_SKILL_DIR'"
+        fi
+        # Check: reserved words in the name. Legal in Claude Code, but the Agent
+        # Skills API / claude.ai upload rejects names containing anthropic or claude.
+        if printf '%s' "$name" | grep -Eiq "$RESERVED_WORD_RE"; then
+            warning "[RESERVED-WORD-PORTABILITY] $skill_name: name '$name' contains a reserved word (anthropic/claude) — legal in Claude Code, but rejected when the skill is uploaded to the API or claude.ai"
+        fi
+        # Check: a bare generic word is not a descriptive skill name.
+        if printf '%s' "$name" | grep -Eq "$VAGUE_SKILL_NAME_RE"; then
+            warning "[VAGUE-NAME] $skill_name: name '$name' is a generic word — prefer a specific, descriptive name (e.g. processing-pdfs)"
         fi
     fi
     # Check: a SKILL.md frontmatter name must match its directory name
@@ -509,6 +549,9 @@ validate_skill_md() {
     check_embedded_secrets      "$skill_file" "$skill_name"
     check_unflagged_destructive "$skill_file" "$skill_name"
     check_over_constrained      "$skill_file" "$skill_name"
+    if [ "$is_skill_md" = 1 ]; then
+        check_time_and_paths "$skill_file" "$skill_name"
+    fi
 }
 
 validate_agent_md() {
@@ -1132,6 +1175,65 @@ _body_stream() {
     ' "$1" 2>/dev/null
 }
 
+# Print `NR:text` for prose lines only (line numbers kept, unlike _body_stream).
+# Mode `fence`: skip frontmatter and fenced code (``` and ~~~). Mode `full`: also
+# skip <details> blocks (a single-line <details>...</details> is skipped without
+# setting the flag) and Old patterns / legacy / deprecated sections, which end at
+# the next heading of the same or a higher level.
+_prose_lines() {
+    awk -v mode="$2" '
+        NR == 1 && /^---[[:space:]]*$/ { fm = 1; next }
+        fm { if (/^---[[:space:]]*$/) fm = 0; next }
+        /^[[:space:]]*(```|~~~)/ {
+            # CommonMark: a fence closes only on the same character, at least as
+            # long as the opener, with nothing but whitespace after the run.
+            ln = $0; sub(/^[[:space:]]+/, "", ln)
+            ch = substr(ln, 1, 1); n = 0
+            while (substr(ln, n + 1, 1) == ch) n++
+            if (!fence) { fence = 1; fch = ch; flen = n }
+            else if (ch == fch && n >= flen && substr(ln, n + 1) ~ /^[[:space:]]*$/) fence = 0
+            next
+        }
+        fence { next }
+        mode == "full" {
+            if (/^#+[[:space:]]/) {
+                match($0, /^#+/); lvl = RLENGTH
+                if (legacy && lvl <= legacy_lvl) legacy = 0
+                if (!legacy && tolower($0) ~ /^#+ +(old patterns?|legacy|deprecated)([^a-z0-9_-]|$)/) {
+                    legacy = 1; legacy_lvl = lvl
+                }
+            }
+            if (legacy) next
+            if (/^[[:space:]]*<details/ && /<\/details>/) next
+            if (/^[[:space:]]*<details/) { det = 1; next }
+            if (/<\/details>/) { det = 0; next }
+            if (det) next
+        }
+        { print NR ":" $0 }
+    ' "$1" 2>/dev/null
+}
+
+# Flag backslash paths (WINDOWS-PATH) and date-conditioned wording (TIME-SENSITIVE)
+# in a skill's prose: SKILL.md and its references. One finding per file per tag.
+check_time_and_paths() {
+    local file="$1" display="$2" hit
+    [ -f "$file" ] || return 0
+    # Regex escapes (`doc\d.md`, `^v\d\.json$`) are not paths: strip \d \w \s \b (and
+    # upper-case forms) when not followed by an alphanumeric (`scripts\build.py` stays
+    # a path), and `\.`, before matching.
+    hit=$(_prose_lines "$file" fence \
+          | sed -E ':a;s/\\[dwsbDWSB]([^A-Za-z0-9]|$)/\1/;ta;s/\\\././g' \
+          | grep -E "$WINDOWS_PATH_RE" | head -1 || true)
+    if [ -n "$hit" ]; then
+        warning "[WINDOWS-PATH] $display: Windows-style backslash path at line ${hit%%:*} — use forward slashes (scripts/helper.py)"
+    fi
+    hit=$(_prose_lines "$file" full | grep -Ei "$TIME_SENSITIVE_RE" | head -1 || true)
+    if [ -n "$hit" ]; then
+        warning "[TIME-SENSITIVE] $display: date-conditioned wording at line ${hit%%:*} — it will rot; move legacy behaviour under an 'Old patterns' section"
+    fi
+    return 0
+}
+
 # Flag instruction files whose prose is mostly hard rules. Newer models resolve
 # intent from context; a wall of shouted absolutes forces them to arbitrate
 # conflicting constraints before working, and the guardrails that once earned
@@ -1698,6 +1800,11 @@ for ref_file in "$SKILLS_DIR"/*/references/*.md; do
         fi
     fi
 
+    # Check: non-descriptive reference filename (doc2.md, file1.md).
+    if printf '%s' "$(basename "$ref_file")" | grep -Eiq "$VAGUE_REF_NAME_RE"; then
+        warning "[VAGUE-NAME] $ref_name: reference filename is non-descriptive — name it for its content (form_validation_rules.md, not doc2.md)"
+    fi
+
     # Allow refs to the skill's own data dir (`.claude/<skill_name>/...`),
     # its sibling config files (`.claude/<skill_name>.json`, etc.), and the
     # conventional shared output dir `.claude/reports/` — these are
@@ -1713,6 +1820,7 @@ for ref_file in "$SKILLS_DIR"/*/references/*.md; do
 
     check_embedded_secrets      "$ref_file" "$ref_name"
     check_unflagged_destructive "$ref_file" "$ref_name"
+    check_time_and_paths        "$ref_file" "$ref_name"
 done
 
 # Command-support reference trees (e.g. ~/.claude/review-all/references/).

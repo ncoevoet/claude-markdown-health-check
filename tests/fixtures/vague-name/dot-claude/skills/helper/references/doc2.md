@@ -1,0 +1,3 @@
+# Rules
+
+Keep tables narrow.

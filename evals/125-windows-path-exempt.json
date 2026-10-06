@@ -1,0 +1,27 @@
+{
+  "id": "125-windows-path-exempt",
+  "command": "claude-markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/windows-path-exempt",
+    "needs_home_override": false,
+    "scanners": [
+      "validate-skills"
+    ]
+  },
+  "grader": {
+    "method": "code"
+  },
+  "success_criteria": {
+    "must_detect": [],
+    "must_not_flag": [
+      "WINDOWS-PATH"
+    ],
+    "expect_clean": false
+  },
+  "expected_behavior": [
+    "a backslash path inside a ``` fence or a ~~~ fence is not flagged",
+    "validate-skills.sh does not emit [WINDOWS-PATH]",
+    "regex text such as `doc\\d.md` and `^v\\d.\\d.json$` is not a Windows path"
+  ]
+}
