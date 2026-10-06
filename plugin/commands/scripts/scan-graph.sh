@@ -402,27 +402,142 @@ scan_memory() {
     done < <(find "$mem_root" -mindepth 3 -maxdepth 3 -name 'MEMORY.md' -type f 2>/dev/null)
 }
 
-# Output-style hygiene: a settings `outputStyle` naming a style with no file
-# (and not a built-in) is a dead selection. Built-in styles ship with Claude
-# Code and have no file; documented values are capitalized (e.g. "Explanatory"),
-# so the match is case-insensitive. Runs on any tree.
-OUTPUT_STYLE_BUILTINS="default proactive explanatory learning"
+# Output-style hygiene (Phase 26). Runs on any tree.
+#   OUTPUTSTYLE-MISSING — `outputStyle` names no style: not a built-in, and no
+#                         output-styles/*.md whose frontmatter `name:` (else file name) equals it.
+#   OUTPUTSTYLE-CASE    — the value matches a style only case-insensitively. The settings
+#                         value is case-sensitive, so Claude Code falls back to Default.
+# Built-ins are exactly the documented spellings; lowercase `default` is tolerated because
+# output-styles.md lists `default` among the `/output-style` entries, so it is selected the same way.
+OUTPUT_STYLE_BUILTINS="Default Proactive Concise Explanatory Learning"
+OUTPUT_STYLE_FIELDS="name description keep-coding-instructions force-for-plugin"
+
+# Frontmatter body (between the first two `---` lines); empty when the file has no fence.
+_output_style_frontmatter() {
+    awk 'NR == 1 { if ($0 !~ /^---[[:space:]]*$/) exit; infm = 1; next }
+         infm && /^---[[:space:]]*$/ { exit }
+         infm { print }' "$1" 2>/dev/null
+}
+
+# The style's name: frontmatter `name:` when set, else the file name without .md.
+_output_style_name() {
+    local n
+    n=$(_output_style_frontmatter "$1" | sed -nE 's/^name:[[:space:]]*(.*)$/\1/p' | head -1 \
+        | sed -E 's/[[:space:]]+$//; s/^"(.*)"$/\1/; s/^'"'"'(.*)'"'"'$/\1/' | tr -d '\r')
+    if [ -n "$n" ]; then printf '%s\n' "$n"; else basename "$1" .md; fi
+}
+
+# The style files of one root (a .claude tree or a plugin root). A plugin manifest's
+# `outputStyles` (files or directories, relative, no `..`) REPLACES the default output-styles/ scan.
+_output_style_files() {
+    local root="$1" pj="$1/.claude-plugin/plugin.json" entry p f has=0
+    if [ -f "$pj" ] && jq -e 'has("outputStyles")' "$pj" >/dev/null 2>&1; then
+        has=1
+        while IFS= read -r entry; do
+            case "$entry" in /*|*..*) continue ;; esac
+            p="$root/${entry#./}"
+            if [ -d "$p" ]; then
+                for f in "$p"/*.md; do [ -f "$f" ] && printf '%s\n' "$f"; done
+            elif [ -f "$p" ]; then
+                printf '%s\n' "$p"
+            fi
+        done < <(jq -r '.outputStyles | if type == "array" then .[] else . end | strings' "$pj" 2>/dev/null)
+    fi
+    [ "$has" = 1 ] && return 0
+    for f in "$root"/output-styles/*.md; do [ -f "$f" ] && printf '%s\n' "$f"; done
+    return 0
+}
+
+# Every root whose styles Claude Code would load for this tree: the scanned one, the user's,
+# each ancestor project's up to the repository root (docs: "every .claude/output-styles/
+# between the working directory and the repository root"), and, in the user tree, every
+# installed plugin.
+_output_style_roots() {
+    local d
+    printf '%s\n' "$CLAUDE_DIR" "$USER_TREE"
+    if [ "$IS_USER_TREE" = 1 ] && [ -f "$USER_TREE/plugins/installed_plugins.json" ]; then
+        jq -r '.plugins // {} | to_entries[] | .value[]? | .installPath // empty' \
+            "$USER_TREE/plugins/installed_plugins.json" 2>/dev/null
+    fi
+    d=$(cd "$CLAUDE_DIR/.." 2>/dev/null && pwd -P) || return 0
+    while [ -n "$d" ] && [ "$d" != "/" ]; do
+        printf '%s\n' "$d/.claude"
+        { [ -e "$d/.git" ] || [ "$d" = "$HOME" ]; } && break
+        d=$(dirname "$d")
+    done
+}
+
 scan_output_styles() {
-    local styles_dir="$CLAUDE_DIR/output-styles"
-    local selected="" sf v sel_lc
+    local selected="" sf v root f names="" b hit="" sel_lc b_lc
+    scan_output_style_files
     for sf in "$CLAUDE_DIR/settings.json" "$CLAUDE_DIR/settings.local.json"; do
         [ -f "$sf" ] || continue
         v=$(jq -r '.outputStyle // empty' "$sf" 2>/dev/null)
         [ -n "$v" ] && selected="$v"
     done
     [ -n "$selected" ] || return 0
-    sel_lc=$(printf '%s' "$selected" | tr '[:upper:]' '[:lower:]')
+    [ "$selected" = "default" ] && return 0
     case " $OUTPUT_STYLE_BUILTINS " in
-        *" $sel_lc "*) return 0 ;;
+        *" $selected "*) return 0 ;;
     esac
-    if [ ! -f "$styles_dir/$selected.md" ]; then
-        emit_finding 26 "OUTPUTSTYLE-MISSING" "settings.json" "outputStyle '$selected' has no file at output-styles/$selected.md and is not a built-in style"
+    while IFS= read -r root; do
+        [ -d "$root" ] || continue
+        while IFS= read -r f; do
+            names+="$(_output_style_name "$f")"$'\n'
+        done < <(_output_style_files "$root")
+    done < <(_output_style_roots)
+    if printf '%s' "$names" | grep -qxF -- "$selected"; then
+        return 0
     fi
+    sel_lc=$(printf '%s' "$selected" | tr '[:upper:]' '[:lower:]')
+    for b in $OUTPUT_STYLE_BUILTINS; do
+        b_lc=$(printf '%s' "$b" | tr '[:upper:]' '[:lower:]')
+        [ "$b_lc" = "$sel_lc" ] && hit="$b"
+    done
+    [ -z "$hit" ] && hit=$(printf '%s' "$names" | grep -ixF -- "$selected" | head -1)
+    if [ -n "$hit" ]; then
+        emit_finding 26 "OUTPUTSTYLE-CASE" "settings.json" "outputStyle '$selected' matches style '$hit' only case-insensitively — the value is case-sensitive, so Claude Code falls back to the Default style; write '$hit'"
+    else
+        emit_finding 26 "OUTPUTSTYLE-MISSING" "settings.json" "outputStyle '$selected' names no style: it is not a built-in and no output-styles/*.md has that file name or frontmatter name:"
+    fi
+}
+
+#   OUTPUTSTYLE-UNKNOWN-FIELD       — a frontmatter key outside name/description/keep-coding-instructions/
+#                                     force-for-plugin: ignored without any error.
+#   OUTPUTSTYLE-BAD-YAML            — frontmatter that cannot parse (unclosed fence, tab indent, plain scalar
+#                                     containing `: `): the style loads under its file name with no fields.
+#   OUTPUTSTYLE-FORCE-OUTSIDE-PLUGIN — `force-for-plugin` outside a plugin root is inert.
+# Only the scanned tree's own style files are checked (never the user tree, ancestors or other plugins).
+scan_output_style_files() {
+    local f rel fm key norm want suggestion plugin_root=0
+    [ -f "$CLAUDE_DIR/.claude-plugin/plugin.json" ] && plugin_root=1
+    while IFS= read -r f; do
+        rel="${f#"$CLAUDE_DIR"/}"
+        head -1 "$f" | grep -qE '^---[[:space:]]*$' || continue
+        fm=$(_output_style_frontmatter "$f")
+        if ! sed -n '2,$p' "$f" | grep -qE '^---[[:space:]]*$'; then
+            emit_finding 26 "OUTPUTSTYLE-BAD-YAML" "$rel" "frontmatter fence is never closed — the style loads under its file name with no fields set (run claude --debug to see the parse error)"
+            continue
+        fi
+        if printf '%s\n' "$fm" | grep -qE $'^[ ]*\t' \
+            || printf '%s\n' "$fm" | grep -qE '^[A-Za-z][A-Za-z0-9_-]*:[[:space:]]+[^"'"'"'|>[{#&*!%@`-][^#]*:[[:space:]]'; then
+            emit_finding 26 "OUTPUTSTYLE-BAD-YAML" "$rel" "frontmatter does not parse as YAML (tab indent, or an unquoted value containing ': ') — the style loads under its file name with no fields set"
+            continue
+        fi
+        while IFS= read -r key; do
+            [ -z "$key" ] && continue
+            case " $OUTPUT_STYLE_FIELDS " in *" $key "*) continue ;; esac
+            norm=$(printf '%s' "$key" | tr -d '_-' | tr '[:upper:]' '[:lower:]')
+            suggestion=""
+            for want in $OUTPUT_STYLE_FIELDS; do
+                [ "$(printf '%s' "$want" | tr -d '-')" = "$norm" ] && suggestion=" — did you mean '$want'?"
+            done
+            emit_finding 26 "OUTPUTSTYLE-UNKNOWN-FIELD" "$rel" "frontmatter key '$key' is not an output-style field and is silently ignored$suggestion"
+        done < <(printf '%s\n' "$fm" | sed -nE 's/^([A-Za-z_][A-Za-z0-9_-]*):.*/\1/p')
+        if [ "$plugin_root" = 0 ] && printf '%s\n' "$fm" | grep -qE '^force-for-plugin:'; then
+            emit_finding 26 "OUTPUTSTYLE-FORCE-OUTSIDE-PLUGIN" "$rel" "force-for-plugin only applies to plugin output styles — in a user/project style it has no effect"
+        fi
+    done < <(_output_style_files "$CLAUDE_DIR")
 }
 
 # MCP server hygiene across the project/user MCP config files. Runs on any tree.

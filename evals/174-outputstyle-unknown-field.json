@@ -1,0 +1,19 @@
+{
+  "id": "174-outputstyle-unknown-field",
+  "command": "claude-markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/outputstyle-unknown-field",
+    "needs_home_override": true,
+    "scanners": ["scan-graph"]
+  },
+  "grader": { "method": "code" },
+  "success_criteria": {
+    "must_detect": [ { "tag": "OUTPUTSTYLE-UNKNOWN-FIELD", "path_substring": "keep_coding_instructions" }, { "tag": "OUTPUTSTYLE-UNKNOWN-FIELD", "path_substring": "descripton" } ],
+    "must_not_flag": ["OUTPUTSTYLE-BAD-YAML"],
+    "expect_clean": false
+  },
+  "expected_behavior": [
+    "scan-graph.sh emits [OUTPUTSTYLE-UNKNOWN-FIELD] for keep_coding_instructions (did-you-mean keep-coding-instructions) and the descripton typo; description is valid"
+  ]
+}
