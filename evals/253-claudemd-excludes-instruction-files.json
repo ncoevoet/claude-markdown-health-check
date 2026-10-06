@@ -1,0 +1,19 @@
+{
+  "id": "253-claudemd-excludes-instruction-files",
+  "command": "markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/claudemd-excludes-instruction-files",
+    "needs_home_override": false,
+    "scanners": ["validate-skills"]
+  },
+  "grader": { "method": "code" },
+  "success_criteria": {
+    "must_detect": [],
+    "must_not_flag": ["CLAUDEMD-EXCLUDE-DEAD"],
+    "expect_clean": true
+  },
+  "expected_behavior": [
+    "claudeMdExcludes globs that match a .claude/rules file, AGENTS.md or CLAUDE.local.md are live, not dead"
+  ]
+}
