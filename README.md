@@ -238,7 +238,7 @@ Two layers, following Anthropic's [develop-tests](https://platform.claude.com/do
   HEALTH_CHECK_EVAL_RUNS=3 make evals   # majority vote to smooth LLM noise
   ```
 
-Cases live in `evals/*.json` (221 cases: 209 `grader.method: code` + 12 `llm-rubric`; numbered 01–252 with 32 ids unused — 43, 50, 113, 129, 138–139, 208–209, 218–219, 222–229, 233–239, 243–249 — and 91 used twice); fixtures in `tests/fixtures/`. 
+Cases live in `evals/*.json` (221 cases: 209 `grader.method: code` + 12 `llm-rubric`; numbered 01–252 with 31 ids unused — 43, 50, 113, 138–139, 208–209, 218–219, 222–229, 233–239, 243–249); fixtures in `tests/fixtures/`. 
 
 Tags are the stable machine contract, so the code-graded cases are immune to report-format changes. CI (`.github/workflows/ci.yml`) runs shellcheck + `bash -n` + the anonymization gate + eval-schema validation + the deterministic suite + the history aggregation suite on every push; it does **not** run the token-spending LLM evals. Every real-world miss or false positive should become a new case.
 
@@ -287,10 +287,11 @@ plugin/                                      # the installed tree — a plugin i
     ├── context-coherence.md                 # Phase 27
     ├── finding-verification.md              # Pre-print evidence-grounding gate (judgment findings)
     ├── report-format.md                     # Phase 24 report rendering — domain map + scorecard
-    └── post-report-menu.md                  # Phase 25 menu
+    ├── post-report-menu.md                  # Phase 25 menu
+    └── command-phase-details.md             # Phases 1, 3-23, 26, 27 detail moved out of the command file
 
 evals/                                       # data-driven eval cases (dev-only, never installed)
-├── 01-clean-zero-findings.json … 83-history-signals.json  (71 code + 10 LLM; 43 & 50 retired)
+├── 01-clean-zero-findings.json … 252-eval-skills-root-no-grader.json  (221 cases: 209 code + 12 LLM; 31 ids unused)
 └── README.md                                # eval schema + how to run
 
 tests/                                       # deterministic test suite (dev-only, CI)

@@ -15,7 +15,7 @@ Where this master and a lane section disagree, the master wins only on the point
 Add 35 new deterministic tags (+ behaviour changes to 6 existing tags; see "Overrides to lane sections", which wins over everything else here) covering the 15 survey rows, rename the plugin and command to `markdown-health-check`, register everything in the shared docs, bump to 0.20.0.
 
 Done when ALL hold (the "Final verification gate" below is the executable form):
-1. `bash tests/run.sh` exit 0; `validate-evals.sh` reports **217 case(s) valid** (126 + 91 new evals).
+1. `bash tests/run.sh` exit 0; `validate-evals.sh` reports **221 case(s) valid** (126 + 91 lane evals + 4 later additions: 137, 179, 217, 252).
 2. `shellcheck -S warning plugin/commands/scripts/*.sh` clean.
 3. `claude plugin validate plugin/ --strict` and `claude plugin validate . --strict` exit 0 (both are RED at the tip today: verified, "Plugin name ... is reserved" on `plugin.json` and `marketplace.json plugins[0].name`; only L9 turns them green).
 4. Every emitted tag is registered (corrected one-liner, see Corrections #1).
@@ -137,7 +137,7 @@ This section WINS over SPEC-A, SPEC-B, SPEC-C and over every other section of th
 | L9, L10 | none | 0 | none |
 
 **Totals: 35 new tags (27 + 8), 91 new evals, 126 -> 217 cases (114 -> 205 `code` + 12 `llm-rubric`).** Running case count after each merge, in merge order H0, L1, L2, L3, L4, L6, L5, L7, L7b, L8: 126, 133, 150, 156, 173, 185, 192, 205, 210, 217. Disjointness checked: 130-136, 140-149, 150-154, 155-164, 165-169, 170-178, 180-189, 190-194, 195-199, 200-207, 210-216, 220-221, 230-232, 240-242, 250-251; the tip's highest id is 128. Existing evals edited: 27 (L3), 45 and 101 (L2), 47 (L6).
-Verify (can fail): `ls evals/*.json | wc -l` = 217 after L8; `jq -r .id evals/*.json | sort | uniq -d` prints only the pre-existing `91-*` duplicate; a builder reusing another range's id fails `validate-evals.sh` (`id == stem`) or the uniq check.
+Verify (can fail): `ls evals/*.json | wc -l` = 217 after L8 (221 on the final tree); `jq -r .id evals/*.json | sort | uniq -d` prints nothing (the former `91-plugin-lsp-only-ok` duplicate was renamed to `129-plugin-lsp-only-ok`); a builder reusing another range's id fails `validate-evals.sh` (`id == stem`) or the uniq check.
 
 ### O-H0. Harness pre-lane (owner: orchestrator, one sonnet builder, before the worktrees)
 
@@ -235,7 +235,7 @@ Review A B1: survey row 8 ("shadowed dirs / unknown keys / `..`") had no lane. N
 - **L10-e (review A G6)**: `skill-listing-budget.md` gains a "Cross-check at runtime" paragraph citing `claude plugin details <name>` ("Show a plugin's component inventory and projected token cost", verified with `claude plugin details --help` today) and `/skill-doctor` (commands.md:144 "Show what each of your skills costs in context and how often it gets used"; skills.md:893-897: requires Claude Code v2.1.252 or later, unavailable in sessions that skip feature-flag fetching). Verify: `grep -c 'plugin details' plugin/references/skill-listing-budget.md` >= 1 and `grep -c 'skill-doctor' ...` >= 1 (both 0 at the tip).
 - **L10-f (review B G2, Phase 1 doc fetch)**: command file lines 63-69 (the WebFetch list) gain `https://code.claude.com/docs/en/settings-reference` (the source of the L2 scope tables) and `https://code.claude.com/docs/en/plugins/manifest-reference` (L7/L7b key and name tables). Verify: `sed -n '60,75p' plugin/commands/markdown-health-check.md | grep -c 'settings-reference'` = 1 (0 at the tip).
 - **L10-g (review B G7, command file and script header)**: (1) `:95` (the "UserPromptSubmit defaults to 30s" note) becomes the per-event table: `command|http|mcp_tool` default 600, but 30 on `UserPromptSubmit`, `PreModelSwitch`, `PostModelSwitch` and 10 on `MessageDisplay`; `prompt` 30; `agent` 60; `SessionEnd` capped at 60 (hooks.md "Common fields" `timeout`, quoted in SPEC-A L1). (2) `:279` lists `HOOK-MATCHER-ARRAY`, `HOOK-MATCHER-CASE`, `HOOK-MATCHER-BARE-MCP` as script-relayed. (3) `:283` (Phase 14 `DEAD-MATCHER`): add "NEVER emit `DEAD-MATCHER` for a matcher the script already reports as `HOOK-MATCHER-ARRAY`, `HOOK-MATCHER-CASE` or `HOOK-MATCHER-BARE-MCP`; `DEAD-MATCHER` stays the judgment tag for a regex-path matcher that names no real tool", so nothing is double-reported. (4) The other Phase 14 relay bullets list `SETTINGS-SCOPE-IGNORED`, `SETTINGS-DEPRECATED-KEY`, `CLAUDEMD-EXCLUDE-DEAD`, `WORKTREE-SPARSE-NO-CLAUDE`, `PERM-INERT-RULE`, `CLAUDEIGNORE-NO-EFFECT` as relay-only, and add the intent-judgment note for `SKILL-MCP-REFERENCE` / `RULE-PATH-LOST-ON-COMPACT` ("does the skill's stated purpose need that server?") plus the labelled last-third heuristic from L4-e. (5) `validate-skills.sh` header lines 3-8 (the "hook timeouts 600/30/60 + UserPromptSubmit 30" claim) are rewritten to the per-event defaults and re-dated: the ONLY script edit L10 makes. Verify: `grep -n 'UserPromptSubmit 30' plugin/commands/scripts/validate-skills.sh` is empty (matches at the tip); `sed -n '275,290p' plugin/commands/markdown-health-check.md | grep -c 'HOOK-MATCHER-BARE-MCP'` >= 1.
-- **L10-h**: README counts use the final numbers (217 cases: 205 `code` + 12 `llm-rubric`), recomputed from `ls evals/*.json | wc -l` and `jq -r .grader.method evals/*.json | sort | uniq -c`; the id range and unused-id list are generated from the directory, never typed.
+- **L10-h**: README counts use the final numbers (221 cases: 209 `code` + 12 `llm-rubric`), recomputed from `ls evals/*.json | wc -l` and `jq -r .grader.method evals/*.json | sort | uniq -c`; the id range and unused-id list are generated from the directory, never typed.
 
 ### Merge order and step amendments (supersede Steps 0-2 where they differ)
 
@@ -300,6 +300,8 @@ Gate: new hits vs `/tmp/mhc-baseline`, on the final merged + renamed tree. Anyth
 | `~/work/intraswitch/.claude` | none | all | `outputStyle: "default"` in `settings.local.json` must NOT fire `OUTPUTSTYLE-CASE` (L6 tolerated spelling); no `.mcp.json` at `~/work/intraswitch/` |
 | `~/work/intraswitch/apps/ng/.claude` | `SETTINGS-DEPRECATED-KEY 'includeCoAuthoredBy'` (use `attribution`) | L2 | True positive |
 | `~/work/intraswitch/apps/ng/.claude` | `SKILL-COMPACTION-TRUNCATED e2e-scenario-creator` (24,205 B) | L4 | True positive |
+| `~/work/intraswitch/apps/ng/.claude` | `RULE-PATH-LOST-ON-COMPACT` x5 (every path-scoped rule with a hard directive; context-window.md: drop `paths:` if the rule must survive `/compact`) | L4-e | True positive (Discovery) |
+| `~/.claude` plugin cache (review-all) | `SKILL-MCP-REFERENCE` (`codegraph:codegraph_callers` sits in prose explaining host naming) | L4 | Benign mention (Discovery) |
 | `~/work/intraswitch/apps/ng/.claude` | `MCP-MISPLACED settings.json` (`mcpServers`: chrome-devtools, webstorm sse, angular-cli are ignored; `apps/ng/.mcp.json` declares only angular-cli) | L5 | True positive; report to the user, do not modify their config |
 | repo `plugin/` and repo root (`scan-graph.sh --no-cache .`) | before L9: `PLUGIN-RESERVED-NAME` on `plugin.json` and on `marketplace.json` entry; **after L9: none** | L7 / L9 | True positive, cleared by the rename |
 
@@ -312,7 +314,7 @@ Reporting rule for the user: the three true positives that need their action (`r
 ```
 cd ~/work/claude-markdown-health-check
 bash tests/run.sh                                            # exit 0; ends "ALL TESTS PASSED"
-bash plugin/commands/scripts/validate-evals.sh               # "217 case(s) valid"
+bash plugin/commands/scripts/validate-evals.sh               # "221 case(s) valid" (217 lane evals + 4 later additions: 137, 179, 217, 252)
 shellcheck -S warning plugin/commands/scripts/*.sh           # no output
 claude plugin validate plugin/ --strict                      # exit 0
 claude plugin validate . --strict                            # exit 0
