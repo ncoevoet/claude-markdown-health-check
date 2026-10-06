@@ -1,0 +1,19 @@
+{
+  "id": "167-mcp-misplaced-settings",
+  "command": "claude-markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/mcp-misplaced-settings",
+    "needs_home_override": false,
+    "scanners": ["scan-graph"]
+  },
+  "grader": { "method": "code" },
+  "success_criteria": {
+    "must_detect": [ { "tag": "MCP-MISPLACED", "path_substring": "settings.json" } ],
+    "must_not_flag": [],
+    "expect_clean": false
+  },
+  "expected_behavior": [
+    "scan-graph.sh emits [MCP-MISPLACED] for an mcpServers key in settings.json, which Claude Code does not read"
+  ]
+}

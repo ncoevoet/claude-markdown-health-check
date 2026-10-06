@@ -1,0 +1,19 @@
+{
+  "id": "168-mcp-relative-path",
+  "command": "claude-markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/mcp-relative-path",
+    "needs_home_override": false,
+    "scanners": ["scan-graph"]
+  },
+  "grader": { "method": "code" },
+  "success_criteria": {
+    "must_detect": [ { "tag": "MCP-RELATIVE-PATH", "path_substring": "./server.js" }, { "tag": "MCP-RELATIVE-PATH", "path_substring": "scripts/run.sh" } ],
+    "must_not_flag": ["MCP-MISPLACED"],
+    "expect_clean": false
+  },
+  "expected_behavior": [
+    "scan-graph.sh emits [MCP-RELATIVE-PATH] for the 'local' (./server.js) and 'nested' (scripts/run.sh) servers, and nothing for the npx / absolute-path / ${CLAUDE_PROJECT_DIR} servers"
+  ]
+}

@@ -1,0 +1,4 @@
+{
+  "mcpServers": { "top": { "command": "npx", "args": ["-y", "some-mcp-server"] } },
+  "projects": { "/p": { "mcpServers": { "x": { "command": "/usr/local/bin/tool", "args": ["--config", "/etc/mcp.toml"] } } } }
+}
