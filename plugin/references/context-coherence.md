@@ -1,6 +1,6 @@
 # Context Coherence
 
-Loaded by `/claude-markdown-health-check` Phase 27. Everything the model reads before
+Loaded by `/markdown-health-check` Phase 27. Everything the model reads before
 the user's prompt — CLAUDE.md and its imports, skills, commands, rules, output styles —
 arrives as one assembled document. The other phases audit each file on its own; this one
 judges the assembly.

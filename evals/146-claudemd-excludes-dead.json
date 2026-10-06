@@ -1,6 +1,6 @@
 {
   "id": "146-claudemd-excludes-dead",
-  "command": "claude-markdown-health-check",
+  "command": "markdown-health-check",
   "fixture": {
     "kind": "claude-tree",
     "dir": "tests/fixtures/claudemd-excludes-dead",

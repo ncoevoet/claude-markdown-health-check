@@ -1,6 +1,6 @@
 {
   "id": "180-plugin-name-reserved-prefix",
-  "command": "claude-markdown-health-check",
+  "command": "markdown-health-check",
   "fixture": {
     "kind": "claude-tree",
     "dir": "tests/fixtures/plugin-name-reserved-prefix",

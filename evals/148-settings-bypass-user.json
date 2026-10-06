@@ -1,6 +1,6 @@
 {
   "id": "148-settings-bypass-user",
-  "command": "claude-markdown-health-check",
+  "command": "markdown-health-check",
   "fixture": {
     "kind": "claude-tree",
     "dir": "tests/fixtures/settings-bypass-user",

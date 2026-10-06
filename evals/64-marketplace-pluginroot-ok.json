@@ -1,6 +1,6 @@
 {
   "id": "64-marketplace-pluginroot-ok",
-  "command": "claude-markdown-health-check",
+  "command": "markdown-health-check",
   "fixture": {
     "kind": "claude-tree",
     "dir": "tests/fixtures/marketplace-pluginroot-ok",

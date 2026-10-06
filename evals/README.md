@@ -1,4 +1,4 @@
-# Evals for `/claude-markdown-health-check`
+# Evals for `/markdown-health-check`
 
 Data-driven test cases, following Anthropic's
 [develop-tests](https://platform.claude.com/docs/en/test-and-evaluate/develop-tests)
@@ -19,7 +19,7 @@ Two grading tiers (develop-tests: code-grading > LLM-grading):
 ```jsonc
 {
   "id": "02-dead-ref",
-  "command": "claude-markdown-health-check",
+  "command": "markdown-health-check",
   "fixture": {
     "kind": "claude-tree",            // fixture is tests/fixtures/<dir>/dot-claude, materialized
                                       //       as .claude at run time (never a live-loaded skill)
@@ -34,7 +34,7 @@ Two grading tiers (develop-tests: code-grading > LLM-grading):
     "must_not_flag": [ "MISSING-DESC" ],   // tags that must be ABSENT (false-positive guard)
     "expect_clean": false             // true: the whole tag set must be empty
   },
-  "query": "/claude-markdown-health-check",   // llm-rubric cases
+  "query": "/markdown-health-check",   // llm-rubric cases
   "grader_rubric": "PASS only if ... last line PASS|FAIL",
   "expected_behavior": [ "..." ],
   "expected_not_behavior": [ "..." ],

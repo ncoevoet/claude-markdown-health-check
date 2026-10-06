@@ -1,6 +1,6 @@
 {
   "id": "134-hook-timeout-defaults-ok",
-  "command": "claude-markdown-health-check",
+  "command": "markdown-health-check",
   "fixture": {
     "kind": "claude-tree",
     "dir": "tests/fixtures/hook-timeout-defaults-ok",

@@ -6,7 +6,7 @@
   "description": "Health-check tooling for Claude Code configurations: audits the .claude/ ecosystem for dead references, weak triggers, token bloat, permission drift and memory hygiene.",
   "plugins": [
     {
-      "name": "claude-markdown-health-check",
+      "name": "markdown-health-check",
       "displayName": ".claude/ Health Check",
       "source": "./plugin",
       "version": "0.19.0",

@@ -1,4 +1,4 @@
-# /claude-markdown-health-check
+# /markdown-health-check
 
 [![CI](https://github.com/ncoevoet/claude-markdown-health-check/actions/workflows/ci.yml/badge.svg)](https://github.com/ncoevoet/claude-markdown-health-check/actions/workflows/ci.yml)
 [![version](https://img.shields.io/badge/version-0.19.0-blue)](plugin/.claude-plugin/plugin.json)
@@ -15,7 +15,7 @@ It reports first and waits. Nothing is edited, moved, or deleted until you reply
 
 ## Demo
 
-![/claude-markdown-health-check report](docs/demo.png)
+![/markdown-health-check report](docs/demo.png)
 
 A scorecard with a letter grade, an always-on per-file CLAUDE.md score, and findings grouped by area — each a plain-language line led by a colored 🔴 / 🟠 / 🟡 / 🔵 badge with the trailing machine tag. It reports first and waits — nothing is touched until you reply.
 
@@ -57,7 +57,7 @@ Thresholds — line counts, description caps, budget fractions, hook timeouts �
 - 🟡 **polish** (Hygiene) — cosmetic / token efficiency (over-broad patterns, stale reminders, low cache-hit, unused declared tools)
 - 🔵 **idea** (Discovery) — additive suggestions surfaced from the current session (new rules, patterns, triggers)
 
-The chat report groups findings by **area** (Skills, Hooks, Settings & Permissions, Memory, References, Plugins, CLAUDE.md, …) under a scorecard, each rendered as a plain-language line led by a colored 🔴 / 🟠 / 🟡 badge; the canonical tag stays as a trailing machine code (e.g. ` · DEAD-REF`). When a CLAUDE.md is in scope, its block also carries an always-on per-file score (`score: 88/100 (B) — …`). See [`references/report-format.md`](commands/claude-markdown-health-check/references/report-format.md).
+The chat report groups findings by **area** (Skills, Hooks, Settings & Permissions, Memory, References, Plugins, CLAUDE.md, …) under a scorecard, each rendered as a plain-language line led by a colored 🔴 / 🟠 / 🟡 badge; the canonical tag stays as a trailing machine code (e.g. ` · DEAD-REF`). When a CLAUDE.md is in scope, its block also carries an always-on per-file score (`score: 88/100 (B) — …`). See [`references/report-format.md`](plugin/references/report-format.md).
 
 Before the report prints, every **judgment** finding (the heuristic calls — weak descriptions, orphaned guides, stale CLAUDE.md commands, …) passes an **evidence-grounding gate**: 
 
@@ -75,14 +75,16 @@ In Claude Code, add the marketplace and install:
 
 ```
 /plugin marketplace add ncoevoet/claude-markdown-health-check
-/plugin install claude-markdown-health-check@ncoevoet-health-check
+/plugin install markdown-health-check@ncoevoet-health-check
 ```
 
-`/claude-markdown-health-check` is available right away. 
+`/markdown-health-check` is available right away. 
 
-Update with `/plugin update claude-markdown-health-check@ncoevoet-health-check`, remove with `/plugin uninstall claude-markdown-health-check@ncoevoet-health-check`. 
+Update with `/plugin update markdown-health-check@ncoevoet-health-check`, remove with `/plugin uninstall markdown-health-check@ncoevoet-health-check`. 
 
-CLI equivalents: `claude plugin marketplace add ncoevoet/claude-markdown-health-check` then `claude plugin install claude-markdown-health-check@ncoevoet-health-check`. 
+CLI equivalents: `claude plugin marketplace add ncoevoet/claude-markdown-health-check` then `claude plugin install markdown-health-check@ncoevoet-health-check`. 
+
+Upgrading from <= 0.19.0: the plugin was renamed, so `claude-markdown-health-check@ncoevoet-health-check` no longer resolves; run `/plugin uninstall claude-markdown-health-check@ncoevoet-health-check` then `/plugin install markdown-health-check@ncoevoet-health-check`, and invoke `/markdown-health-check`. The old command name is gone (no alias). `make install` users: run `make uninstall` on the old checkout first.
 
 The plugin is self-contained — the command resolves its scripts and reference docs from `${CLAUDE_PLUGIN_ROOT}`, so `make install` is **not** needed.
 
@@ -98,8 +100,8 @@ make install
 
 `make install` copies five things into `~/.claude/`:
 
-- `commands/claude-markdown-health-check.md` → `~/.claude/commands/`
-- the reference docs → `~/.claude/claude-markdown-health-check/references/`
+- `commands/markdown-health-check.md` → `~/.claude/commands/`
+- the reference docs → `~/.claude/markdown-health-check/references/`
 - `validate-skills.sh` → `~/.claude/commands/scripts/`
 - `scan-graph.sh` → `~/.claude/commands/scripts/`
 - `scan-history.sh` → `~/.claude/commands/scripts/`
@@ -117,7 +119,7 @@ This command works in Claude Code only — it depends on filesystem access and b
 Inside Claude Code:
 
 ```
-/claude-markdown-health-check
+/markdown-health-check
 ```
 
 | Argument | Effect |
@@ -133,13 +135,13 @@ Inside Claude Code:
 Examples:
 
 ```
-/claude-markdown-health-check
-/claude-markdown-health-check quick
-/claude-markdown-health-check deep
-/claude-markdown-health-check --refresh
-/claude-markdown-health-check --compress-bodies
-/claude-markdown-health-check --window-days=7
-/claude-markdown-health-check check that every skill has a Troubleshooting section
+/markdown-health-check
+/markdown-health-check quick
+/markdown-health-check deep
+/markdown-health-check --refresh
+/markdown-health-check --compress-bodies
+/markdown-health-check --window-days=7
+/markdown-health-check check that every skill has a Troubleshooting section
 ```
 
 The report prints in chat. Reply naming the findings to fix and the command applies them; until then it touches nothing.
@@ -171,7 +173,7 @@ The phase sequence runs flat from 1 to 25, renumbered from the previous 5a / 5b 
 
 | Phase | What it does | Depth |
 |---|---|---|
-| 1 — Load Config + Thresholds | Reads optional `markdown-health-check.json`, then fetches skill / memory / settings / hooks limits from the Anthropic docs; caches at `~/.claude/.cache/claude-markdown-health-check-guidance.json` | All |
+| 1 — Load Config + Thresholds | Reads optional `markdown-health-check.json`, then fetches skill / memory / settings / hooks limits from the Anthropic docs; caches at `~/.claude/.cache/markdown-health-check-guidance.json` | All |
 | 2 — Plugin + MCP Integrity | `installed_plugins.json` vs on-disk cache: broken refs, missing manifests, version drift; deprecated `sse` MCP transport in `.mcp.json` | Standard + Deep |
 | 3 — Select Depth | Standard by default, Deep for a large ecosystem, Quick only when you ask for it | All |
 | 4 — Focus + History | Reads the focus message (if any) and mines the current session for recurring bugs, corrections, uncovered patterns | Standard + Deep |
@@ -229,7 +231,7 @@ Two layers, following Anthropic's [develop-tests](https://platform.claude.com/do
   bash tests/run.sh 02   # run one case / id-prefix (deterministic suite only)
   ```
   `tests/run.sh` also runs two release gates first: an **anonymization** check (no real scanned-project names in the published `plugin/`, `evals/`, `tests/fixtures/`, `README.md` — the real blocklist is gitignored, a placeholder ships) and **eval-schema validation** (`validate-evals.sh` asserts every case matches the contract before an expensive run is wasted on a malformed one).
-- **Behavioural (LLM-graded, opt-in, costs tokens).** Runs the full `/claude-markdown-health-check` headless against a fixture to exercise the judgment phases (weak descriptions, thin CLAUDE.md, autonomy-gate compliance) and the evidence-grounding gate — including paired guards (cases 36–41: a referenced guide and a live CLAUDE.md command must _not_ be flagged, while a genuinely-orphaned guide and a missing-script command must _still_ be; case 77: CLAUDE.md self-referential count drift plus the always-on per-file score), graded by an LLM rubric and scored by majority over N runs.
+- **Behavioural (LLM-graded, opt-in, costs tokens).** Runs the full `/markdown-health-check` headless against a fixture to exercise the judgment phases (weak descriptions, thin CLAUDE.md, autonomy-gate compliance) and the evidence-grounding gate — including paired guards (cases 36–41: a referenced guide and a live CLAUDE.md command must _not_ be flagged, while a genuinely-orphaned guide and a missing-script command must _still_ be; case 77: CLAUDE.md self-referential count drift plus the always-on per-file score), graded by an LLM rubric and scored by majority over N runs.
   ```bash
   make evals                            # needs the authenticated `claude` CLI
   HEALTH_CHECK_EVAL_RUNS=3 make evals   # majority vote to smooth LLM noise
@@ -254,7 +256,7 @@ plugin/                                      # the installed tree — a plugin i
 ├── .claude-plugin/plugin.json
 ├── LICENSE
 ├── commands/
-│   ├── claude-markdown-health-check.md      # the slash command (~440 lines, orchestrator)
+│   ├── markdown-health-check.md      # the slash command (~440 lines, orchestrator)
 │   └── scripts/
 │       ├── validate-skills.sh               # deterministic compliance validator (Phase 5)
 │       ├── scan-graph.sh                    # static graph scanner (Phases 2, 11, 20, 26)

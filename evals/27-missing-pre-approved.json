@@ -1,6 +1,6 @@
 {
   "id": "27-missing-pre-approved",
-  "command": "claude-markdown-health-check",
+  "command": "markdown-health-check",
   "fixture": {
     "kind": "claude-tree",
     "dir": "tests/fixtures/missing-pre-approved",

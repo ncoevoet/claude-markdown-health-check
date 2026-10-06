@@ -1,6 +1,6 @@
 {
   "id": "165-mcp-misplaced-claude-dir",
-  "command": "claude-markdown-health-check",
+  "command": "markdown-health-check",
   "fixture": {
     "kind": "claude-tree",
     "dir": "tests/fixtures/mcp-misplaced-claude-dir",

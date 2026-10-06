@@ -1,6 +1,6 @@
 {
   "id": "24-unregistered-hook",
-  "command": "claude-markdown-health-check",
+  "command": "markdown-health-check",
   "fixture": {
     "kind": "claude-tree",
     "dir": "tests/fixtures/unregistered-hook",

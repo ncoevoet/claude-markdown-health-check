@@ -1,6 +1,6 @@
 {
   "id": "173-outputstyle-name-shadowed",
-  "command": "claude-markdown-health-check",
+  "command": "markdown-health-check",
   "fixture": {
     "kind": "claude-tree",
     "dir": "tests/fixtures/outputstyle-name-shadowed",

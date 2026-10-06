@@ -1,6 +1,6 @@
 {
   "id": "57-plugin-bad-version",
-  "command": "claude-markdown-health-check",
+  "command": "markdown-health-check",
   "fixture": {
     "kind": "claude-tree",
     "dir": "tests/fixtures/plugin-bad-version",

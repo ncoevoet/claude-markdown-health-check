@@ -1,6 +1,6 @@
 {
   "id": "117-anchor-comma-in-token",
-  "command": "claude-markdown-health-check",
+  "command": "markdown-health-check",
   "fixture": {
     "kind": "claude-tree",
     "dir": "tests/fixtures/anchor-comma-token",

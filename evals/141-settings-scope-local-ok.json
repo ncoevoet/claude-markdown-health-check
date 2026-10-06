@@ -1,6 +1,6 @@
 {
   "id": "141-settings-scope-local-ok",
-  "command": "claude-markdown-health-check",
+  "command": "markdown-health-check",
   "fixture": {
     "kind": "claude-tree",
     "dir": "tests/fixtures/settings-scope-local-ok",

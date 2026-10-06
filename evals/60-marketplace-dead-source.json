@@ -1,6 +1,6 @@
 {
   "id": "60-marketplace-dead-source",
-  "command": "claude-markdown-health-check",
+  "command": "markdown-health-check",
   "fixture": {
     "kind": "claude-tree",
     "dir": "tests/fixtures/marketplace-dead-source",

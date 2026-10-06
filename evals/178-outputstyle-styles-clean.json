@@ -1,6 +1,6 @@
 {
   "id": "178-outputstyle-styles-clean",
-  "command": "claude-markdown-health-check",
+  "command": "markdown-health-check",
   "fixture": {
     "kind": "claude-tree",
     "dir": "tests/fixtures/outputstyle-styles-clean",

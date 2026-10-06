@@ -1,6 +1,6 @@
 {
   "id": "185-marketplace-name-reserved",
-  "command": "claude-markdown-health-check",
+  "command": "markdown-health-check",
   "fixture": {
     "kind": "claude-tree",
     "dir": "tests/fixtures/marketplace-name-reserved",

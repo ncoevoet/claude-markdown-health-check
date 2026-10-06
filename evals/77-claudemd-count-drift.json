@@ -1,7 +1,7 @@
 {
   "id": "77-claudemd-count-drift",
-  "command": "claude-markdown-health-check",
-  "query": "/claude-markdown-health-check",
+  "command": "markdown-health-check",
+  "query": "/markdown-health-check",
   "fixture": {
     "kind": "claude-tree",
     "dir": "tests/fixtures/claudemd-count-drift",

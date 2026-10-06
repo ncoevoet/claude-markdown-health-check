@@ -1,6 +1,6 @@
 {
   "id": "154-mcp-union-approval",
-  "command": "claude-markdown-health-check",
+  "command": "markdown-health-check",
   "fixture": {
     "kind": "claude-tree",
     "dir": "tests/fixtures/mcp-union-approval",

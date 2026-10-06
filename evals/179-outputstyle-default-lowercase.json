@@ -1,6 +1,6 @@
 {
   "id": "179-outputstyle-default-lowercase",
-  "command": "claude-markdown-health-check",
+  "command": "markdown-health-check",
   "fixture": {
     "kind": "claude-tree",
     "dir": "tests/fixtures/outputstyle-default-lower",

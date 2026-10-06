@@ -16,7 +16,7 @@ if [[ -d "$PWD/.claude" ]]; then PROJECT_DIR="$PWD/.claude"; fi
 
 - `USER_DIR` is always audited.
 - `PROJECT_DIR` is audited if it exists.
-- Every `references/*.md` this command names resolves the same way — first that exists of `${CLAUDE_PLUGIN_ROOT}/references/<name>`, `~/.claude/claude-markdown-health-check/references/<name>`, then the repo copy. Stated once here; the phases just name the file.
+- Every `references/*.md` this command names resolves the same way — first that exists of `${CLAUDE_PLUGIN_ROOT}/references/<name>`, `~/.claude/markdown-health-check/references/<name>`, then the repo copy. Stated once here; the phases just name the file.
 - Findings MUST be prefixed `[user]` or `[project]` so the user knows which tree the issue is in.
 - Phase 5 runs `validate-skills.sh` once per scope. Phase 2/7/11/15/16/19/20/22/23 read the cached scan outputs.
 
@@ -24,7 +24,7 @@ if [[ -d "$PWD/.claude" ]]; then PROJECT_DIR="$PWD/.claude"; fi
 
 - After the report prints, run Phase 25 — present the post-report action menu. Do not apply any fix until the user picks a scope through it.
 - NEVER edit, delete, move, or rename any file before the user picks a menu scope.
-- NEVER write the report (or any copy / summary / "full version" of it) to disk. The chat channel is the only output. (Cache files at `${CLAUDE_PLUGIN_DATA:-~/.claude/.cache}/{claude-markdown-health-check-guidance,graph-scan,history-scan}.json` are internal state, NOT report content — those writes are explicitly allowed.)
+- NEVER write the report (or any copy / summary / "full version" of it) to disk. The chat channel is the only output. (Cache files at `${CLAUDE_PLUGIN_DATA:-~/.claude/.cache}/{markdown-health-check-guidance,graph-scan,history-scan}.json` are internal state, NOT report content — those writes are explicitly allowed.)
 - For `REPURPOSE` items: the destination `references/*.md` MUST be written and the SKILL.md References section MUST be updated BEFORE the source orphan is deleted.
 - Done when: report printed in chat AND user has either named fixes OR explicitly declined further action.
 
@@ -54,7 +54,7 @@ Apply them: `depth`/`quick`/`deep` CLI args override `CFG.depth` in Phase 3; `WI
 Source of truth is the official Anthropic docs. Cache the fetch to avoid 5 round-trips per invocation.
 
 ```bash
-CACHE="${CLAUDE_PLUGIN_DATA:-$HOME/.claude/.cache}/claude-markdown-health-check-guidance.json"
+CACHE="${CLAUDE_PLUGIN_DATA:-$HOME/.claude/.cache}/markdown-health-check-guidance.json"
 mkdir -p "$(dirname "$CACHE")"
 AGE_SEC=$(( $(date +%s) - $(stat -c %Y "$CACHE" 2>/dev/null || echo 0) ))
 TTL_SEC=$(( ${TTL_DAYS:-7} * 86400 ))
@@ -136,7 +136,7 @@ surprise worth guarding against.
 4. Scan recent conversation changes for violations and flag them.
 
 **Conversation history** (always):
-- "Empty" means: zero user/assistant turns BEFORE this `/claude-markdown-health-check` invocation in the current session. The command itself does NOT count as history. If empty, the report MUST include `[OBSERVATION] empty-history: skipping behavioural analysis` — mandatory output.
+- "Empty" means: zero user/assistant turns BEFORE this `/markdown-health-check` invocation in the current session. The command itself does NOT count as history. If empty, the report MUST include `[OBSERVATION] empty-history: skipping behavioural analysis` — mandatory output.
 - Otherwise extract:
   - Recurring bugs/solutions → `NEW-PATTERN`
   - Multi-attempt requests → missing/unclear trigger → `NEW-TRIGGER`

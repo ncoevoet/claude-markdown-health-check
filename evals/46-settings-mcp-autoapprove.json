@@ -1,6 +1,6 @@
 {
   "id": "46-settings-mcp-autoapprove",
-  "command": "claude-markdown-health-check",
+  "command": "markdown-health-check",
   "fixture": {
     "kind": "claude-tree",
     "dir": "tests/fixtures/settings-mcp-autoapprove",

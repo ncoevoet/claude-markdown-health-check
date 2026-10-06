@@ -1,6 +1,6 @@
 {
   "id": "161-plugin-skill-risk",
-  "command": "claude-markdown-health-check",
+  "command": "markdown-health-check",
   "fixture": {
     "kind": "claude-tree",
     "dir": "tests/fixtures/plugin-skill-risk",

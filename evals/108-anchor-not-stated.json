@@ -1,6 +1,6 @@
 {
   "id": "108-anchor-not-stated",
-  "command": "claude-markdown-health-check",
+  "command": "markdown-health-check",
   "fixture": {
     "kind": "claude-tree",
     "dir": "tests/fixtures/embedded-secret",

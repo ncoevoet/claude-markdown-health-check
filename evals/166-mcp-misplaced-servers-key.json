@@ -1,6 +1,6 @@
 {
   "id": "166-mcp-misplaced-servers-key",
-  "command": "claude-markdown-health-check",
+  "command": "markdown-health-check",
   "fixture": {
     "kind": "claude-tree",
     "dir": "tests/fixtures/mcp-misplaced-servers-key",

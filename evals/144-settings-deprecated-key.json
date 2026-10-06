@@ -1,6 +1,6 @@
 {
   "id": "144-settings-deprecated-key",
-  "command": "claude-markdown-health-check",
+  "command": "markdown-health-check",
   "fixture": {
     "kind": "claude-tree",
     "dir": "tests/fixtures/settings-deprecated-key",

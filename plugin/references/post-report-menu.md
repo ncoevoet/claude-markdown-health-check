@@ -1,6 +1,6 @@
 # Post-Report Menu
 
-Loaded by `/claude-markdown-health-check` Phase 25. After the report prints, this turns the passive "wait for the user" step into an explicit action menu.
+Loaded by `/markdown-health-check` Phase 25. After the report prints, this turns the passive "wait for the user" step into an explicit action menu.
 
 ## When to show
 

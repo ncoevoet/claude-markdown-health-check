@@ -1,6 +1,6 @@
 # Finding Verification — evidence-grounding gate
 
-Loaded by `/claude-markdown-health-check` as **step 1 of the Pre-print pass**
+Loaded by `/markdown-health-check` as **step 1 of the Pre-print pass**
 (before tag-canon enforcement). Filters the JUDGMENT findings — the ones the LLM
 phases reason out (Phases 6, 8, 12, 14, 17, 18, 19, 20, 27) — so the report carries only
 findings provable from a concrete artifact. Deterministic / script-relayed

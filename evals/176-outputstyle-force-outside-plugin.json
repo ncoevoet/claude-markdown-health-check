@@ -1,6 +1,6 @@
 {
   "id": "176-outputstyle-force-outside-plugin",
-  "command": "claude-markdown-health-check",
+  "command": "markdown-health-check",
   "fixture": {
     "kind": "claude-tree",
     "dir": "tests/fixtures/outputstyle-force-outside-plugin",

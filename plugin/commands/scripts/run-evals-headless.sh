@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # run-evals-headless.sh — headless, LLM-graded eval runner for the judgment
-# phases of /claude-markdown-health-check (the ones the deterministic suite
+# phases of /markdown-health-check (the ones the deterministic suite
 # can't grade: weak descriptions, thin CLAUDE.md, autonomy-gate compliance).
 #
 # For each evals/*.json with grader.method == "llm-rubric", HEALTH_CHECK_EVAL_RUNS times:
 #   1. Build a throwaway $HOME whose .claude IS the fixture tree (stored on
 #      disk as dot-claude/, materialized here as .claude/) PLUS a copy of
-#      the command, its scripts and references (so /claude-markdown-health-check
+#      the command, its scripts and references (so /markdown-health-check
 #      resolves and scans ONLY the fixture — never the dev's real ~/.claude).
 #   2. Snapshot the fixture tree (sha256, excluding the .cache carve-out).
 #   3. Run the audit headlessly with `claude -p`, report-only.
@@ -38,7 +38,7 @@ HERE="$(cd "$(dirname "$0")" && pwd)"          # commands/scripts
 PLUGIN="$(cd "$HERE/../.." && pwd)"        # plugin/
 ROOT="$(cd "$PLUGIN/.." && pwd)"             # repo root
 EVALS="$ROOT/evals"
-CMD_MD="$PLUGIN/commands/claude-markdown-health-check.md"
+CMD_MD="$PLUGIN/commands/markdown-health-check.md"
 REFS="$PLUGIN/references"
 filter="${1:-}"
 
@@ -83,7 +83,7 @@ judge_model_flag=(); [ -n "$judge_model" ] && judge_model_flag=(--model "$judge_
 judge_effort="${HEALTH_CHECK_JUDGE_EFFORT-low}"
 judge_eff=(); [ -n "$judge_effort" ] && judge_eff=(--effort "$judge_effort")
 
-prompt='Run the /claude-markdown-health-check audit on this environment in DEEP mode (comprehensive — run every phase, including the skill semantic audit and the CLAUDE.md content-quality checks). Print ONLY the final health report (Phase 24). Do NOT run the Phase 25 post-report menu and do NOT call AskUserQuestion. Do NOT edit, write, move, or delete any file.'
+prompt='Run the /markdown-health-check audit on this environment in DEEP mode (comprehensive — run every phase, including the skill semantic audit and the CLAUDE.md content-quality checks). Print ONLY the final health report (Phase 24). Do NOT run the Phase 25 post-report menu and do NOT call AskUserQuestion. Do NOT edit, write, move, or delete any file.'
 
 pass=0; fail=0; err=0
 for f in "$EVALS"/*.json; do
@@ -124,7 +124,7 @@ for f in "$EVALS"/*.json; do
             wrote=$(jq -r '.wrote' "$cache_entry")
         else
             tmp=$(mktemp -d)
-            mkdir -p "$tmp/.claude/commands/scripts" "$tmp/.claude/claude-markdown-health-check/references" "$tmp/.claude/.cache" "$tmp/work"
+            mkdir -p "$tmp/.claude/commands/scripts" "$tmp/.claude/markdown-health-check/references" "$tmp/.claude/.cache" "$tmp/work"
             # Fixtures store their config tree on disk as dot-claude/ (not .claude/)
             # so Claude Code's lazy nested-skills discovery never registers a
             # fixture's SKILL.md as a live skill in this repo; materialize it here.
@@ -134,10 +134,10 @@ for f in "$EVALS"/*.json; do
             # References go to the make-install location (top-level), NOT under
             # commands/<cmd>/references/ — otherwise the audit scans the tool's own
             # references and pollutes the report. The command resolves them via its
-            # ~/.claude/claude-markdown-health-check/references/ fallback path.
-            cp "$REFS"/*.md "$tmp/.claude/claude-markdown-health-check/references/" 2>/dev/null
+            # ~/.claude/markdown-health-check/references/ fallback path.
+            cp "$REFS"/*.md "$tmp/.claude/markdown-health-check/references/" 2>/dev/null
             # Reuse the real guidance cache (thresholds) if present so Phase 1 skips 5 WebFetches.
-            cp "$HOME/.claude/.cache/claude-markdown-health-check-guidance.json" "$tmp/.claude/.cache/" 2>/dev/null || true
+            cp "$HOME/.claude/.cache/markdown-health-check-guidance.json" "$tmp/.claude/.cache/" 2>/dev/null || true
             # Seed OAuth credentials so the headless `claude -p` authenticates under the temp HOME
             # (the temp dir is 0700 and removed after the run).
             cp "$HOME/.claude/.credentials.json" "$tmp/.claude/.credentials.json" 2>/dev/null || true

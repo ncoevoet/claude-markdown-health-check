@@ -1,6 +1,6 @@
 {
   "id": "102-plugin-default-enabled",
-  "command": "claude-markdown-health-check",
+  "command": "markdown-health-check",
   "fixture": {
     "kind": "claude-tree",
     "dir": "tests/fixtures/plugin-default-enabled",

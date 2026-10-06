@@ -1,6 +1,6 @@
 # Skill Listing Budget Audit
 
-Loaded by `/claude-markdown-health-check` Phase 6. Audits whether the cumulative skill-listing block fits Claude Code's runtime budget and proposes remediations.
+Loaded by `/markdown-health-check` Phase 6. Audits whether the cumulative skill-listing block fits Claude Code's runtime budget and proposes remediations.
 
 ## Why this exists
 

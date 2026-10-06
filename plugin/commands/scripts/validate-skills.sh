@@ -226,7 +226,7 @@ ANCHOR_EXT_RE='\.[a-z0-9]{2,6}\b'
 ANCHOR_DOTTED_RE='\b[a-z0-9_-]+\.[a-z0-9]{2,6}\b'
 ANCHOR_BACKTICK_RE='`[^`]+`'
 # Hyphenated/compound lowercase identifiers (`coder-eval`,
-# `claude-markdown-health-check`) read as domain-specific product/artifact
+# `markdown-health-check`) read as domain-specific product/artifact
 # names, not prose — but plenty of ordinary English is hyphenated too
 # ("well-known", "built-in"). Matched lowercase-only (no `-i`) so a
 # Capitalized-Hyphenated run (sentence-initial or not) is left to the

@@ -1,6 +1,6 @@
 {
   "id": "206-settings-global-config-removed",
-  "command": "claude-markdown-health-check",
+  "command": "markdown-health-check",
   "fixture": {
     "kind": "claude-tree",
     "dir": "tests/fixtures/settings-global-config-removed",

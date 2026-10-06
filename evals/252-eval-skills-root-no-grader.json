@@ -1,6 +1,6 @@
 {
   "id": "252-eval-skills-root-no-grader",
-  "command": "claude-markdown-health-check",
+  "command": "markdown-health-check",
   "fixture": {
     "kind": "claude-tree",
     "dir": "tests/fixtures/skills-root-no-grader",

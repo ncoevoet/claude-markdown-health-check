@@ -1,6 +1,6 @@
 {
   "id": "65-ref-bare-sibling",
-  "command": "claude-markdown-health-check",
+  "command": "markdown-health-check",
   "fixture": {
     "kind": "claude-tree",
     "dir": "tests/fixtures/ref-bare-sibling",

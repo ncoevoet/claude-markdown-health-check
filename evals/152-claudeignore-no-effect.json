@@ -1,6 +1,6 @@
 {
   "id": "152-claudeignore-no-effect",
-  "command": "claude-markdown-health-check",
+  "command": "markdown-health-check",
   "fixture": {
     "kind": "claude-tree",
     "dir": "tests/fixtures/claudeignore-no-effect",

@@ -1,6 +1,6 @@
 {
   "id": "110-history-observed-recall-hit",
-  "command": "claude-markdown-health-check",
+  "command": "markdown-health-check",
   "fixture": {
     "kind": "synthetic-jsonl",
     "dir": "tests/fixtures/history-observed-recall-hit",

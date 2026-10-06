@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# validate-evals.sh — schema/validity gate for claude-markdown-health-check eval
+# validate-evals.sh — schema/validity gate for markdown-health-check eval
 # cases. Validates every evals/*.json (skipping README*) against the contract the
 # headless runner (run-evals-headless.sh) and the deterministic suite depend on,
 # so a malformed case is caught cheaply HERE instead of wasting an expensive
@@ -8,7 +8,7 @@
 # Per case (ERROR = fails the gate):
 #   - parses as a JSON object
 #   - id == filename stem
-#   - .command == "claude-markdown-health-check"
+#   - .command == "markdown-health-check"
 #   - fixture.kind == "claude-tree"
 #   - fixture.dir is non-empty, exists on disk, and has a dot-claude/ subtree
 #     (fixtures store their config tree on disk as dot-claude/, not .claude/,
@@ -57,8 +57,8 @@ for f in "$EVALS"/*.json; do
   [ "$(jq -r '.id // empty' "$f")" = "$stem" ] \
     || err "$base: id ('$(jq -r '.id // empty' "$f")') != filename stem ('$stem')"
 
-  [ "$(jq -r '.command // empty' "$f")" = "claude-markdown-health-check" ] \
-    || err "$base: .command != 'claude-markdown-health-check'"
+  [ "$(jq -r '.command // empty' "$f")" = "markdown-health-check" ] \
+    || err "$base: .command != 'markdown-health-check'"
 
   fkind="$(jq -r '.fixture.kind // empty' "$f")"
   case "$fkind" in

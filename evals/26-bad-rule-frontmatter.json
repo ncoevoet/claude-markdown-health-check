@@ -1,6 +1,6 @@
 {
   "id": "26-bad-rule-frontmatter",
-  "command": "claude-markdown-health-check",
+  "command": "markdown-health-check",
   "fixture": {
     "kind": "claude-tree",
     "dir": "tests/fixtures/bad-rule-frontmatter",
