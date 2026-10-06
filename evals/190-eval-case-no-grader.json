@@ -1,0 +1,19 @@
+{
+  "id": "190-eval-case-no-grader",
+  "command": "claude-markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/eval-case-no-grader",
+    "needs_home_override": false,
+    "scanners": ["scan-graph"]
+  },
+  "grader": { "method": "code" },
+  "success_criteria": {
+    "must_detect": [ { "tag": "EVAL-CASE-NO-GRADER", "path_substring": "evals/ungraded" } ],
+    "must_not_flag": ["EVAL-NO-SKILL-GRADER","PLUGIN-NO-EVALS"],
+    "expect_clean": false
+  },
+  "expected_behavior": [
+    "scan-graph.sh emits [EVAL-CASE-NO-GRADER] for evals/ungraded (prompt.md, no graders/ and no case.yaml); the sibling case with graders/skill-fired.md is fine and names the triage skill"
+  ]
+}

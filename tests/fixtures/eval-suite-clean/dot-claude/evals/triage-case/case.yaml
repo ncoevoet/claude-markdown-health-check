@@ -1,0 +1,7 @@
+schema_version: "1.1"
+name: triage-case
+graders:
+  - name: skill-fired
+    type: tool_used
+    tool: Skill
+    input_match: '"skill"\s*:\s*"(?:[\w-]+:)?triage"'

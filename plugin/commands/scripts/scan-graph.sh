@@ -1007,10 +1007,111 @@ scan_plugin_self() {
     fi
 }
 
+# ── L8: plugin eval suite (claude plugin eval) ──────────────────────────────
+# Doc: plugin-evals. A case is a directory under the eval dir holding prompt.md and/or case.yaml;
+# it needs >= 1 grader (graders/<name>.md or a `graders:` entry in case.yaml) or it fails to load.
+#   EVAL-CASE-NO-GRADER  (Structural) — a case directory with no grader.
+#   EVAL-NO-SKILL-GRADER (Hygiene)    — the suite has cases, yet no `type: tool_used` + `tool: Skill`
+#                                       grader names a model-invocable skill of the plugin.
+#   PLUGIN-NO-EVALS      (Discovery)  — plugin ships a model-invocable skill but its eval dir holds no case.
+# Eval dir: experimental.evals (first entry when an array; plain relative dir names, no `..`, optional
+# leading ./) else `evals/`. An unusable manifest value falls back to evals/, as claude plugin eval does.
+# Skill census: `skills/` plus every manifest `skills` entry (`.` = the plugin root); entries with `..`
+# or absolute are ignored (the manifest checks flag those). Runs only when CLAUDE_DIR is a plugin root.
+_plugin_eval_dir() {
+    local pj="$CLAUDE_DIR/.claude-plugin/plugin.json" v
+    v=$(jq -r '(.experimental // {}) | if type == "object" then .evals else null end
+               | if type == "array" then .[0] else . end | select(type == "string")' "$pj" 2>/dev/null || true)
+    v="${v#./}"; v="${v%/}"
+    case "$v" in ""|/*|..|../*|*/..|*/../*) v="evals" ;; esac
+    printf '%s\n' "$v"
+}
+
+# Model-invocable SKILL.md files of the plugin, one per line (disable-model-invocation: true skipped,
+# Claude never chooses those so they have no trigger to eval). Roots: skills/ + manifest skills entries.
+_plugin_eval_skills() {
+    local pj="$CLAUDE_DIR/.claude-plugin/plugin.json" r root f
+    {
+        printf 'skills\n'
+        jq -r '.skills // empty | if type == "array" then .[] else . end | select(type == "string")' "$pj" 2>/dev/null || true
+    } | while IFS= read -r r; do
+        r="${r#./}"; r="${r%/}"
+        case "$r" in /*|..|../*|*/..|*/../*) continue ;; esac
+        root="$CLAUDE_DIR"
+        { [ -z "$r" ] || [ "$r" = "." ]; } || root="$CLAUDE_DIR/$r"
+        for f in "$root"/*/SKILL.md "$root"/SKILL.md; do
+            [ -f "$f" ] && ! grep -qE '^disable-model-invocation:[[:space:]]*true' "$f" && printf '%s\n' "$f"
+        done
+    done | sort -u
+}
+
+# A case dir has graders when graders/*.md exists or case.yaml carries a non-empty top-level `graders:`.
+_eval_case_has_grader() {
+    local c="$1" g
+    for g in "$c"/graders/*.md; do [ -f "$g" ] && return 0; done
+    [ -f "$c/case.yaml" ] || return 1
+    awk '/^graders:[[:space:]]*(#.*)?$/ { inl = 1; next }
+         /^graders:[[:space:]]*\[[[:space:]]*\]/ { exit 1 }
+         /^graders:[[:space:]]*[^[:space:]#]/ { found = 1; exit }
+         inl && /^[[:space:]]*-[[:space:]]/ { found = 1; exit }
+         inl && /^[^[:space:]#-]/ { inl = 0 }
+         END { exit(found ? 0 : 1) }' "$c/case.yaml"
+}
+
+scan_plugin_evals() {
+    local pj="$CLAUDE_DIR/.claude-plugin/plugin.json" edir_rel edir c p nested cases="" case_n=0 skill sname sk_files gf skills named
+    [ -f "$pj" ] || return 0
+    edir_rel=$(_plugin_eval_dir)
+    edir="$CLAUDE_DIR/$edir_rel"
+    skills=$(_plugin_eval_skills)
+    if [ -d "$edir" ]; then
+        while IFS= read -r c; do
+            case "$c" in "$edir/results"/*|"$edir/mocks"/*) continue ;; esac
+            # nested inside an earlier case: it belongs to that case, not a case of its own
+            nested=0
+            while IFS= read -r p; do
+                [ -n "$p" ] && [[ "$c" == "$p"/* ]] && nested=1
+            done <<<"$cases"
+            [ "$nested" = 1 ] && continue
+            cases+="$c"$'\n'; case_n=$((case_n + 1))
+        done < <(find "$edir" \( -name prompt.md -o -name case.yaml \) -type f -exec dirname {} \; 2>/dev/null | sort -u)
+    fi
+    if [ "$case_n" = 0 ]; then
+        [ -n "$skills" ] \
+            && emit_finding 2 "PLUGIN-NO-EVALS" ".claude-plugin/plugin.json" "plugin ships skills but $edir_rel/ holds no eval case (a <case>/prompt.md or case.yaml) — claude plugin eval has nothing to run, so skill triggering is untested"
+        return 0
+    fi
+    while IFS= read -r c; do
+        [ -z "$c" ] && continue
+        _eval_case_has_grader "$c" \
+            || emit_finding 2 "EVAL-CASE-NO-GRADER" "${c#"$CLAUDE_DIR"/}" "eval case has no grader (graders/<name>.md or a graders: entry in case.yaml) — claude plugin eval fails to load it"
+    done <<<"$cases"
+    # every grader file of the suite: graders/*.md plus case.yaml
+    sk_files=$(find "$edir" \( -path '*/graders/*.md' -o -name case.yaml \) -type f 2>/dev/null | sort)
+    while IFS= read -r skill; do
+        [ -z "$skill" ] && continue
+        sname=$(basename "$(dirname "$skill")")
+        # a SKILL.md at the plugin root (skills: ".") has no dir of its own: use its frontmatter name
+        [ "$(dirname "$skill")" = "$CLAUDE_DIR" ] \
+            && sname=$(awk '/^name:/ { sub(/^name:[[:space:]]*/, ""); gsub(/["'"'"']/, ""); print; exit }' "$skill")
+        [ -n "$sname" ] || continue
+        named=0
+        while IFS= read -r gf; do
+            [ -z "$gf" ] && continue
+            grep -qE '^[[:space:]-]*type:[[:space:]]*tool_used' "$gf" \
+                && grep -qE '^[[:space:]-]*tool:[[:space:]]*"?Skill"?[[:space:]]*$' "$gf" \
+                && grep -qF -- "$sname" "$gf" && { named=1; break; }
+        done <<<"$sk_files"
+        [ "$named" = 1 ] \
+            || emit_finding 2 "EVAL-NO-SKILL-GRADER" "${skill#"$CLAUDE_DIR"/}" "no eval grader (type: tool_used, tool: Skill) names skill '$sname' — the suite cannot show Claude picks it on natural phrasing"
+    done <<<"$skills"
+}
+
 GEN_AT=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 scan_plugins
 scan_plugin_names
 scan_plugin_self
+scan_plugin_evals
 scan_ref_graph
 scan_memory
 scan_plugin_manifest_keys
