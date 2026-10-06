@@ -645,6 +645,123 @@ _plugin_shell_commands() {
         | add | .[]? | select(type == "string" and . != "") | "\($d)\t\(.)"' "$f" 2>/dev/null || true
 }
 
+# ── L7: plugin and marketplace names ────────────────────────────────────────
+# Rule tables: plugins/manifest-reference#name and plugins/marketplace-reference#reserved-names.
+#   PLUGIN-RESERVED-NAME       (Structural) — passes as one of Anthropic's own: prefix claude-/anthropic-/
+#                              anthropics-/cc-plugin-, exact claude/anthropic/anthropics/claude-code/
+#                              claude-mods, or `official` beside claude/anthropic. claude plugin
+#                              init/tag refuse it; install and load still work.
+#   PLUGIN-NAME-LOOKALIKE      (Hygiene)    — claude/anthropic/anthropics as a whole word elsewhere (warning).
+#   PLUGIN-NAME-FORMAT         (Structural) — empty, or a space, @, :, path separator, control or
+#                              bidirectional-formatting character, or a leading `-` (heuristic, not in the
+#                              docs: `claude plugin install -x` would parse it as an option).
+#   PLUGIN-NAME-NOT-KEBAB      (Hygiene)    — valid but not lower-case kebab-case.
+#   MARKETPLACE-NAME-FORMAT    (Critical)   — not letters/digits/./_/-, not starting alphanumeric, contains `..`,
+#                              or a control/bidi character: nothing can be installed from it.
+#   MARKETPLACE-NAME-RESERVED  (Critical)   — reserved or impersonating name, any casing/spelling variant.
+# A marketplace entry's `name` gets the plugin rules plus the plugin-id alphabet.
+# Limits: the github.com/anthropics/ exemption is not evaluated (no git-remote parsing); the impersonation
+# heuristic goes no further than the documented examples; a missing `name` is left to claude plugin validate.
+# Control and bidi characters are matched by jq (already a hard dependency): its \u ranges are multibyte-safe
+# and need neither grep -P (absent on macOS) nor a UTF-8 locale. The docs do not enumerate the set, so it is
+# C0, DEL, C1 and the Unicode bidi formatting characters (ALM, LRM, RLM, LRE..RLO, LRI..PDI).
+NAME_BAD_JQ='test("[\u0001-\u001f\u007f-\u009f؜‎‏‪-‮⁦-⁩]")'
+MKT_RESERVED_NAMES="claude-code-marketplace claude-code-plugins claude-plugins-official anthropic-marketplace anthropic-plugins agent-skills anthropic-agent-skills life-sciences knowledge-work-plugins claude-for-legal claude-for-financial-services financial-services-plugins first-party-plugins claude-tag-plugins claude-community claude-plugins-community healthcare anthropic-plugin-directory claude-plugin-directory inline builtin skills-dir synced claude-plugin-test npm pip uv cargo github gh"
+
+# Prints "error" | "warning" | nothing for a plugin name (normalised: lower case, separator runs -> one `-`).
+# The docs say only "ignores case and treats any run of separators as one", so edge hyphens are NOT trimmed.
+_plugin_name_reserved() {
+    local n
+    n=$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g')
+    case "$n" in
+        claude|anthropic|anthropics|claude-code|claude-mods) echo error; return ;;
+        claude-*|anthropic-*|anthropics-*|cc-plugin-*) echo error; return ;;
+    esac
+    if printf '%s' "$n" | grep -qE '(^|-)official-(claude|anthropic|anthropics)(-|$)|(^|-)(claude|anthropic|anthropics)-official(-|$)'; then echo error; return; fi
+    if printf '%s' "$n" | grep -qE '(^|-)(claude|anthropic|anthropics)(-|$)'; then echo warning; fi
+}
+
+# Emits plugin-name findings for $1=name $2=display path $3=1 when the plugin-id alphabet applies
+# (marketplace entry) $4=true when the name holds a control or bidi character (decided by jq).
+_check_plugin_name() {
+    local name="$1" where="$2" idrule="${3:-0}" bad="${4:-false}" verdict
+    if [ -z "$name" ]; then
+        emit_finding 2 "PLUGIN-NAME-FORMAT" "$where" "plugin name is empty"; return
+    fi
+    if [ "$bad" = true ] || printf '%s' "$name" | grep -qE '[[:space:]@:/\\]'; then
+        emit_finding 2 "PLUGIN-NAME-FORMAT" "$where" "plugin name '$name' contains a space, @, :, path separator, control or bidirectional-formatting character — use kebab-case"; return
+    fi
+    case "$name" in -*)
+        emit_finding 2 "PLUGIN-NAME-FORMAT" "$where" "plugin name '$name' starts with '-' (heuristic: claude plugin install would read it as an option)"; return ;;
+    esac
+    if [ "$idrule" = 1 ] && ! printf '%s' "$name" | grep -qE '^[A-Za-z0-9][A-Za-z0-9._-]*$'; then
+        emit_finding 2 "PLUGIN-NAME-FORMAT" "$where" "plugin name '$name' is not a valid plugin-id part (letters, digits, '.', '_', '-'; must start alphanumeric) — Claude Code cannot install it"; return
+    fi
+    verdict=$(_plugin_name_reserved "$name")
+    case "$verdict" in
+        error)   emit_finding 2 "PLUGIN-RESERVED-NAME" "$where" "plugin name '$name' is reserved: it passes as one of Anthropic's own — claude plugin validate/init/tag report an error" ;;
+        warning) emit_finding 2 "PLUGIN-NAME-LOOKALIKE" "$where" "plugin name '$name' reads as one of Anthropic's own (claude/anthropic as a whole word) — claude plugin validate warns" ;;
+    esac
+    printf '%s' "$name" | grep -qE '^[a-z0-9]+(-[a-z0-9]+)*$' \
+        || emit_finding 2 "PLUGIN-NAME-NOT-KEBAB" "$where" "plugin name '$name' is not kebab-case (lower-case words joined by single hyphens)"
+}
+
+# $1=name $2=display path $3=true when the name holds a control or bidi character.
+_check_marketplace_name() {
+    local name="$1" where="$2" bad="${3:-false}" n r canon
+    if [ -z "$name" ]; then
+        emit_finding 2 "MARKETPLACE-NAME-FORMAT" "$where" "marketplace name is empty"; return
+    fi
+    if [ "$bad" = true ]; then
+        # before the non-ASCII branch: a bidi character is non-ASCII too, but the docs list it as a format error
+        emit_finding 2 "MARKETPLACE-NAME-FORMAT" "$where" "marketplace name '$name' contains a control or bidirectional-formatting character — Claude Code cannot install plugins from it"; return
+    fi
+    if printf '%s' "$name" | LC_ALL=C grep -qE '[^A-Za-z0-9._-]' \
+        || ! printf '%s' "$name" | grep -qE '^[A-Za-z0-9]' \
+        || printf '%s' "$name" | grep -qF '..'; then
+        # non-ASCII is reported as impersonation by the docs, everything else as a format error
+        if [ -n "$(printf '%s' "$name" | LC_ALL=C tr -d '\000-\177')" ]; then
+            emit_finding 2 "MARKETPLACE-NAME-RESERVED" "$where" "marketplace name '$name' contains a non-ASCII character — Claude Code treats it as impersonating an official marketplace"
+        else
+            emit_finding 2 "MARKETPLACE-NAME-FORMAT" "$where" "marketplace name '$name' must use only letters, digits, '.', '_' and '-', start alphanumeric and contain no '..' — Claude Code cannot install plugins from it"
+        fi
+        return
+    fi
+    n=$(printf '%s' "$name" | tr '[:upper:]' '[:lower:]')
+    canon=$(printf '%s' "$n" | sed -E 's/[^a-z0-9_]/-/g; s/-+$//')
+    for r in $MKT_RESERVED_NAMES; do
+        if [ "$n" = "$r" ]; then
+            emit_finding 2 "MARKETPLACE-NAME-RESERVED" "$where" "marketplace name '$name' is reserved (unless the marketplace is hosted under github.com/anthropics/)"; return
+        fi
+        if [ "$canon" = "$r" ]; then
+            emit_finding 2 "MARKETPLACE-NAME-RESERVED" "$where" "marketplace name '$name' is another spelling of reserved name '$r'"; return
+        fi
+    done
+    case "$n" in claudeai-*)
+        emit_finding 2 "MARKETPLACE-NAME-RESERVED" "$where" "marketplace names starting with 'claudeai-' are reserved for marketplaces hosted on claude.ai"; return ;;
+    esac
+    if printf '%s' "$canon" | grep -qE '(^|-)official-(claude|anthropic)(-|$)|(^|-)(claude|anthropic)-official(-|$)|^(claude|anthropic)-plugins?(-|$)'; then
+        emit_finding 2 "MARKETPLACE-NAME-RESERVED" "$where" "marketplace name '$name' impersonates an official Anthropic/Claude marketplace"
+    fi
+}
+
+# Names are read as `bad<TAB>json-string` so a newline or a control character inside a name cannot split the line.
+scan_plugin_names() {
+    local pj="$CLAUDE_DIR/.claude-plugin/plugin.json" mp="$CLAUDE_DIR/.claude-plugin/marketplace.json" bad enc
+    if [ -f "$pj" ]; then
+        while IFS=$'\t' read -r bad enc; do
+            _check_plugin_name "$(printf '%s' "$enc" | jq -r .)" ".claude-plugin/plugin.json" 0 "$bad"
+        done < <(jq -r 'select(type == "object" and (.name | type == "string")) | .name | "\('"$NAME_BAD_JQ"')\t\(@json)"' "$pj" 2>/dev/null || true)
+    fi
+    [ -f "$mp" ] || return 0
+    while IFS=$'\t' read -r bad enc; do
+        _check_marketplace_name "$(printf '%s' "$enc" | jq -r .)" ".claude-plugin/marketplace.json" "$bad"
+    done < <(jq -r 'select(type == "object" and (.name | type == "string")) | .name | "\('"$NAME_BAD_JQ"')\t\(@json)"' "$mp" 2>/dev/null || true)
+    while IFS=$'\t' read -r bad enc; do
+        _check_plugin_name "$(printf '%s' "$enc" | jq -r .)" ".claude-plugin/marketplace.json" 1 "$bad"
+    done < <(jq -r 'select(type == "object") | (.plugins // []) | if type == "array" then .[] else empty end | select(type == "object" and (.name | type == "string")) | .name | "\('"$NAME_BAD_JQ"')\t\(@json)"' "$mp" 2>/dev/null || true)
+}
+
 # Validate a plugin repo's OWN manifest + structure when CLAUDE_DIR is a plugin
 # root (contains .claude-plugin/plugin.json). Phase 2 band; independent of scope —
 # lets the tool dogfood on any plugin tree, not just installed user-tree plugins.
@@ -725,6 +842,7 @@ scan_plugin_self() {
 
 GEN_AT=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 scan_plugins
+scan_plugin_names
 scan_plugin_self
 scan_ref_graph
 scan_memory

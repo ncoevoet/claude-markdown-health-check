@@ -1,0 +1,19 @@
+{
+  "id": "189-marketplace-inline-reserved",
+  "command": "claude-markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/marketplace-inline-reserved",
+    "needs_home_override": false,
+    "scanners": ["scan-graph"]
+  },
+  "grader": { "method": "code" },
+  "success_criteria": {
+    "must_detect": [ { "tag": "MARKETPLACE-NAME-RESERVED", "path_substring": "marketplace.json" } ],
+    "must_not_flag": [],
+    "expect_clean": false
+  },
+  "expected_behavior": [
+    "scan-graph.sh emits [MARKETPLACE-NAME-RESERVED]: inline (any casing) is the name Claude Code gives --plugin-dir plugins"
+  ]
+}
