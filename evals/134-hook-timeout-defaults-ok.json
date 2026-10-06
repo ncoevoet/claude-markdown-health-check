@@ -1,0 +1,23 @@
+{
+  "id": "134-hook-timeout-defaults-ok",
+  "command": "claude-markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/hook-timeout-defaults-ok",
+    "needs_home_override": false,
+    "scanners": [
+      "validate-skills"
+    ]
+  },
+  "grader": {
+    "method": "code"
+  },
+  "success_criteria": {
+    "must_detect": [],
+    "must_not_flag": [],
+    "expect_clean": true
+  },
+  "expected_behavior": [
+    "timeouts exactly at 2x the per-event default (and at the SessionEnd cap) are not flagged"
+  ]
+}

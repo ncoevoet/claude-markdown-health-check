@@ -1,0 +1,11 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      { "matcher": ["Edit", "Write"], "hooks": [ { "type": "command", "command": "echo lint" } ] },
+      { "matcher": "Bash", "hooks": [ { "type": "command", "command": "echo ok" } ] }
+    ],
+    "PostToolUse": [
+      { "matcher": ["Bash"], "hooks": [ { "type": "command", "command": "echo post" } ] }
+    ]
+  }
+}

@@ -49,14 +49,24 @@ hooks. Per the [hooks doc](https://code.claude.com/docs/en/hooks):
 | `Notification` | notification type (`permission_prompt`, `idle_prompt`, …) |
 | `SubagentStart` `SubagentStop` | agent type (`Explore`, `Plan`, custom) |
 | `ConfigChange` | config source (`user_settings`, `project_settings`, …) |
+| `PreModelSwitch` `PostModelSwitch` | the canonical model name (`claude-opus-5`, `.*opus.*`) |
+| `DirectoryAdded` | the add source (`slash_command`, `register_repo_root`) |
 | `UserPromptSubmit` `Stop` `PostToolBatch` `SessionEnd`-less events | no matcher (always fires) |
 
 Other current events that take no/elsewhere-defined matchers: `Setup`,
 `UserPromptExpansion`, `TaskCreated`, `TaskCompleted`, `StopFailure`,
 `InstructionsLoaded`, `CwdChanged`, `FileChanged`, `WorktreeCreate`,
-`WorktreeRemove`, `Elicitation`, `ElicitationResult`, `MessageDisplay`,
+`WorktreeRemove`, `Elicitation`, `ElicitationResult`, `MessageDisplay` (no matcher;
+default timeout 10s),
 `TeammateIdle`. Treat any of these event NAMES as valid — do not flag an
 unfamiliar event as an error.
+
+## Matcher validity
+
+- A matcher must be ONE string. An array is invalid (`HOOK-MATCHER-ARRAY`); under `PreToolUse` or `PermissionRequest` none of that file's other hooks load either.
+- Matching is case-sensitive and tool names are capitalised: `bash` matches nothing (`HOOK-MATCHER-CASE`).
+- A matcher of only letters, digits, `_`, `-`, spaces, `,` and `|` is an exact-string list (`|` or `,` both separate, from v2.1.191); anything else is a JavaScript regex.
+- A bare `mcp__server` is compared as an exact string and matches no tool; `.*` is required, as in `mcp__server__.*` (`HOOK-MATCHER-BARE-MCP`).
 
 ## Report block
 

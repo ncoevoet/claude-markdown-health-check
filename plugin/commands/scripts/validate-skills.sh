@@ -148,6 +148,9 @@ MEMORY_MAX_BYTES=25600
 HOOK_TIMEOUT_COMMAND=600
 HOOK_TIMEOUT_PROMPT=30
 HOOK_TIMEOUT_AGENT=60
+HOOK_TIMEOUT_FAST_EVENT=30
+HOOK_TIMEOUT_MESSAGEDISPLAY=10
+HOOK_TIMEOUT_SESSIONEND_CAP=60
 
 # Skill listing budget — see https://code.claude.com/docs/en/skills
 # "The budget scales dynamically at 1% of the context window, with a fallback of 8,000 characters."
@@ -980,28 +983,79 @@ check_memory_stale_refs() {
     done < <(find "$CLAUDE_DIR/projects" -path '*/memory/*.md' 2>/dev/null | sort)
 }
 
-# Flag hook timeouts above 2x the documented per-type default. Defaults:
-# command/http/mcp_tool 600s, prompt 30s, agent 60s — but a command hook under
-# a UserPromptSubmit event defaults to 30s.
+# Flag hook matchers Claude Code silently ignores or rejects: an array matcher
+# (invalid under any event), a lowercase tool name, or a bare MCP server name.
+# The case and bare-MCP checks apply only to the five tool events and only to the
+# exact-string path (matcher made of letters, digits, _ - space , |), where
+# matching is case-sensitive; any other character makes it a JavaScript regex.
+check_hook_matchers() {
+    local json_file="$1" display="$2" ev m
+    [ -f "$json_file" ] || return 0
+    command -v jq >/dev/null 2>&1 || return 0
+    while IFS=$'\t' read -r ev m; do
+        [ -z "$ev" ] && continue
+        case "$ev" in
+            PreToolUse|PermissionRequest)
+                error "[HOOK-MATCHER-ARRAY] $display: $ev matcher is a JSON array ($m) — it must be one string such as \"Edit|Write\"; Claude Code rejects the entry and none of this file's other hooks load" ;;
+            *)
+                error "[HOOK-MATCHER-ARRAY] $display: $ev matcher is a JSON array ($m) — it must be one string such as \"Edit|Write\"; Claude Code lists the entry as an invalid setting and the hook never fires" ;;
+        esac
+    done < <(jq -r '(.hooks // {}) | if type=="object" then to_entries[] else empty end | .key as $ev | .value | if type=="array" then .[] else empty end | select(type=="object" and ((.matcher|type)=="array")) | "\($ev)\t\(.matcher|tojson)"' "$json_file" 2>/dev/null || true)
+    while IFS=$'\t' read -r ev m; do
+        [ -z "$ev" ] && continue
+        warning "[HOOK-MATCHER-CASE] $display: $ev matcher segment '$m' starts lowercase — tool names are case-sensitive and capitalised (Bash, Edit, Write, Read), so it matches nothing"
+    done < <(jq -r '
+        (.hooks // {}) | if type=="object" then to_entries[] else empty end
+        | select(.key | test("^(PreToolUse|PostToolUse|PostToolUseFailure|PermissionRequest|PermissionDenied)$"))
+        | .key as $ev | .value | if type=="array" then .[] else empty end
+        | select(type=="object" and ((.matcher|type)=="string"))
+        | .matcher as $m | select($m | test("^[A-Za-z0-9_ ,|-]+$"))
+        | ($m | split("[|,]"; null) | map(gsub("^ +| +$"; "")) | map(select(test("^[a-z]") and (test("^mcp__") | not))))[]
+        | "\($ev)\t\(.)"' "$json_file" 2>/dev/null || true)
+    while IFS=$'\t' read -r ev m; do
+        [ -z "$ev" ] && continue
+        warning "[HOOK-MATCHER-BARE-MCP] $display: $ev matcher segment '$m' names a server but no tool: it is compared as an exact string and matches nothing; write '${m}__.*'"
+    done < <(jq -r '
+        (.hooks // {}) | if type=="object" then to_entries[] else empty end
+        | select(.key | test("^(PreToolUse|PostToolUse|PostToolUseFailure|PermissionRequest|PermissionDenied)$"))
+        | .key as $ev | .value | if type=="array" then .[] else empty end
+        | select(type=="object" and ((.matcher|type)=="string"))
+        | .matcher as $m | select($m | test("^[A-Za-z0-9_ ,|-]+$"))
+        | ($m | split("[|,]"; null) | map(gsub("^ +| +$"; "")) | map(select(startswith("mcp__") and (ltrimstr("mcp__") | contains("__") | not))))[]
+        | "\($ev)\t\(.)"' "$json_file" 2>/dev/null || true)
+    return 0
+}
+
+# Flag hook timeouts above 2x the documented default. command/http/mcp_tool 600s
+# (30s on UserPromptSubmit, PreModelSwitch, PostModelSwitch; 10s on
+# MessageDisplay), prompt 30s, agent 60s. SessionEnd hooks share a budget Claude
+# Code raises to the longest per-hook timeout, up to 60s, so they are capped.
 check_hook_timeouts() {
     local json_file="$1" display="$2" ev typ t def
     [ -f "$json_file" ] || return 0
     command -v jq >/dev/null 2>&1 || return 0
     while IFS=$'\t' read -r ev typ t; do
         case "${t:-}" in ''|*[!0-9]*) continue ;; esac
+        if [ "$ev" = "SessionEnd" ]; then
+            [ "$t" -gt "$HOOK_TIMEOUT_SESSIONEND_CAP" ] && warning "[SUSPICIOUS-TIMEOUT] $display: a $typ hook (SessionEnd) has timeout ${t}s — SessionEnd shares a budget Claude Code raises to the highest per-hook timeout only up to ${HOOK_TIMEOUT_SESSIONEND_CAP}s"
+            continue
+        fi
         case "$typ" in
-            command|http|mcp_tool) def=$HOOK_TIMEOUT_COMMAND ;;
-            prompt)                def=$HOOK_TIMEOUT_PROMPT ;;
-            agent)                 def=$HOOK_TIMEOUT_AGENT ;;
+            command|http|mcp_tool)
+                case "$ev" in
+                    UserPromptSubmit|PreModelSwitch|PostModelSwitch) def=$HOOK_TIMEOUT_FAST_EVENT ;;
+                    MessageDisplay)                                  def=$HOOK_TIMEOUT_MESSAGEDISPLAY ;;
+                    *)                                               def=$HOOK_TIMEOUT_COMMAND ;;
+                esac ;;
+            prompt) def=$HOOK_TIMEOUT_PROMPT ;;
+            agent)  def=$HOOK_TIMEOUT_AGENT ;;
             *) continue ;;
         esac
-        if [ "$typ" = "command" ] && [ "$ev" = "UserPromptSubmit" ]; then
-            def=$HOOK_TIMEOUT_PROMPT
-        fi
         if [ "$t" -gt $((def * 2)) ]; then
             warning "[SUSPICIOUS-TIMEOUT] $display: a $typ hook ($ev) has timeout ${t}s (>2x the ${def}s default)"
         fi
-    done < <(jq -r '.hooks // {} | to_entries[] | .key as $ev | .value[]? | .hooks[]? | select(has("type") and has("timeout")) | "\($ev)\t\(.type)\t\(.timeout)"' "$json_file" 2>/dev/null || true)
+    done < <(jq -r '.hooks // {} | to_entries[] | select(.value|type=="array") | .key as $ev | .value[] | select(type=="object") | (.hooks // [])[]? | select(type=="object" and has("type") and ((.timeout|type)=="number")) | "\($ev)\t\(.type)\t\(.timeout)"' "$json_file" 2>/dev/null || true)
+    return 0
 }
 
 # Flag http hooks that carry an auth-bearing header but scope no env vars. Without
@@ -1874,6 +1928,7 @@ for settings_file in "$CLAUDE_DIR/settings.json" "$CLAUDE_DIR/settings.local.jso
         check_settings_guide_refs    "$settings_file" "$sdisp"
         check_mcp_preapproved        "$settings_file" "$sdisp"
         check_hook_timeouts          "$settings_file" "$sdisp"
+        check_hook_matchers          "$settings_file" "$sdisp"
         check_http_hook_env          "$settings_file" "$sdisp"
         check_http_hook_allowlist    "$settings_file" "$sdisp"
         check_settings_security      "$settings_file" "$sdisp"
@@ -1882,6 +1937,7 @@ done
 # hooks/hooks.json holds hook definitions but no allowlist of its own, so it is
 # checked against the allowlist merged from the settings files above.
 check_http_hook_allowlist "$CLAUDE_DIR/hooks/hooks.json" "hooks/hooks.json"
+check_hook_matchers "$CLAUDE_DIR/hooks/hooks.json" "hooks/hooks.json"
 if [ "$settings_checked" -eq 0 ]; then
     ok "No settings.json found (skipped)"
 fi

@@ -1,0 +1,19 @@
+{
+  "hooks": {
+    "PreModelSwitch": [
+      { "hooks": [ { "type": "command", "command": "echo a", "timeout": 90 } ] }
+    ],
+    "PostModelSwitch": [
+      { "hooks": [ { "type": "http", "url": "https://hooks.example.com/x", "timeout": 61 } ] }
+    ],
+    "MessageDisplay": [
+      { "hooks": [ { "type": "command", "command": "echo b", "timeout": 25 } ] }
+    ],
+    "UserPromptSubmit": [
+      { "hooks": [ { "type": "mcp_tool", "server": "memory", "tool": "recall", "timeout": 70 } ] }
+    ],
+    "SessionEnd": [
+      { "hooks": [ { "type": "command", "command": "echo c", "timeout": 120 } ] }
+    ]
+  }
+}
