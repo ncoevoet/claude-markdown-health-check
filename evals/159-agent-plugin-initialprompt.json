@@ -1,0 +1,31 @@
+{
+  "id": "159-agent-plugin-initialprompt",
+  "command": "claude-markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/agent-plugin-initialprompt",
+    "needs_home_override": false,
+    "scanners": [
+      "validate-skills"
+    ]
+  },
+  "grader": {
+    "method": "code"
+  },
+  "success_criteria": {
+    "must_detect": [
+      {
+        "tag": "AGENT-PLUGIN-FORBIDDEN-FIELD",
+        "path_substring": "no plugin-level equivalent"
+      }
+    ],
+    "must_not_flag": [
+      "AGENT-YAML-UNPARSED"
+    ],
+    "expect_clean": false
+  },
+  "expected_behavior": [
+    "a plugin agent declaring initialPrompt is flagged: plugin agents ignore it",
+    "the message is per field: initialPrompt has no plugin-level equivalent, unlike hooks/mcpServers/permissionMode"
+  ]
+}

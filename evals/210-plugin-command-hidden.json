@@ -1,0 +1,28 @@
+{
+  "id": "210-plugin-command-hidden",
+  "command": "claude-markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/plugin-command-risk",
+    "needs_home_override": true,
+    "scanners": [
+      "validate-skills"
+    ]
+  },
+  "grader": {
+    "method": "code"
+  },
+  "success_criteria": {
+    "must_detect": [
+      {
+        "tag": "SKILL-HIDDEN-BEHAVIOR",
+        "path_substring": "commands/x.md"
+      }
+    ],
+    "must_not_flag": [],
+    "expect_clean": false
+  },
+  "expected_behavior": [
+    "plugin commands/*.md are scanned for hidden-behaviour instructions and displayed as commands/x.md"
+  ]
+}

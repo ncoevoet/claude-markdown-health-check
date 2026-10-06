@@ -1,0 +1,26 @@
+{
+  "id": "156-skill-compaction-ok",
+  "command": "claude-markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/skill-compaction-ok",
+    "needs_home_override": false,
+    "scanners": [
+      "validate-skills"
+    ]
+  },
+  "grader": {
+    "method": "code"
+  },
+  "success_criteria": {
+    "must_detect": [],
+    "must_not_flag": [
+      "SKILL-COMPACTION-TRUNCATED"
+    ],
+    "expect_clean": true
+  },
+  "expected_behavior": [
+    "a 17.5 KB body is under the 20,000-byte compaction cap and stays clean",
+    "lowering SKILL_COMPACTION_MAX_BYTES to 15000 must turn this case red"
+  ]
+}

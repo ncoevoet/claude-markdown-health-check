@@ -1,0 +1,25 @@
+{
+  "id": "213-plugin-hidden-show-ok",
+  "command": "claude-markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/plugin-hidden-show-ok",
+    "needs_home_override": true,
+    "scanners": [
+      "validate-skills"
+    ]
+  },
+  "grader": {
+    "method": "code"
+  },
+  "success_criteria": {
+    "must_detect": [],
+    "must_not_flag": [
+      "SKILL-HIDDEN-BEHAVIOR"
+    ],
+    "expect_clean": true
+  },
+  "expected_behavior": [
+    "Never show the user more than 10 lines of output is a benign output limit, not a request to hide actions"
+  ]
+}

@@ -1,0 +1,28 @@
+{
+  "id": "214-plugin-skill-mcp-reference",
+  "command": "claude-markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/plugin-mcp-reference",
+    "needs_home_override": true,
+    "scanners": [
+      "validate-skills"
+    ]
+  },
+  "grader": {
+    "method": "code"
+  },
+  "success_criteria": {
+    "must_detect": [
+      {
+        "tag": "SKILL-MCP-REFERENCE",
+        "path_substring": "BigQuery:bigquery_schema"
+      }
+    ],
+    "must_not_flag": [],
+    "expect_clean": false
+  },
+  "expected_behavior": [
+    "a plugin skill that tells the model to call ServerName:tool_name extends access beyond the skill itself (Discovery indicator, judged against the skill purpose by the orchestrator)"
+  ]
+}

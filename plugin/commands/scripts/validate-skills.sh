@@ -126,7 +126,7 @@ SKILLS_DIR_EXCLUDES=("bootstrap" "commands")
 AGENT_COLOR_RE='^(red|blue|green|yellow|purple|orange|pink|cyan)$'
 AGENT_PERMMODE_RE='^(default|acceptEdits|auto|dontAsk|bypassPermissions|plan)$'
 # Fields a PLUGIN-provided subagent declares in vain — Claude Code silently ignores them.
-AGENT_PLUGIN_FORBIDDEN=("hooks" "mcpServers" "permissionMode")
+AGENT_PLUGIN_FORBIDDEN=("hooks" "mcpServers" "permissionMode" "initialPrompt")
 # Context-engineering thresholds — see
 # https://claude.com/blog/the-new-rules-of-context-engineering-for-claude-5-generation-models
 # ("we were overconstraining Claude Code", "delete these repeat examples").
@@ -372,6 +372,195 @@ frontmatter_orphaned_list_key() {
     ' "$1"
 }
 
+SKILL_COMPACTION_MAX_BYTES=20000   # 5,000 tokens x ~4 bytes/token
+
+# Network-call and hidden-behaviour indicators for plugin-installed skills (Discovery).
+# Source: the enterprise skill review checklist (platform.claude.com agent-skills/enterprise).
+SKILL_NETWORK_RE='(^|[;&|(`[:space:]])(curl|wget)[[:space:]]+[-"'"'"'$h]|(^|[^A-Za-z0-9_.])fetch\(|requests\.(get|post|put|patch|delete|request)\(|urllib\.request|http\.client|(^|[^A-Za-z0-9_])axios[.(]|Invoke-WebRequest|XMLHttpRequest|new WebSocket\(|Invoke-RestMethod|(^|[^A-Za-z0-9_])iwr[[:space:]]|window\.fetch\(|globalThis\.fetch\(|(^|[^A-Za-z0-9_])httpx\.|urlopen\(|(^|[^A-Za-z0-9_.])https?\.get\('
+SKILL_HIDDEN_RE='(do not|don.t|never|without) (tell|telling|inform|informing|notify|notifying|mention|mentioning|reveal|revealing)[^.]{0,40}(the )?(user|human)|(hide|conceal)[^.]{0,40}from (the )?(user|human)|ignore (all |any )?(previous|prior|earlier|safety|system)( safety)? (instructions|rules|guidelines)'
+# ServerName:tool_name — the snake_case tool segment keeps http:, note:, type:string out.
+SKILL_MCP_RE='(^|[^A-Za-z0-9_/:.-])[A-Za-z][A-Za-z0-9_-]*:[a-z][a-z0-9]*(_[a-z0-9]+)+([^A-Za-z0-9_:]|$)'
+RULE_DIRECTIVE_RE='(^|[^A-Za-z0-9_])(NEVER|MUST NOT|MUST|ALWAYS|DO NOT)([^A-Za-z0-9_]|$)'
+
+# Body of a SKILL.md / command / rule file: everything after the closing frontmatter ---.
+_md_body() {
+    awk 'NR == 1 && /^---[[:space:]]*$/ { fm = 1; next } fm == 1 { if ($0 ~ /^---[[:space:]]*$/) fm = 2; next } { print }' "$1"
+}
+
+# Body size in bytes (frontmatter excluded).
+_skill_body_bytes() {
+    _md_body "$1" | wc -c | tr -d '[:space:]'
+}
+
+# Lexical path normalisation, pure bash (realpath is not portable to macOS). Splits on /,
+# skips "." and empty segments, ".." pops one; never touches the filesystem.
+_mhc_lexpath() {
+    local seg out=""
+    local -a parts=()
+    IFS=/ read -ra parts <<< "$1" || true
+    for seg in "${parts[@]+"${parts[@]}"}"; do
+        case "$seg" in
+            ""|.) ;;
+            ..) out="${out%/*}" ;;
+            *) out="$out/$seg" ;;
+        esac
+    done
+    printf '%s\n' "${out:-/}"
+    return 0
+}
+
+# Prints a short reason when the frontmatter of $1 cannot parse as YAML, else nothing.
+frontmatter_unparsed_reason() {
+    awk '
+        NR == 1 { if ($0 ~ /^---[[:space:]]*$/) { in_fm = 1; next } else { exit } }
+        in_fm && /^---[[:space:]]*$/ { closed = 1; exit }
+        in_fm {
+            if ($0 ~ /^\t/) { if (reason == "") reason = "tab indentation at frontmatter line " NR; next }
+            if ($0 !~ /^([A-Za-z0-9_-]+:|[[:space:]]|#|-[[:space:]]|$)/) { if (reason == "") reason = "line is not a key: value pair at frontmatter line " NR; next }
+            if ($0 ~ /^[A-Za-z0-9_-]+:[[:space:]]+[^[:space:]]/) {
+                v = $0; sub(/^[A-Za-z0-9_-]+:[[:space:]]+/, "", v)
+                if (v !~ /^["\x27|>\[{&*!%@`#]/) {
+                    sub(/[[:space:]]+#.*$/, "", v)
+                    if (v ~ /:([[:space:]]|$)/ && reason == "") reason = "unquoted value contains \": \" at frontmatter line " NR
+                }
+            }
+        }
+        END { if (in_fm && !closed) reason = "opening --- has no closing ---"; if (reason != "") print reason }
+    ' "$1"
+}
+
+# Text indicators in one plugin skill / command file: hide-from-user wording, a ../ that
+# leaves the plugin, an MCP tool reference. Args: <file> <display> <physical-dir> <physical-root>
+_plugin_text_risk() {
+    local file="$1" display="$2" dir="$3" root="$4" hid m t mcp
+    hid=$(grep -oEi "$SKILL_HIDDEN_RE" "$file" 2>/dev/null | head -1 || true)
+    if [ -n "$hid" ]; then
+        warning "[SKILL-HIDDEN-BEHAVIOR] $display: says \"$hid\" — instructions to hide actions from the user or override safety rules"
+    fi
+    while IFS= read -r m; do
+        [ -n "$m" ] || continue
+        case "$m" in *[A-Za-z0-9_-].) m="${m%.}" ;; esac
+        t=$(_mhc_lexpath "$dir/$m")
+        if [ "$t" != "$root" ] && [[ "$t" != "$root"/* ]]; then
+            warning "[SKILL-HIDDEN-BEHAVIOR] $display: path escapes the plugin: $m — instructions that reach outside the plugin directory"
+            break
+        fi
+    done < <(grep -oE '(\.\./)+[A-Za-z0-9._/-]*' "$file" 2>/dev/null | sort -u || true)
+    mcp=$(grep -oE "$SKILL_MCP_RE" "$file" 2>/dev/null | head -1 | sed -E 's/^[^A-Za-z]+//; s/[^a-z0-9]+$//' || true)
+    if [ -n "$mcp" ]; then
+        warning "[SKILL-MCP-REFERENCE] $display: references MCP tool $mcp — this extends access beyond the skill itself; check that the skill's purpose needs that server"
+    fi
+    return 0
+}
+
+# Bundled scripts of one plugin skill that make network calls. Args: <skill-dir> <display>
+_plugin_net_risk() {
+    local sd="$1" display="$2" s n
+    while IFS= read -r s; do
+        [ -n "$s" ] || continue
+        # grep -c (not -q): reads the whole stream, so pipefail never sees a SIGPIPE.
+        n=$(grep -vE '^[[:space:]]*(#|//)' "$s" 2>/dev/null | grep -cE "$SKILL_NETWORK_RE" || true)
+        if [ "${n:-0}" -gt 0 ]; then
+            warning "[SKILL-NETWORK-SURFACE] $display: bundled script ${s#"$sd"/} makes network calls (curl/wget/fetch/requests) — review it before trusting this plugin skill"
+        fi
+    done < <(find -L "$sd" -type f \( -name '*.py' -o -name '*.sh' -o -name '*.js' -o -name '*.mjs' -o -name '*.ts' -o -name '*.ps1' \) -not -path '*/node_modules/*' 2>/dev/null | sort | head -50 || true)
+    return 0
+}
+
+# Manifest entries (string or array) of <key> in plugin.json, relative and inside the plugin:
+# "./x" -> x, "." -> "." ; absolute or ".." entries are skipped (PLUGIN-PATH-ESCAPE territory).
+_plugin_manifest_entries() {
+    local manifest="$1/.claude-plugin/plugin.json" e
+    [ -f "$manifest" ] || return 0
+    while IFS= read -r e; do
+        e="${e#./}"
+        e="${e%/}"
+        case "$e" in
+            /*|..|../*|*/..|*/../*) continue ;;
+            "") e="." ;;
+        esac
+        printf '%s\n' "$e"
+    done < <(jq -r --arg k "$2" '(.[$k] // empty) | if type == "string" then [.] elif type == "array" then . else [] end | .[] | strings' "$manifest" 2>/dev/null || true)
+    return 0
+}
+
+# One installed plugin: its skills (default skills/ plus manifest `skills` roots) and commands.
+# Args: <plugin-name> <physical-root>
+_plugin_skill_risk_scan() {
+    local pname="$1" root="$2" e r f sd rel
+    local -a files=() cmds=()
+    while IFS= read -r e; do
+        [ -n "$e" ] || continue
+        if [ "$e" = "." ]; then r="$root"; else r="$root/$e"; fi
+        [ -d "$r" ] || continue
+        for f in "$r"/*/SKILL.md "$r/SKILL.md"; do
+            if [ -f "$f" ]; then files+=("$f"); fi
+        done
+    done < <(printf 'skills\n'; _plugin_manifest_entries "$root" skills)
+    while IFS= read -r f; do
+        [ -n "$f" ] || continue
+        sd=$( (cd -P "$(dirname "$f")" 2>/dev/null && pwd -P) || true)
+        [ -n "$sd" ] || continue
+        if [ "$sd" = "$root" ]; then rel="."; else rel="${sd#"$root"/}"; fi
+        _plugin_text_risk "$f" "$pname/$rel/SKILL.md" "$sd" "$root"
+        _plugin_net_risk "$sd" "$pname/$rel"
+    done < <(printf '%s\n' "${files[@]+"${files[@]}"}" | sort -u || true)
+    while IFS= read -r e; do
+        [ -n "$e" ] || continue
+        r="$root/$e"
+        if [ -d "$r" ]; then
+            for f in "$r"/*.md; do
+                if [ -f "$f" ]; then cmds+=("$f"); fi
+            done
+        elif [ -f "$r" ]; then
+            cmds+=("$r")
+        fi
+    done < <(printf 'commands\n'; _plugin_manifest_entries "$root" commands)
+    while IFS= read -r f; do
+        [ -n "$f" ] || continue
+        sd=$( (cd -P "$(dirname "$f")" 2>/dev/null && pwd -P) || true)
+        [ -n "$sd" ] || continue
+        if [ "$sd" = "$root" ]; then rel="$(basename "$f")"; else rel="${sd#"$root"/}/$(basename "$f")"; fi
+        # Commands are slash-invoked prompts: hide-from-user and MCP reach apply, scripts do not.
+        _plugin_text_risk "$f" "$pname/$rel" "$sd" "$root"
+    done < <(printf '%s\n' "${cmds[@]+"${cmds[@]}"}" | sort -u || true)
+    return 0
+}
+
+# Third-party / plugin-installed skills and commands: network surface, hidden behaviour, MCP
+# reach (Discovery). User tree only: the user's own skills are exempt, installed plugins are not.
+check_plugin_skill_risk() {
+    local ip_file="$HOME/.claude/plugins/installed_plugins.json" pname ip root
+    [ "$(readlink -f "$CLAUDE_DIR" 2>/dev/null)" = "$(readlink -f "$HOME/.claude" 2>/dev/null)" ] || return 0
+    [ -f "$ip_file" ] || return 0
+    command -v jq >/dev/null 2>&1 || return 0
+    while IFS=$'\t' read -r pname ip; do
+        [ -n "$ip" ] || continue
+        root=$( (cd -P "$ip" 2>/dev/null && pwd -P) || true)
+        [ -n "$root" ] || continue
+        _plugin_skill_risk_scan "$pname" "$root"
+    done < <(jq -r '.plugins // {} | to_entries[] | select(.value | type == "array") | select(.value[0] | type == "object") | (.value[0].installPath | strings) as $p | [(.key | sub("@.*$"; "")), $p] | @tsv' "$ip_file" 2>/dev/null || true)
+    return 0
+}
+
+# A rule scoped with `paths:` is reloaded only on demand after /compact (unscoped rules are
+# re-injected from disk), so a hard directive kept only there can vanish from the session.
+check_rule_path_lost_on_compact() {
+    local rules_dir="$CLAUDE_DIR/rules" rf rel scoped body
+    [ -d "$rules_dir" ] || return 0
+    while IFS= read -r rf; do
+        [ -f "$rf" ] || continue
+        scoped=$(awk 'NR == 1 { if ($0 ~ /^---[[:space:]]*$/) { fm = 1; next } else { exit } } fm && /^---[[:space:]]*$/ { exit } fm && /^paths:/ { print "y"; exit }' "$rf" || true)
+        [ -n "$scoped" ] || continue
+        body=$(_md_body "$rf" || true)
+        if grep -qE "$RULE_DIRECTIVE_RE" <<< "$body"; then
+            rel=${rf#"$CLAUDE_DIR"/}
+            warning "[RULE-PATH-LOST-ON-COMPACT] $rel: a hard directive (NEVER/MUST/ALWAYS/DO NOT) lives in a path-scoped rule — after /compact the rule is reloaded only when a matching file is read again, so the constraint can be absent; move it to CLAUDE.md or an unscoped rule"
+        fi
+    done < <(find -L "$rules_dir" -name '*.md' -type f 2>/dev/null | sort || true)
+    return 0
+}
+
 validate_skill_md() {
     # Validates a SKILL.md or unified command .md file. Args: <file> <display-name>
     local skill_file="$1" skill_name="$2"
@@ -393,6 +582,21 @@ validate_skill_md() {
     orphan_key=$(frontmatter_orphaned_list_key "$skill_file")
     if [ -n "$orphan_key" ]; then
         error "[BAD-FRONTMATTER-SCHEMA] $skill_name: frontmatter is not parseable YAML — a list is indented under the completed scalar '$orphan_key:' (a key line such as when_to_use: is missing above the list); the runtime falls back to the H1 title and the skill loses its routing description"
+    fi
+
+    # Check: broader unparsed-YAML reasons (tab indent, unquoted ": ", unclosed ---) —
+    # only when the orphaned-list check above did not already report this file.
+    local fm_reason
+    fm_reason=$(frontmatter_unparsed_reason "$skill_file")
+    if [ -n "$fm_reason" ] && [ -z "$orphan_key" ]; then
+        error "[BAD-FRONTMATTER-SCHEMA] $skill_name: frontmatter is not parseable YAML ($fm_reason); Claude Code loads the file with no fields set, so the routing description is lost"
+    fi
+
+    # Check: body size vs the post-/compact re-injection cap (5,000 tokens per skill)
+    local body_bytes
+    body_bytes=$(_skill_body_bytes "$skill_file")
+    if [ "$body_bytes" -gt "$SKILL_COMPACTION_MAX_BYTES" ]; then
+        warning "[SKILL-COMPACTION-TRUNCATED] $skill_name: body is $body_bytes bytes (about $((body_bytes / 4)) tokens) — after /compact only the first 5,000 tokens are re-injected, so put the critical instructions at the top or split to references/"
     fi
 
     # Check: description present, then length (40 advisory, 1024 hard, 1536 combined)
@@ -569,6 +773,17 @@ validate_agent_md() {
     desc=$(extract_field "$agent_file" "description")
     [ -z "$desc" ] && error "[AGENT-BAD-SCHEMA] $display: no 'description' in frontmatter (required for delegation routing)"
 
+    # Unparseable frontmatter: Claude Code skips a plain agent file and loads a plugin agent
+    # with every field ignored.
+    local fm_reason
+    fm_reason=$(frontmatter_unparsed_reason "$agent_file")
+    if [ -z "$fm_reason" ]; then
+        fm_reason=$(frontmatter_orphaned_list_key "$agent_file" | sed 's/^\(.\)/a list is indented under the completed scalar \1/')
+    fi
+    if [ -n "$fm_reason" ]; then
+        error "[AGENT-YAML-UNPARSED] $display: frontmatter is not parseable YAML ($fm_reason) — Claude Code reads no fields from the file (a plugin agent still loads, named after the file with every field ignored)"
+    fi
+
     # model whitelist (shared with skills).
     model_field=$(extract_field "$agent_file" "model")
     if [ -n "$model_field" ] && ! echo "$model_field" | grep -qE "$MODEL_WHITELIST_RE"; then
@@ -623,8 +838,13 @@ validate_agent_md() {
     # Plugin-provided agents silently ignore hooks/mcpServers/permissionMode.
     if [ "$is_plugin" = 1 ]; then
         for ff in "${AGENT_PLUGIN_FORBIDDEN[@]}"; do
-            [ -n "$(extract_field "$agent_file" "$ff")" ] \
-                && warning "[AGENT-PLUGIN-FORBIDDEN-FIELD] $display: plugin agents ignore '$ff' frontmatter (declare it at plugin level instead)"
+            [ -n "$(extract_field "$agent_file" "$ff")" ] || continue
+            # initialPrompt has no plugin-level equivalent; the others move to the manifest.
+            if [ "$ff" = "initialPrompt" ]; then
+                warning "[AGENT-PLUGIN-FORBIDDEN-FIELD] $display: plugin agents ignore '$ff' frontmatter (no plugin-level equivalent; remove it)"
+            else
+                warning "[AGENT-PLUGIN-FORBIDDEN-FIELD] $display: plugin agents ignore '$ff' frontmatter (declare it at plugin level instead)"
+            fi
         done
     fi
 
@@ -2046,6 +2266,7 @@ else
         validate_skill_md "$skill_file" "$skill_name/SKILL.md"
     done
 fi
+check_plugin_skill_risk
 echo ""
 
 # --- Check 3: Commands (unified with skills per current docs) ---
@@ -2215,6 +2436,7 @@ echo ""
 # --- Check 8: Path-scoped rules ---
 bold "--- Rules ---"
 check_rules
+check_rule_path_lost_on_compact
 echo ""
 
 # --- Check 9: Name collisions (commands vs skills) ---

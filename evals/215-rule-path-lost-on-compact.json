@@ -1,0 +1,28 @@
+{
+  "id": "215-rule-path-lost-on-compact",
+  "command": "claude-markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/rule-path-lost",
+    "needs_home_override": false,
+    "scanners": [
+      "validate-skills"
+    ]
+  },
+  "grader": {
+    "method": "code"
+  },
+  "success_criteria": {
+    "must_detect": [
+      {
+        "tag": "RULE-PATH-LOST-ON-COMPACT",
+        "path_substring": "rules/scoped.md"
+      }
+    ],
+    "must_not_flag": [],
+    "expect_clean": false
+  },
+  "expected_behavior": [
+    "a rule with paths: frontmatter whose body holds an upper-case MUST NOT is reloaded only on demand after /compact, so the hard constraint can vanish"
+  ]
+}

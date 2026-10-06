@@ -8,6 +8,10 @@ Claude Code loads every skill's `description` + `when_to_use` into one listing b
 
 Per-entry combined `description` + `when_to_use` is separately hard-capped at **1,536 characters**, enforced by `validate-skills.sh` (`DESCRIPTION-TRUNCATED`) — do NOT re-check it here.
 
+## Compaction cap
+
+A separate, per-skill budget applies after `/compact`: Claude Code re-attaches the most recent invocation of each skill, keeping only the **first 5,000 tokens** of each, within a combined **25,000-token** budget filled starting from the most recently invoked skill (context-window docs). `validate-skills.sh` approximates 5,000 tokens as 20,000 bytes of body (frontmatter excluded) and emits `SKILL-COMPACTION-TRUNCATED` (Hygiene) above it. Remediation: put the critical instructions at the top of the body, or move detail to `references/` files that are read on demand. The check also covers command files, which are skills.
+
 ## Compute the cost (per scope)
 
 ```bash
