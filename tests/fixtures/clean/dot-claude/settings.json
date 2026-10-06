@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "Bash(ls:*)",
-      "Read"
+      "Read",
+      "mcp__weather__*"
     ]
   },
   "outputStyle": "concise"

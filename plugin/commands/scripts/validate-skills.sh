@@ -871,23 +871,72 @@ check_settings_guide_refs() {
     done < <(jq -r '.guides? // {} | [.. | strings] | .[]' "$json_file" 2>/dev/null | sort -u || true)
 }
 
-# Flag MCP servers defined in mcpServers but absent from preApprovedTools.
-check_mcp_preapproved() {
-    local json_file="$1" display="$2" srv
-    [ -f "$json_file" ] || return 0
+# Flag MCP servers Claude Code actually loads (project .mcp.json, user ~/.claude.json)
+# that no settings file pre-approves. Claude Code does not read mcpServers from
+# settings.json (debug-your-config.md "MCP servers"), so those are never servers here
+# (scan-graph reports them as MCP-MISPLACED). The approval set is the union of
+# permissions.allow and preApprovedTools over settings.json AND settings.local.json.
+check_mcp_preapproved_live() {
+    local mcp_file display keys="" strs="" f srv
     command -v jq >/dev/null 2>&1 || return 0
+    if [ "$(readlink -f "$CLAUDE_DIR" 2>/dev/null)" = "$(readlink -f "$HOME/.claude" 2>/dev/null)" ]; then
+        mcp_file="$HOME/.claude.json"; display=".claude.json"
+    else
+        mcp_file="$(dirname "$(readlink -f "$CLAUDE_DIR")")/.mcp.json"; display=".mcp.json"
+    fi
+    [ -f "$mcp_file" ] || return 0
+    for f in "$CLAUDE_DIR/settings.json" "$CLAUDE_DIR/settings.local.json"; do
+        [ -f "$f" ] || continue
+        keys+=$'\n'$(jq -r '(.preApprovedTools // {}) | if type == "object" then keys[] else empty end' "$f" 2>/dev/null || true)
+        strs+=$'\n'$(jq -r '((.preApprovedTools // {}) | if type == "object" then .[] | arrays | .[] else empty end), ((.permissions.allow // []) | if type == "array" then .[] else empty end) | strings' "$f" 2>/dev/null || true)
+    done
     while IFS= read -r srv; do
         [ -z "$srv" ] && continue
-        if ! jq -e --arg s "$srv" '
-            (.preApprovedTools // {}) as $p
-            | (.permissions.allow // []) as $allow
-            | ($p | has($s))
-              or ([$p[]? | arrays | .[]] | any(type == "string" and test("mcp__\($s)__")))
-              or ($allow | any(type == "string" and test("mcp__\($s)__")))
-        ' "$json_file" >/dev/null 2>&1; then
-            error "[MISSING-PRE-APPROVED] $display: MCP server \"$srv\" not in preApprovedTools or permissions.allow"
-        fi
-    done < <(jq -r '.mcpServers? // {} | keys[]' "$json_file" 2>/dev/null || true)
+        if printf '%s\n' "$keys" | grep -qxF -- "$srv"; then continue; fi
+        case "$strs" in *"mcp__${srv}__"*) continue ;; esac
+        error "[MISSING-PRE-APPROVED] $display: MCP server \"$srv\" not in preApprovedTools or permissions.allow"
+    done < <(jq -r '(.mcpServers // {}) | if type == "object" then keys[] else empty end' "$mcp_file" 2>/dev/null || true)
+    return 0
+}
+
+# Flag permission rules Claude Code accepts but never applies.
+check_inert_permission_rules() {
+    local json_file="$1" display="$2" list kind rule
+    [ -f "$json_file" ] || return 0
+    command -v jq >/dev/null 2>&1 || return 0
+    while IFS=$'\t' read -r list kind rule; do
+        [ -z "$rule" ] && continue
+        case "$kind" in
+            tool-path)
+                warning "[PERM-INERT-RULE] $display: permissions.$list rule '$rule' is never consulted — file permissions are checked against Edit(path) and Read(path) rules only; use Edit(...) in place of Write/NotebookEdit/MultiEdit and Read(...) in place of Glob" ;;
+            mcp-parens)
+                warning "[PERM-INERT-RULE] $display: permissions.$list rule '$rule' is skipped when the settings file loads — an mcp__ rule cannot carry parentheses; use mcp__server__tool or mcp__server__*" ;;
+            primary-param)
+                warning "[PERM-INERT-RULE] $display: permissions.$list rule '$rule' is ignored — Tool(param:value) cannot match a tool's primary content field; use Bash(rm *), Read(./path) or WebFetch(domain:host)" ;;
+        esac
+    done < <(jq -r '
+        def inert:
+          if test("^(Write|NotebookEdit|Glob|MultiEdit)\\([^)]") and (test("^[A-Za-z]+\\(\\*\\)$") | not) then "tool-path"
+          elif test("^mcp__[^(]*\\(") then "mcp-parens"
+          elif test("^(Bash|PowerShell)\\([[:space:]]*command[[:space:]]*:|^(Read|Edit|Write)\\([[:space:]]*file_path[[:space:]]*:|^(Grep|Glob)\\([[:space:]]*path[[:space:]]*:|^NotebookEdit\\([[:space:]]*notebook_path[[:space:]]*:|^WebFetch\\([[:space:]]*url[[:space:]]*:") then "primary-param"
+          else empty end;
+        (.permissions // {}) | if type=="object" then to_entries[] else empty end
+        | select(.key | IN("allow","ask","deny")) | .key as $k
+        | .value | if type=="array" then .[] else empty end | select(type=="string")
+        | . as $r | inert | "\($k)\t\(.)\t\($r)"' "$json_file" 2>/dev/null || true)
+    return 0
+}
+
+# permissions.md: "If your project has a `.claudeignore` file, it has no effect, so move
+# its entries into `Read` deny rules." Project tree only: the user tree is skipped.
+check_claudeignore() {
+    local root
+    [ "$(readlink -f "$CLAUDE_DIR" 2>/dev/null)" = "$(readlink -f "$HOME/.claude" 2>/dev/null)" ] && return 0
+    root=$(dirname "$(readlink -f "$CLAUDE_DIR")")
+    if [ -f "$root/.claudeignore" ]; then
+        warning "[CLAUDEIGNORE-NO-EFFECT] .claudeignore: Claude Code does not read a .claudeignore file — move its entries into permissions.deny Read(...) rules"
+    fi
+    return 0
 }
 
 # Flag hook scripts on disk that no settings file registers. pre-commit.sh and
@@ -1718,6 +1767,7 @@ if [ -d "$CLAUDE_DIR/documentation/guides" ]; then
     done < <(find "$CLAUDE_DIR/documentation/guides" -name '*.md' 2>/dev/null | sort)
 fi
 check_local_md_tracked
+check_claudeignore
 echo ""
 
 # --- Check 2: Skills (SKILL.md files) ---
@@ -1872,7 +1922,7 @@ for settings_file in "$CLAUDE_DIR/settings.json" "$CLAUDE_DIR/settings.local.jso
         check_json_duplicate_keys    "$settings_file" "$sdisp"
         check_json_duplicate_entries "$settings_file" "$sdisp"
         check_settings_guide_refs    "$settings_file" "$sdisp"
-        check_mcp_preapproved        "$settings_file" "$sdisp"
+        check_inert_permission_rules  "$settings_file" "$sdisp"
         check_hook_timeouts          "$settings_file" "$sdisp"
         check_http_hook_env          "$settings_file" "$sdisp"
         check_http_hook_allowlist    "$settings_file" "$sdisp"
@@ -1882,6 +1932,7 @@ done
 # hooks/hooks.json holds hook definitions but no allowlist of its own, so it is
 # checked against the allowlist merged from the settings files above.
 check_http_hook_allowlist "$CLAUDE_DIR/hooks/hooks.json" "hooks/hooks.json"
+check_mcp_preapproved_live
 if [ "$settings_checked" -eq 0 ]; then
     ok "No settings.json found (skipped)"
 fi
