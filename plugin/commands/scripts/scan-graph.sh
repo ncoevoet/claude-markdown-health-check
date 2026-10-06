@@ -581,6 +581,53 @@ scan_mcp() {
     done
 }
 
+# ── L5: MCP config placement ────────────────────────────────────────────────
+#   MCP-MISPLACED      — a config Claude Code never reads: `.claude/.mcp.json`, a project-root
+#                        `.mcp.json` whose servers sit under `servers` (VS Code shape) with no
+#                        `mcpServers`, or an `mcpServers` key in settings.json/settings.local.json.
+#   MCP-RELATIVE-PATH  — `command`/`args` is a relative file path (`./x`, `scripts/x`): it resolves
+#                        against the launch directory, not against the .mcp.json. `~/.claude.json`
+#                        is read at the top level and under every `projects.<path>`.
+# A plugin root legitimately carries `.mcp.json` at its top, so the `.claude/.mcp.json` rule and the
+# relative-path rule are skipped when CLAUDE_DIR holds .claude-plugin/plugin.json.
+MCP_RELPATH_RE='^(\.{1,2}/|[A-Za-z0-9_-]+=\.{1,2}/)'
+scan_mcp_placement() {
+    local plugin_root=0 f sf rel srv val
+    [ -f "$CLAUDE_DIR/.claude-plugin/plugin.json" ] && plugin_root=1
+    if [ "$plugin_root" = 0 ] && [ -f "$CLAUDE_DIR/.mcp.json" ]; then
+        emit_finding 2 "MCP-MISPLACED" ".claude/.mcp.json" "project MCP config sits inside .claude/ — Claude Code reads .mcp.json only at the repository root, so these servers never load"
+    fi
+    f="$CLAUDE_DIR/../.mcp.json"
+    if [ -f "$f" ] && jq -e 'type == "object" and has("servers") and (has("mcpServers") | not)' "$f" >/dev/null 2>&1; then
+        emit_finding 2 "MCP-MISPLACED" ".mcp.json" "servers sit under a top-level 'servers' key (VS Code layout) — Claude Code reads only 'mcpServers', so none of them load"
+    fi
+    for sf in settings.json settings.local.json; do
+        f="$CLAUDE_DIR/$sf"
+        [ -f "$f" ] || continue
+        jq -e 'type == "object" and has("mcpServers")' "$f" >/dev/null 2>&1 \
+            && emit_finding 2 "MCP-MISPLACED" "$sf" "'mcpServers' in $sf is never read — define project servers in .mcp.json at the repository root, or run 'claude mcp add --scope user'"
+    done
+    [ "$plugin_root" = 1 ] && return 0
+    for f in "$CLAUDE_DIR/../.mcp.json" "$CLAUDE_DIR/../.claude.json"; do
+        [ -f "$f" ] || continue
+        rel="${f##*/}"
+        while IFS=$'\t' read -r srv val; do
+            [ -z "$srv" ] && continue
+            emit_finding 2 "MCP-RELATIVE-PATH" "$rel" "MCP server '$srv' uses relative path '$val' — it resolves against the directory Claude Code was launched from, not against $rel; use an absolute path or a PATH executable"
+        done < <(jq -r --arg re "$MCP_RELPATH_RE" '
+            def servers: if type == "object" then . else {} end;
+            ( ((.mcpServers // {}) | servers)
+              + ( [ (.projects // {}) | if type == "object" then .[] else empty end
+                    | select(type == "object") | (.mcpServers // {}) | servers ] | add // {} ) )
+            | to_entries[] | select(.value | type == "object") | .key as $k
+            | ( [ (.value.command // empty), ((.value.args // []) | if type == "array" then .[] else empty end) ]
+                | map(select(type == "string"))
+                | map(select(test($re))) ) as $args
+            | ( (.value.command // "") | if type == "string" and test("^[A-Za-z0-9_.-]+/") then [.] else [] end ) as $cmd
+            | ($args + $cmd) | select(length > 0) | "\($k)\t\(.[0])"' "$f" 2>/dev/null || true)
+    done
+}
+
 # Emit `display<TAB>command` for every shell command a hooks-shaped or monitors-shaped
 # JSON document declares. Handles the three layouts: inline `hooks` (plugin.json or
 # hooks/hooks.json), inline `experimental.monitors`, and a bare monitors array.
@@ -683,6 +730,7 @@ scan_ref_graph
 scan_memory
 scan_output_styles
 scan_mcp
+scan_mcp_placement
 
 NUM_FINDINGS=$(wc -l <"$TMP_FINDINGS" | tr -d ' ')
 META=$(jq -n --arg gen "$GEN_AT" --arg s "$SCOPE" --arg cd "$CLAUDE_DIR" --argjson n "${NUM_FINDINGS:-0}" \

@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "local": { "command": "node", "args": ["./server.js"] },
+    "nested": { "command": "scripts/run.sh" },
+    "fine-npx": { "command": "npx", "args": ["-y", "some-mcp-server"] },
+    "fine-abs": { "command": "/usr/local/bin/tool", "args": ["--config", "${CLAUDE_PROJECT_DIR}/mcp.toml"] }
+  }
+}
