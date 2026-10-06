@@ -1,0 +1,19 @@
+{
+  "id": "260-mcp-dead-settings-single-finding",
+  "command": "markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/mcp-dead-settings-no-double",
+    "needs_home_override": false,
+    "scanners": ["scan-graph"]
+  },
+  "grader": { "method": "code" },
+  "success_criteria": {
+    "must_detect": [ { "tag": "MCP-MISPLACED", "path_substring": "settings.json" } ],
+    "must_not_flag": [ "MCP-DEPRECATED-TRANSPORT","MCP-BAD-DEF","MCP-PLAINTEXT-SECRET" ],
+    "expect_clean": false
+  },
+  "expected_behavior": [
+    "mcpServers in settings.json is reported once as MCP-MISPLACED; its entries are not also checked for transport, definition or secrets (Claude Code never loads them)"
+  ]
+}

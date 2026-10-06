@@ -1,0 +1,44 @@
+{
+  "id": "144-settings-deprecated-key",
+  "command": "markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/settings-deprecated-key",
+    "needs_home_override": false,
+    "scanners": [
+      "validate-skills"
+    ]
+  },
+  "grader": {
+    "method": "code"
+  },
+  "success_criteria": {
+    "must_detect": [
+      {
+        "tag": "SETTINGS-DEPRECATED-KEY",
+        "path_substring": "'includeCoAuthoredBy'"
+      },
+      {
+        "tag": "SETTINGS-DEPRECATED-KEY",
+        "path_substring": "'disableArtifact'"
+      },
+      {
+        "tag": "SETTINGS-DEPRECATED-KEY",
+        "path_substring": "'keybindingFlavor'"
+      },
+      {
+        "tag": "SETTINGS-DEPRECATED-KEY",
+        "path_substring": "'voiceEnabled'"
+      },
+      {
+        "tag": "SETTINGS-DEPRECATED-KEY",
+        "path_substring": "'taskOutputMaxChars'"
+      }
+    ],
+    "must_not_flag": [],
+    "expect_clean": false
+  },
+  "expected_behavior": [
+    "each deprecated or removed settings key is reported by name"
+  ]
+}

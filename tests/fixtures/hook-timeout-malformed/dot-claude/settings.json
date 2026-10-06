@@ -1,0 +1,12 @@
+{
+  "hooks": {
+    "Stop": "oops",
+    "Notification": [
+      "str",
+      { "hooks": [ 5, { "type": "command", "command": "echo n", "timeout": 1500 } ] }
+    ],
+    "PreModelSwitch": [
+      { "hooks": [ { "type": "command", "command": "echo p", "timeout": 90 } ] }
+    ]
+  }
+}

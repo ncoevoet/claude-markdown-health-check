@@ -1,0 +1,19 @@
+{
+  "id": "241-plugin-name-leading-dash",
+  "command": "markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/plugin-name-leading-dash",
+    "needs_home_override": false,
+    "scanners": ["scan-graph"]
+  },
+  "grader": { "method": "code" },
+  "success_criteria": {
+    "must_detect": [ { "tag": "PLUGIN-NAME-FORMAT", "path_substring": "plugin.json" } ],
+    "must_not_flag": ["PLUGIN-RESERVED-NAME"],
+    "expect_clean": false
+  },
+  "expected_behavior": [
+    "scan-graph.sh emits [PLUGIN-NAME-FORMAT] (heuristic, not in the docs) for a name starting with - which claude plugin install would parse as an option"
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "strictKnownMarketplaces": [],
+  "modelPicker": {},
+  "skipAutoPermissionPrompt": true,
+  "env": {
+    "CLAUDE_CODE_MESSAGING_TOKEN": "x",
+    "OTEL_EXPORTER_OTLP_ENDPOINT": "https://otel.example.com"
+  },
+  "permissions": { "defaultMode": "auto" }
+}

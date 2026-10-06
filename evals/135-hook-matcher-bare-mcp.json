@@ -1,0 +1,34 @@
+{
+  "id": "135-hook-matcher-bare-mcp",
+  "command": "markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/hook-matcher-bare-mcp",
+    "needs_home_override": false,
+    "scanners": [
+      "validate-skills"
+    ]
+  },
+  "grader": {
+    "method": "code"
+  },
+  "success_criteria": {
+    "must_detect": [
+      {
+        "tag": "HOOK-MATCHER-BARE-MCP",
+        "path_substring": "'mcp__memory'"
+      },
+      {
+        "tag": "HOOK-MATCHER-BARE-MCP",
+        "path_substring": "'mcp__brave-search'"
+      }
+    ],
+    "must_not_flag": [
+      "HOOK-MATCHER-CASE"
+    ],
+    "expect_clean": false
+  },
+  "expected_behavior": [
+    "validate-skills.sh warns [HOOK-MATCHER-BARE-MCP] when a tool-event matcher segment names an MCP server but no tool (needs a trailing __.*)"
+  ]
+}

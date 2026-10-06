@@ -1,0 +1,28 @@
+{
+  "id": "157-agent-yaml-unparsed",
+  "command": "markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/agent-yaml-unparsed",
+    "needs_home_override": false,
+    "scanners": [
+      "validate-skills"
+    ]
+  },
+  "grader": {
+    "method": "code"
+  },
+  "success_criteria": {
+    "must_detect": [
+      {
+        "tag": "AGENT-YAML-UNPARSED",
+        "path_substring": "agents/bad.md"
+      }
+    ],
+    "must_not_flag": [],
+    "expect_clean": false
+  },
+  "expected_behavior": [
+    "validate-skills.sh emits [AGENT-YAML-UNPARSED] (error) for an agent whose description holds an unquoted ': ', which YAML rejects; Claude Code then skips the agent file"
+  ]
+}

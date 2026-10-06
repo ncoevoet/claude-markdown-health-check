@@ -1,0 +1,25 @@
+{
+  "id": "216-rule-path-lost-on-compact-ok",
+  "command": "markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/rule-path-lost-ok",
+    "needs_home_override": false,
+    "scanners": [
+      "validate-skills"
+    ]
+  },
+  "grader": {
+    "method": "code"
+  },
+  "success_criteria": {
+    "must_detect": [],
+    "must_not_flag": [
+      "RULE-PATH-LOST-ON-COMPACT"
+    ],
+    "expect_clean": true
+  },
+  "expected_behavior": [
+    "a paths: rule with only a lower-case never, and an unscoped rule with NEVER (re-injected from disk after compaction), are not flagged"
+  ]
+}

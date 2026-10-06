@@ -1,0 +1,19 @@
+{
+  "id": "258-hook-timeout-async",
+  "command": "markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/hook-timeout-async",
+    "needs_home_override": false,
+    "scanners": ["validate-skills"]
+  },
+  "grader": { "method": "code" },
+  "success_criteria": {
+    "must_detect": [],
+    "must_not_flag": ["SUSPICIOUS-TIMEOUT"],
+    "expect_clean": true
+  },
+  "expected_behavior": [
+    "a command hook with async: true is not flagged for a large timeout: Claude Code does not enforce it"
+  ]
+}

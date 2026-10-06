@@ -1,12 +1,16 @@
 # Skill Listing Budget Audit
 
-Loaded by `/claude-markdown-health-check` Phase 6. Audits whether the cumulative skill-listing block fits Claude Code's runtime budget and proposes remediations.
+Loaded by `/markdown-health-check` Phase 6. Audits whether the cumulative skill-listing block fits Claude Code's runtime budget and proposes remediations.
 
 ## Why this exists
 
 Claude Code loads every skill's `description` + `when_to_use` into one listing block at session start, capped at **1% of the context window (8,000-char floor)**; `/doctor` surfaces this as `skillListingBudgetFraction`. Over budget, descriptions drop to name-only — still invocable by name, but Claude can't auto-route to it (routing keywords gone).
 
 Per-entry combined `description` + `when_to_use` is separately hard-capped at **1,536 characters**, enforced by `validate-skills.sh` (`DESCRIPTION-TRUNCATED`) — do NOT re-check it here.
+
+## Compaction cap
+
+A separate, per-skill budget applies after `/compact`: Claude Code re-attaches the most recent invocation of each skill, keeping only the **first 5,000 tokens** of each, within a combined **25,000-token** budget filled starting from the most recently invoked skill (context-window docs). `validate-skills.sh` approximates 5,000 tokens as 20,000 bytes of body (frontmatter excluded) and emits `SKILL-COMPACTION-TRUNCATED` (Hygiene) above it. Remediation: put the critical instructions at the top of the body, or move detail to `references/` files that are read on demand. The check also covers command files, which are skills.
 
 ## Compute the cost (per scope)
 
@@ -41,6 +45,10 @@ When `SKILL-BUDGET-OVERFLOW` fires, the report's "Skill Listing Budget" block MU
 4. **Raise the budget — last resort** — `SLASH_COMMAND_TOOL_CHAR_BUDGET` env var or `skillListingBudgetFraction` in user settings (e.g. `0.02`). Trade-off per `/doctor`'s warning: ~4k extra tokens/turn, faster rate-limit burn. Only suggest once 1–3 are exhausted.
 
 When `SKILL-DUPLICATE-DOMAIN` fires, propose merging or deleting one of the pair instead of disabling — duplicates are a design issue, not a budget issue. Overlapping siblings are a recall tax independent of budget: merging two has been measured to raise combined observed recall 0.68 → 0.84 with neither description getting smarter. Prefer merge over delete when both have real usage history (`skill-usage-metrics.md`) — deleting the less-used one discards capability instead of consolidating it.
+
+## Cross-check at runtime
+
+The script's cost is a static estimate. To compare it with what Claude Code itself measures, run `claude plugin details <name>` ("Show a plugin's component inventory and projected token cost") for a plugin, or `/skill-doctor` inside a session ("Show what each of your skills costs in context and how often it gets used"). `/skill-doctor` needs Claude Code v2.1.252 or later and is unavailable in sessions that skip feature-flag fetching. Treat a large gap between the two as a reason to re-check the script's assumptions, not as a finding.
 
 ## Report block (emitted from Phase 24)
 

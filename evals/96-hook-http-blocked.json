@@ -1,6 +1,6 @@
 {
   "id": "96-hook-http-blocked",
-  "command": "claude-markdown-health-check",
+  "command": "markdown-health-check",
   "fixture": {
     "kind": "claude-tree",
     "dir": "tests/fixtures/hook-http-blocked",

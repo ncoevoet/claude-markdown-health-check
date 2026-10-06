@@ -1,6 +1,6 @@
 {
   "id": "118-history-anchor-word-boundary",
-  "command": "claude-markdown-health-check",
+  "command": "markdown-health-check",
   "fixture": {
     "kind": "synthetic-jsonl",
     "dir": "tests/fixtures/history-anchor-boundary",

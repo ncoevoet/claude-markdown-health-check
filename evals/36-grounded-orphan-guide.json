@@ -1,7 +1,7 @@
 {
   "id": "36-grounded-orphan-guide",
-  "command": "claude-markdown-health-check",
-  "query": "/claude-markdown-health-check",
+  "command": "markdown-health-check",
+  "query": "/markdown-health-check",
   "fixture": {
     "kind": "claude-tree",
     "dir": "tests/fixtures/grounded-orphan-guide",
@@ -9,7 +9,7 @@
     "scanners": []
   },
   "grader": { "method": "llm-rubric" },
-  "grader_rubric": "Reason briefly, then on the LAST line output exactly PASS or FAIL. The fixture has documentation/guides/deployment.md which IS referenced from CLAUDE.md (\"follow the full checklist in documentation/guides/deployment.md\"). PASS only if the report does NOT flag that guide as orphaned (no ORPHAN-GUIDE / ORPHAN-PATTERN / REPURPOSE for deployment.md) — the inbound reference resolves, so the evidence-grounding gate must suppress a naive orphan finding. FAIL if the report flags the referenced guide as an orphan. Ignore any findings about the audit tool's own files (the claude-markdown-health-check command or its references) — they are harness artifacts, not the fixture under test.",
+  "grader_rubric": "Reason briefly, then on the LAST line output exactly PASS or FAIL. The fixture has documentation/guides/deployment.md which IS referenced from CLAUDE.md (\"follow the full checklist in documentation/guides/deployment.md\"). PASS only if the report does NOT flag that guide as orphaned (no ORPHAN-GUIDE / ORPHAN-PATTERN / REPURPOSE for deployment.md) — the inbound reference resolves, so the evidence-grounding gate must suppress a naive orphan finding. FAIL if the report flags the referenced guide as an orphan. Ignore any findings about the audit tool's own files (the markdown-health-check command or its references) — they are harness artifacts, not the fixture under test.",
   "expected_behavior": [
     "does not flag documentation/guides/deployment.md as orphaned (it is referenced from CLAUDE.md)"
   ],

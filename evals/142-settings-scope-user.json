@@ -1,0 +1,32 @@
+{
+  "id": "142-settings-scope-user",
+  "command": "markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/settings-scope-user",
+    "needs_home_override": true,
+    "scanners": [
+      "validate-skills"
+    ]
+  },
+  "grader": {
+    "method": "code"
+  },
+  "success_criteria": {
+    "must_detect": [
+      {
+        "tag": "SETTINGS-SCOPE-IGNORED",
+        "path_substring": "'strictKnownMarketplaces' is ignored in user"
+      },
+      {
+        "tag": "SETTINGS-SCOPE-IGNORED",
+        "path_substring": "env.CLAUDE_CODE_MESSAGING_TOKEN is ignored in every settings file"
+      }
+    ],
+    "must_not_flag": [],
+    "expect_clean": false
+  },
+  "expected_behavior": [
+    "at user scope only managed-only keys and every-file env variables are flagged; user-allowed keys are not"
+  ]
+}

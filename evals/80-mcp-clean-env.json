@@ -1,6 +1,6 @@
 {
   "id": "80-mcp-clean-env",
-  "command": "claude-markdown-health-check",
+  "command": "markdown-health-check",
   "fixture": {
     "kind": "claude-tree",
     "dir": "tests/fixtures/mcp-clean-env",

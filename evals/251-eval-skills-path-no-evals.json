@@ -1,0 +1,19 @@
+{
+  "id": "251-eval-skills-path-no-evals",
+  "command": "markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/skills-path-no-evals",
+    "needs_home_override": false,
+    "scanners": ["scan-graph"]
+  },
+  "grader": { "method": "code" },
+  "success_criteria": {
+    "must_detect": [ { "tag": "PLUGIN-NO-EVALS", "path_substring": "plugin.json" } ],
+    "must_not_flag": ["EVAL-CASE-NO-GRADER","EVAL-NO-SKILL-GRADER"],
+    "expect_clean": false
+  },
+  "expected_behavior": [
+    "scan-graph.sh emits [PLUGIN-NO-EVALS]: the only model-invocable skill lives under the manifest skills entry ./extra, not skills/, and the plugin has no eval case"
+  ]
+}

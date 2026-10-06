@@ -1,9 +1,13 @@
 #!/usr/bin/env bash
 # validate-skills.sh — Deterministic compliance checks for .claude/ ecosystem
-# Based on Anthropic's official best practices (verified 2026-05-28; thresholds
+# Based on Anthropic's official best practices (verified 2026-10-06; adds XML tags in
+# descriptions, Windows paths, time-sensitive wording, vague names and reserved-word
+# portability; thresholds
 # re-checked against the live docs with no drift — name 64 / desc 1024 / skill
 # 500 lines / memory 200 lines+25600 bytes / listing 1% & 8000 floor & 1536 entry /
-# hook timeouts 600/30/60 + UserPromptSubmit 30):
+# hook timeouts per event: command/http/mcp_tool 600, but 30 on UserPromptSubmit/
+# PreModelSwitch/PostModelSwitch and 10 on MessageDisplay; prompt 30; agent 60;
+# SessionEnd capped at 60):
 #   https://platform.claude.com/docs/en/agents-and-tools/agent-skills/best-practices
 #   https://code.claude.com/docs/en/skills
 #   https://code.claude.com/docs/en/memory
@@ -11,6 +15,10 @@
 #   https://code.claude.com/docs/en/settings
 
 set -euo pipefail
+
+# Shared helpers (path normalisers, manifest walker) — ships beside this script.
+# shellcheck source=lib-common.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib-common.sh"
 
 # Target a `.claude/`-style directory. Resolution order:
 #   1) explicit first positional arg (`validate-skills.sh /path/to/.claude`)
@@ -61,6 +69,27 @@ REF_TOC_THRESHOLD=100
 CLAUDE_MD_MAX_LINES=200
 IMPORT_MAX_DEPTH=4
 RESERVED_SKILL_DIR="synced"
+# Agent Skills best-practices checks. Skill-only (is_skill_md=1): command files
+# legitimately carry <arg> placeholders and are not uploadable skills.
+# Generic skill names / non-descriptive reference filenames (digits required so
+# notes.md and misc.md stay out of scope).
+VAGUE_SKILL_NAME_RE='^(helpers?|utils?|tools?|documents?|data|files?)$'
+VAGUE_REF_NAME_RE='^(doc|file)[0-9]+\.md$'
+# Case-insensitive SUBSTRING (grep -Ei): the docs say a name may not "contain" these.
+RESERVED_WORD_RE='anthropic|claude'
+# Tags: bare (<b>, </b>), self-closing with optional whitespace (<br />), with
+# name="v" / name='v' / name=v attributes (<example name="a">), and generic types
+# with a comma list (Map<K,V>, Map<K, V>; not followed by an identifier char so
+# `x<y, z>w` stays out). `x<y and y>z` and `a < b > c` do not match.
+DESC_XML_TAG_RE="</?[A-Za-z][A-Za-z0-9_:-]*([[:space:]]+[A-Za-z_:][A-Za-z0-9_:.-]*=(\"[^\"]*\"|'[^']*'|[^[:space:]\"'<>=/]+))*[[:space:]]*/?>"
+DESC_GENERIC_RE='[A-Za-z_][A-Za-z0-9_]*<[A-Za-z_][A-Za-z0-9_.]*(,[[:space:]]*[A-Za-z_][A-Za-z0-9_.]*)+>([^A-Za-z0-9_]|$)'
+# A backslash path with a file extension (scripts\helper.py). Segment 2 must start
+# alphanumeric so markdown escapes like snake\_case.py do not match.
+WINDOWS_PATH_RE='[A-Za-z0-9_.-]+\\[A-Za-z0-9][A-Za-z0-9_.-]*\.[A-Za-z0-9]{1,5}\b'
+# before/after/until/as of/since <Month> [day,] <YYYY>, or day-first. Used with grep -Ei.
+# Exact full month names or the 3-letter abbreviations, optional dot ("Marching" is no month).
+TIME_MONTH='(jan(uary)?|feb(ruary)?|mar(ch)?|apr(il)?|may|june?|july?|aug(ust)?|sep(tember)?|oct(ober)?|nov(ember)?|dec(ember)?)\.?'
+TIME_SENSITIVE_RE='\b(before|after|until|as +of|since) +('"$TIME_MONTH"' +([0-9]{1,2},? +)?[0-9]{4}|[0-9]{1,2} +'"$TIME_MONTH"' +[0-9]{4})\b'
 KNOWN_FRONTMATTER_FIELDS=("name" "description" "when_to_use" "allowed-tools" "disallowed-tools" "argument-hint" "arguments" "model" "color" "user-invocable" "disable-model-invocation" "effort" "context" "agent" "hooks" "paths" "shell" "hide-from-slash-command-tool" "background" "metadata" "license" "compatibility")
 MODEL_WHITELIST_RE='^(opus|sonnet|haiku|fable|inherit|claude-(opus|sonnet|haiku|fable)-[0-9])'
 # enforceAvailableModels (settings.json, then settings.local.json overriding): when
@@ -103,7 +132,7 @@ SKILLS_DIR_EXCLUDES=("bootstrap" "commands")
 AGENT_COLOR_RE='^(red|blue|green|yellow|purple|orange|pink|cyan)$'
 AGENT_PERMMODE_RE='^(default|acceptEdits|auto|dontAsk|bypassPermissions|plan)$'
 # Fields a PLUGIN-provided subagent declares in vain — Claude Code silently ignores them.
-AGENT_PLUGIN_FORBIDDEN=("hooks" "mcpServers" "permissionMode")
+AGENT_PLUGIN_FORBIDDEN=("hooks" "mcpServers" "permissionMode" "initialPrompt")
 # Context-engineering thresholds — see
 # https://claude.com/blog/the-new-rules-of-context-engineering-for-claude-5-generation-models
 # ("we were overconstraining Claude Code", "delete these repeat examples").
@@ -125,6 +154,9 @@ MEMORY_MAX_BYTES=25600
 HOOK_TIMEOUT_COMMAND=600
 HOOK_TIMEOUT_PROMPT=30
 HOOK_TIMEOUT_AGENT=60
+HOOK_TIMEOUT_FAST_EVENT=30
+HOOK_TIMEOUT_MESSAGEDISPLAY=10
+HOOK_TIMEOUT_SESSIONEND_CAP=60
 
 # Skill listing budget — see https://code.claude.com/docs/en/skills
 # "The budget scales dynamically at 1% of the context window, with a fallback of 8,000 characters."
@@ -136,8 +168,7 @@ LISTING_BUDGET_FRACTION_DEFAULT="0.01"
 # (e.g. "scans ~/.claude/projects/*.jsonl", "reads .claude/plugins/installed_plugins.json").
 # These are not chained skill references, so they are exempt from CHAINED-REF; genuine
 # cross-component links (.claude/skills/<other>/…, .claude/commands/<other>) still fire.
-# shellcheck disable=SC2088  # the leading ~ is a literal regex char (matches "~/.claude/"), not a path to expand
-CLAUDE_RUNTIME_PATHS_RE='~/\.claude/|\.claude/(projects|plugins|\.?cache|telemetry|usage-data|logs|statsig|todos|shell-snapshots|backups|ide)|\.claude/\.(credentials|claude)|\.claude\.json'
+CLAUDE_RUNTIME_PATHS_RE='[~]/\.claude/|\.claude/(projects|plugins|\.?cache|telemetry|usage-data|logs|statsig|todos|shell-snapshots|backups|ide)|\.claude/\.(credentials|claude)|\.claude\.json'
 
 red()    { printf '\033[0;31m%s\033[0m\n' "$1"; }
 yellow() { printf '\033[0;33m%s\033[0m\n' "$1"; }
@@ -164,7 +195,8 @@ ok()      { printf '  [OK]  %s\n' "$1"; }
 
 extract_field() {
     # extract_field <file> <field-name> -> prints the value. Joins a multi-line
-    # YAML block scalar / wrapped value with spaces; prints "" when absent.
+    # YAML block scalar / wrapped value with spaces, and folds the indented
+    # continuation lines of a plain scalar; prints "" when absent.
     local file="$1" field="$2"
     awk -v key="$field" '
         /^---[[:space:]]*$/ { if (infm) { if (cap) print val; exit } infm = 1; next }
@@ -183,7 +215,7 @@ extract_field() {
             if (v == "" || v == "|" || v == ">" || v == "|-" || v == ">-" || v == "|+" || v == ">+") {
                 cap = 1; val = ""; next
             }
-            print v; exit
+            cap = 1; val = v; next
         }
     ' "$file"
 }
@@ -199,7 +231,7 @@ ANCHOR_EXT_RE='\.[a-z0-9]{2,6}\b'
 ANCHOR_DOTTED_RE='\b[a-z0-9_-]+\.[a-z0-9]{2,6}\b'
 ANCHOR_BACKTICK_RE='`[^`]+`'
 # Hyphenated/compound lowercase identifiers (`coder-eval`,
-# `claude-markdown-health-check`) read as domain-specific product/artifact
+# `markdown-health-check`) read as domain-specific product/artifact
 # names, not prose — but plenty of ordinary English is hyphenated too
 # ("well-known", "built-in"). Matched lowercase-only (no `-i`) so a
 # Capitalized-Hyphenated run (sentence-initial or not) is left to the
@@ -345,6 +377,161 @@ frontmatter_orphaned_list_key() {
     ' "$1"
 }
 
+SKILL_COMPACTION_MAX_BYTES=20000   # 5,000 tokens x ~4 bytes/token
+
+# Network-call and hidden-behaviour indicators for plugin-installed skills (Discovery).
+# Source: the enterprise skill review checklist (platform.claude.com agent-skills/enterprise).
+SKILL_NETWORK_RE='(^|[;&|(`[:space:]])(curl|wget)[[:space:]]+[-"'"'"'$h]|(^|[^A-Za-z0-9_.])fetch\(|requests\.(get|post|put|patch|delete|request)\(|urllib\.request|http\.client|(^|[^A-Za-z0-9_])axios[.(]|Invoke-WebRequest|XMLHttpRequest|new WebSocket\(|Invoke-RestMethod|(^|[^A-Za-z0-9_])iwr[[:space:]]|window\.fetch\(|globalThis\.fetch\(|(^|[^A-Za-z0-9_])httpx\.|urlopen\(|(^|[^A-Za-z0-9_.])https?\.get\('
+SKILL_HIDDEN_RE='(do not|don.t|never|without) (tell|telling|inform|informing|notify|notifying|mention|mentioning|reveal|revealing)[^.]{0,40}(the )?(user|human)|(hide|conceal)[^.]{0,40}from (the )?(user|human)|ignore (all |any )?(previous|prior|earlier|safety|system)( safety)? (instructions|rules|guidelines)'
+# ServerName:tool_name — the snake_case tool segment keeps http:, note:, type:string out.
+SKILL_MCP_RE='(^|[^A-Za-z0-9_/:.-])[A-Za-z][A-Za-z0-9_-]*:[a-z][a-z0-9]*(_[a-z0-9]+)+([^A-Za-z0-9_:]|$)'
+RULE_DIRECTIVE_RE='(^|[^A-Za-z0-9_])(NEVER|MUST NOT|MUST|ALWAYS|DO NOT)([^A-Za-z0-9_]|$)'
+
+# Body of a SKILL.md / command / rule file: everything after the closing frontmatter ---.
+_md_body() {
+    awk 'NR == 1 && /^---[[:space:]]*$/ { fm = 1; next } fm == 1 { if ($0 ~ /^---[[:space:]]*$/) fm = 2; next } { print }' "$1"
+}
+
+# Body size in bytes (frontmatter excluded).
+_skill_body_bytes() {
+    _md_body "$1" | wc -c | tr -d '[:space:]'
+}
+
+# Prints a short reason when the frontmatter of $1 cannot parse as YAML, else nothing.
+frontmatter_unparsed_reason() {
+    awk '
+        NR == 1 { if ($0 ~ /^---[[:space:]]*$/) { in_fm = 1; next } else { exit } }
+        in_fm && /^---[[:space:]]*$/ { closed = 1; exit }
+        in_fm {
+            if ($0 ~ /^\t/) { if (reason == "") reason = "tab indentation at frontmatter line " NR; next }
+            if ($0 !~ /^([A-Za-z0-9_-]+:|[[:space:]]|#|-[[:space:]]|$)/) { if (reason == "") reason = "line is not a key: value pair at frontmatter line " NR; next }
+            if ($0 ~ /^[A-Za-z0-9_-]+:[[:space:]]+[^[:space:]]/) {
+                v = $0; sub(/^[A-Za-z0-9_-]+:[[:space:]]+/, "", v)
+                if (v !~ /^["\x27|>\[{&*!%@`#]/) {
+                    sub(/[[:space:]]+#.*$/, "", v)
+                    if (v ~ /:([[:space:]]|$)/ && reason == "") reason = "unquoted value contains \": \" at frontmatter line " NR
+                }
+            }
+        }
+        END { if (in_fm && !closed) reason = "opening --- has no closing ---"; if (reason != "") print reason }
+    ' "$1"
+}
+
+# Text indicators in one plugin skill / command file: hide-from-user wording, a ../ that
+# leaves the plugin, an MCP tool reference. Args: <file> <display> <physical-dir> <physical-root>
+_plugin_text_risk() {
+    local file="$1" display="$2" dir="$3" root="$4" hid m t mcp
+    hid=$(grep -oEi "$SKILL_HIDDEN_RE" "$file" 2>/dev/null | head -1 || true)
+    if [ -n "$hid" ]; then
+        warning "[SKILL-HIDDEN-BEHAVIOR] $display: says \"$hid\" — instructions to hide actions from the user or override safety rules"
+    fi
+    while IFS= read -r m; do
+        [ -n "$m" ] || continue
+        case "$m" in *[A-Za-z0-9_-].) m="${m%.}" ;; esac
+        t=$(_mhc_lexpath "$dir/$m")
+        if [ "$t" != "$root" ] && [[ "$t" != "$root"/* ]]; then
+            warning "[SKILL-HIDDEN-BEHAVIOR] $display: path escapes the plugin: $m — instructions that reach outside the plugin directory"
+            break
+        fi
+    done < <(grep -oE '(\.\./)+[A-Za-z0-9._/-]*' "$file" 2>/dev/null | sort -u || true)
+    mcp=$(grep -oE "$SKILL_MCP_RE" "$file" 2>/dev/null | head -1 | sed -E 's/^[^A-Za-z]+//; s/[^a-z0-9]+$//' || true)
+    if [ -n "$mcp" ]; then
+        warning "[SKILL-MCP-REFERENCE] $display: references MCP tool $mcp — this extends access beyond the skill itself; check that the skill's purpose needs that server"
+    fi
+    return 0
+}
+
+# Bundled scripts of one plugin skill that make network calls. Args: <skill-dir> <display>
+_plugin_net_risk() {
+    local sd="$1" display="$2" s n
+    while IFS= read -r s; do
+        [ -n "$s" ] || continue
+        # grep -c (not -q): reads the whole stream, so pipefail never sees a SIGPIPE.
+        n=$(grep -vE '^[[:space:]]*(#|//)' "$s" 2>/dev/null | grep -cE "$SKILL_NETWORK_RE" || true)
+        if [ "${n:-0}" -gt 0 ]; then
+            warning "[SKILL-NETWORK-SURFACE] $display: bundled script ${s#"$sd"/} makes network calls (curl/wget/fetch/requests) — review it before trusting this plugin skill"
+        fi
+    done < <(find -L "$sd" -type f \( -name '*.py' -o -name '*.sh' -o -name '*.js' -o -name '*.mjs' -o -name '*.ts' -o -name '*.ps1' \) -not -path '*/node_modules/*' 2>/dev/null | sort | head -50 || true)
+    return 0
+}
+
+# One installed plugin: its skills (default skills/ plus manifest `skills` roots) and commands.
+# Args: <plugin-name> <physical-root>
+_plugin_skill_risk_scan() {
+    local pname="$1" root="$2" e r f sd rel
+    local -a files=() cmds=()
+    while IFS= read -r e; do
+        [ -n "$e" ] || continue
+        if [ "$e" = "." ]; then r="$root"; else r="$root/$e"; fi
+        [ -d "$r" ] || continue
+        for f in "$r"/*/SKILL.md "$r/SKILL.md"; do
+            if [ -f "$f" ]; then files+=("$f"); fi
+        done
+    done < <(printf 'skills\n'; _plugin_manifest_entries "$root" skills)
+    while IFS= read -r f; do
+        [ -n "$f" ] || continue
+        sd=$( (cd -P "$(dirname "$f")" 2>/dev/null && pwd -P) || true)
+        [ -n "$sd" ] || continue
+        if [ "$sd" = "$root" ]; then rel="."; else rel="${sd#"$root"/}"; fi
+        _plugin_text_risk "$f" "$pname/$rel/SKILL.md" "$sd" "$root"
+        _plugin_net_risk "$sd" "$pname/$rel"
+    done < <(printf '%s\n' "${files[@]+"${files[@]}"}" | sort -u || true)
+    while IFS= read -r e; do
+        [ -n "$e" ] || continue
+        r="$root/$e"
+        if [ -d "$r" ]; then
+            for f in "$r"/*.md; do
+                if [ -f "$f" ]; then cmds+=("$f"); fi
+            done
+        elif [ -f "$r" ]; then
+            cmds+=("$r")
+        fi
+    done < <(printf 'commands\n'; _plugin_manifest_entries "$root" commands)
+    while IFS= read -r f; do
+        [ -n "$f" ] || continue
+        sd=$( (cd -P "$(dirname "$f")" 2>/dev/null && pwd -P) || true)
+        [ -n "$sd" ] || continue
+        if [ "$sd" = "$root" ]; then rel="$(basename "$f")"; else rel="${sd#"$root"/}/$(basename "$f")"; fi
+        # Commands are slash-invoked prompts: hide-from-user and MCP reach apply, scripts do not.
+        _plugin_text_risk "$f" "$pname/$rel" "$sd" "$root"
+    done < <(printf '%s\n' "${cmds[@]+"${cmds[@]}"}" | sort -u || true)
+    return 0
+}
+
+# Third-party / plugin-installed skills and commands: network surface, hidden behaviour, MCP
+# reach (Discovery). User tree only: the user's own skills are exempt, installed plugins are not.
+check_plugin_skill_risk() {
+    local ip_file="$HOME/.claude/plugins/installed_plugins.json" pname ip root
+    _mhc_same_path "$CLAUDE_DIR" "$HOME/.claude" || return 0
+    [ -f "$ip_file" ] || return 0
+    command -v jq >/dev/null 2>&1 || return 0
+    while IFS=$'\t' read -r pname ip; do
+        [ -n "$ip" ] || continue
+        root=$( (cd -P "$ip" 2>/dev/null && pwd -P) || true)
+        [ -n "$root" ] || continue
+        _plugin_skill_risk_scan "$pname" "$root"
+    done < <(jq -r '.plugins // {} | to_entries[] | select(.value | type == "array") | select(.value[0] | type == "object") | (.value[0].installPath | strings) as $p | [(.key | sub("@.*$"; "")), $p] | @tsv' "$ip_file" 2>/dev/null || true)
+    return 0
+}
+
+# A rule scoped with `paths:` is reloaded only on demand after /compact (unscoped rules are
+# re-injected from disk), so a hard directive kept only there can vanish from the session.
+check_rule_path_lost_on_compact() {
+    local rules_dir="$CLAUDE_DIR/rules" rf rel scoped body
+    [ -d "$rules_dir" ] || return 0
+    while IFS= read -r rf; do
+        [ -f "$rf" ] || continue
+        scoped=$(awk 'NR == 1 { if ($0 ~ /^---[[:space:]]*$/) { fm = 1; next } else { exit } } fm && /^---[[:space:]]*$/ { exit } fm && /^paths:/ { print "y"; exit }' "$rf" || true)
+        [ -n "$scoped" ] || continue
+        body=$(_md_body "$rf" || true)
+        if grep -qE "$RULE_DIRECTIVE_RE" <<< "$body"; then
+            rel=${rf#"$CLAUDE_DIR"/}
+            warning "[RULE-PATH-LOST-ON-COMPACT] $rel: a hard directive (NEVER/MUST/ALWAYS/DO NOT) lives in a path-scoped rule — after /compact the rule is reloaded only when a matching file is read again, so the constraint can be absent; move it to CLAUDE.md or an unscoped rule"
+        fi
+    done < <(find -L "$rules_dir" -name '*.md' -type f 2>/dev/null | sort || true)
+    return 0
+}
+
 validate_skill_md() {
     # Validates a SKILL.md or unified command .md file. Args: <file> <display-name>
     local skill_file="$1" skill_name="$2"
@@ -366,6 +553,21 @@ validate_skill_md() {
     orphan_key=$(frontmatter_orphaned_list_key "$skill_file")
     if [ -n "$orphan_key" ]; then
         error "[BAD-FRONTMATTER-SCHEMA] $skill_name: frontmatter is not parseable YAML — a list is indented under the completed scalar '$orphan_key:' (a key line such as when_to_use: is missing above the list); the runtime falls back to the H1 title and the skill loses its routing description"
+    fi
+
+    # Check: broader unparsed-YAML reasons (tab indent, unquoted ": ", unclosed ---) —
+    # only when the orphaned-list check above did not already report this file.
+    local fm_reason
+    fm_reason=$(frontmatter_unparsed_reason "$skill_file")
+    if [ -n "$fm_reason" ] && [ -z "$orphan_key" ]; then
+        error "[BAD-FRONTMATTER-SCHEMA] $skill_name: frontmatter is not parseable YAML ($fm_reason); Claude Code loads the file with no fields set, so the routing description is lost"
+    fi
+
+    # Check: body size vs the post-/compact re-injection cap (5,000 tokens per skill)
+    local body_bytes
+    body_bytes=$(_skill_body_bytes "$skill_file")
+    if [ "$body_bytes" -gt "$SKILL_COMPACTION_MAX_BYTES" ]; then
+        warning "[SKILL-COMPACTION-TRUNCATED] $skill_name: body is $body_bytes bytes (about $((body_bytes / 4)) tokens) — after /compact only the first 5,000 tokens are re-injected, so put the critical instructions at the top or split to references/"
     fi
 
     # Check: description present, then length (40 advisory, 1024 hard, 1536 combined)
@@ -393,6 +595,12 @@ validate_skill_md() {
         # a capital I. Second-person words stay case-tolerant via [Yy].
         if echo "$desc" | grep -Eq '(\bI\b|\bI'\''ll\b|\bI can\b|\b[Yy]ou can\b|\b[Yy]our\b)'; then
             warning "[THIRD-PERSON] $skill_name: description appears to use first/second person; docs require third person"
+        fi
+        # Check: XML-style tags in the description. The docs forbid them: the
+        # description is injected into the system prompt. Any bare tag counts,
+        # including backticked placeholders such as <iid>.
+        if [ "$is_skill_md" = 1 ] && { printf '%s' "$desc" | grep -Eq "$DESC_XML_TAG_RE" || printf '%s' "$desc" | grep -Eq "$DESC_GENERIC_RE"; }; then
+            error "[DESC-XML-TAG] $skill_name: description contains an XML-style tag — the docs forbid XML tags in description (it is injected into the system prompt)"
         fi
     elif [ "$is_skill_md" = 1 ]; then
         error "[MISSING-DESC] $skill_name: no 'description' in frontmatter (required — without it the skill cannot be auto-routed)"
@@ -460,12 +668,22 @@ validate_skill_md() {
     # Check: reserved skill directory. The docs reserve exactly one name —
     # the folder `synced`, in any capitalization, in the enterprise, personal
     # and project skill locations. It is the directory that is reserved, not
-    # the frontmatter name, and nothing forbids `anthropic` or `claude`.
+    # the frontmatter name; `anthropic`/`claude` in a name is only a portability
+    # hint (RESERVED-WORD-PORTABILITY, below).
     if [ "$is_skill_md" = 1 ]; then
         local dir_lc
         dir_lc=$(printf '%s' "$dir_name" | tr '[:upper:]' '[:lower:]')
         if [ "$dir_lc" = "$RESERVED_SKILL_DIR" ]; then
             error "[RESERVED-NAME] $skill_name: directory '$dir_name' uses the reserved skill folder name '$RESERVED_SKILL_DIR'"
+        fi
+        # Check: reserved words in the name. Legal in Claude Code, but the Agent
+        # Skills API / claude.ai upload rejects names containing anthropic or claude.
+        if printf '%s' "$name" | grep -Eiq "$RESERVED_WORD_RE"; then
+            warning "[RESERVED-WORD-PORTABILITY] $skill_name: name '$name' contains a reserved word (anthropic/claude) — legal in Claude Code, but rejected when the skill is uploaded to the API or claude.ai"
+        fi
+        # Check: a bare generic word is not a descriptive skill name.
+        if printf '%s' "$name" | grep -Eq "$VAGUE_SKILL_NAME_RE"; then
+            warning "[VAGUE-NAME] $skill_name: name '$name' is a generic word — prefer a specific, descriptive name (e.g. processing-pdfs)"
         fi
     fi
     # Check: a SKILL.md frontmatter name must match its directory name
@@ -509,6 +727,9 @@ validate_skill_md() {
     check_embedded_secrets      "$skill_file" "$skill_name"
     check_unflagged_destructive "$skill_file" "$skill_name"
     check_over_constrained      "$skill_file" "$skill_name"
+    if [ "$is_skill_md" = 1 ]; then
+        check_time_and_paths "$skill_file" "$skill_name"
+    fi
 }
 
 validate_agent_md() {
@@ -522,6 +743,17 @@ validate_agent_md() {
     # description is required — without it the agent cannot be delegation-routed.
     desc=$(extract_field "$agent_file" "description")
     [ -z "$desc" ] && error "[AGENT-BAD-SCHEMA] $display: no 'description' in frontmatter (required for delegation routing)"
+
+    # Unparseable frontmatter: Claude Code skips a plain agent file and loads a plugin agent
+    # with every field ignored.
+    local fm_reason
+    fm_reason=$(frontmatter_unparsed_reason "$agent_file")
+    if [ -z "$fm_reason" ]; then
+        fm_reason=$(frontmatter_orphaned_list_key "$agent_file" | sed 's/^\(.\)/a list is indented under the completed scalar \1/')
+    fi
+    if [ -n "$fm_reason" ]; then
+        error "[AGENT-YAML-UNPARSED] $display: frontmatter is not parseable YAML ($fm_reason) — Claude Code reads no fields from the file (a plugin agent still loads, named after the file with every field ignored)"
+    fi
 
     # model whitelist (shared with skills).
     model_field=$(extract_field "$agent_file" "model")
@@ -577,8 +809,13 @@ validate_agent_md() {
     # Plugin-provided agents silently ignore hooks/mcpServers/permissionMode.
     if [ "$is_plugin" = 1 ]; then
         for ff in "${AGENT_PLUGIN_FORBIDDEN[@]}"; do
-            [ -n "$(extract_field "$agent_file" "$ff")" ] \
-                && warning "[AGENT-PLUGIN-FORBIDDEN-FIELD] $display: plugin agents ignore '$ff' frontmatter (declare it at plugin level instead)"
+            [ -n "$(extract_field "$agent_file" "$ff")" ] || continue
+            # initialPrompt has no plugin-level equivalent; the others move to the manifest.
+            if [ "$ff" = "initialPrompt" ]; then
+                warning "[AGENT-PLUGIN-FORBIDDEN-FIELD] $display: plugin agents ignore '$ff' frontmatter (no plugin-level equivalent; remove it)"
+            else
+                warning "[AGENT-PLUGIN-FORBIDDEN-FIELD] $display: plugin agents ignore '$ff' frontmatter (declare it at plugin level instead)"
+            fi
         done
     fi
 
@@ -668,9 +905,8 @@ check_json_valid() {
 # Resolve a ".claude/<rest>" or "~/.claude/<rest>" reference to its on-disk path.
 # A bare .claude/ is scope-relative ($CLAUDE_DIR); a ~/.claude/ is the user tree.
 _resolve_dotclaude() {
-    # shellcheck disable=SC2088  # the "~/.claude/" pattern is a literal tilde (as written in a settings file), not an expansion
     case "$1" in
-        "~/.claude/"*) printf '%s/%s\n' "$HOME/.claude" "${1#\~/.claude/}" ;;
+        \~/.claude/*)   printf '%s/%s\n' "$HOME/.claude" "${1#\~/.claude/}" ;;
         ".claude/"*)   printf '%s/%s\n' "$CLAUDE_DIR"   "${1#.claude/}" ;;
         *)             printf '%s/%s\n' "$CLAUDE_DIR"   "$1" ;;
     esac
@@ -772,9 +1008,8 @@ walk_imports() {
     base_dir=$(dirname "$file")
     while IFS= read -r tok; do
         [ -z "$tok" ] && continue
-        # shellcheck disable=SC2088  # the "~/" pattern is a literal tilde from the @import token text, matched not expanded
         case "$tok" in
-            '~/'*) resolved="$HOME/${tok#\~/}" ;;
+            \~/*) resolved="$HOME/${tok#\~/}" ;;
             /*)    resolved="$tok" ;;
             ./*)   resolved="$base_dir/${tok#./}" ;;
             *)     resolved="$base_dir/$tok" ;;
@@ -828,23 +1063,73 @@ check_settings_guide_refs() {
     done < <(jq -r '.guides? // {} | [.. | strings] | .[]' "$json_file" 2>/dev/null | sort -u || true)
 }
 
-# Flag MCP servers defined in mcpServers but absent from preApprovedTools.
-check_mcp_preapproved() {
-    local json_file="$1" display="$2" srv
-    [ -f "$json_file" ] || return 0
+# Flag MCP servers Claude Code actually loads (project .mcp.json, user ~/.claude.json)
+# that no settings file pre-approves. Claude Code does not read mcpServers from
+# settings.json (debug-your-config.md "MCP servers"), so those are never servers here
+# (scan-graph reports them as MCP-MISPLACED). The approval set is the union of
+# permissions.allow and preApprovedTools over settings.json AND settings.local.json.
+check_mcp_preapproved_live() {
+    local mcp_file display keys="" strs="" f srv
     command -v jq >/dev/null 2>&1 || return 0
+    if _mhc_same_path "$CLAUDE_DIR" "$HOME/.claude"; then
+        mcp_file="$HOME/.claude.json"; display=".claude.json"
+    else
+        mcp_file="$(dirname "$(readlink -f "$CLAUDE_DIR")")/.mcp.json"; display=".mcp.json"
+    fi
+    [ -f "$mcp_file" ] || return 0
+    for f in "$CLAUDE_DIR/settings.json" "$CLAUDE_DIR/settings.local.json"; do
+        [ -f "$f" ] || continue
+        keys+=$'\n'$(jq -r '(.preApprovedTools // {}) | if type == "object" then keys[] else empty end' "$f" 2>/dev/null || true)
+        strs+=$'\n'$(jq -r '((.preApprovedTools // {}) | if type == "object" then .[] | arrays | .[] else empty end), ((.permissions.allow // []) | if type == "array" then .[] else empty end) | strings' "$f" 2>/dev/null || true)
+    done
     while IFS= read -r srv; do
         [ -z "$srv" ] && continue
-        if ! jq -e --arg s "$srv" '
-            (.preApprovedTools // {}) as $p
-            | (.permissions.allow // []) as $allow
-            | ($p | has($s))
-              or ([$p[]? | arrays | .[]] | any(type == "string" and test("mcp__\($s)__")))
-              or ($allow | any(type == "string" and test("mcp__\($s)__")))
-        ' "$json_file" >/dev/null 2>&1; then
-            error "[MISSING-PRE-APPROVED] $display: MCP server \"$srv\" not in preApprovedTools or permissions.allow"
-        fi
-    done < <(jq -r '.mcpServers? // {} | keys[]' "$json_file" 2>/dev/null || true)
+        if printf '%s\n' "$keys" | grep -qxF -- "$srv"; then continue; fi
+        if printf '%s\n' "$strs" | grep -qxF -- "mcp__${srv}"; then continue; fi
+        case "$strs" in *"mcp__${srv}__"*) continue ;; esac
+        error "[MISSING-PRE-APPROVED] $display: MCP server \"$srv\" not in preApprovedTools or permissions.allow"
+    done < <(jq -r '(.mcpServers // {}) | if type == "object" then keys[] else empty end' "$mcp_file" 2>/dev/null || true)
+    return 0
+}
+
+# Flag permission rules Claude Code accepts but never applies.
+check_inert_permission_rules() {
+    local json_file="$1" display="$2" list kind rule
+    [ -f "$json_file" ] || return 0
+    command -v jq >/dev/null 2>&1 || return 0
+    while IFS=$'\t' read -r list kind rule; do
+        [ -z "$rule" ] && continue
+        case "$kind" in
+            tool-path)
+                warning "[PERM-INERT-RULE] $display: permissions.$list rule '$rule' is never consulted — file permissions are checked against Edit(path) and Read(path) rules only; use Edit(...) in place of Write/NotebookEdit/MultiEdit and Read(...) in place of Glob" ;;
+            mcp-parens)
+                warning "[PERM-INERT-RULE] $display: permissions.$list rule '$rule' is skipped when the settings file loads — an mcp__ rule cannot carry parentheses; use mcp__server__tool or mcp__server__*" ;;
+            primary-param)
+                warning "[PERM-INERT-RULE] $display: permissions.$list rule '$rule' is ignored — Tool(param:value) cannot match a tool's primary content field; use Bash(rm *), Read(./path) or WebFetch(domain:host)" ;;
+        esac
+    done < <(jq -r '
+        def inert:
+          if test("^(Write|NotebookEdit|Glob|MultiEdit)\\([^)]") and (test("^[A-Za-z]+\\(\\*\\)$") | not) then "tool-path"
+          elif test("^mcp__[^(]*\\(") then "mcp-parens"
+          elif test("^(Bash|PowerShell)\\([[:space:]]*command[[:space:]]*:|^(Read|Edit|Write)\\([[:space:]]*file_path[[:space:]]*:|^(Grep|Glob)\\([[:space:]]*path[[:space:]]*:|^NotebookEdit\\([[:space:]]*notebook_path[[:space:]]*:|^WebFetch\\([[:space:]]*url[[:space:]]*:") then "primary-param"
+          else empty end;
+        (.permissions // {}) | if type=="object" then to_entries[] else empty end
+        | select(.key | IN("allow","ask","deny")) | .key as $k
+        | .value | if type=="array" then .[] else empty end | select(type=="string")
+        | . as $r | inert | "\($k)\t\(.)\t\($r)"' "$json_file" 2>/dev/null || true)
+    return 0
+}
+
+# permissions.md: "If your project has a `.claudeignore` file, it has no effect, so move
+# its entries into `Read` deny rules." Project tree only: the user tree is skipped.
+check_claudeignore() {
+    local root
+    _mhc_same_path "$CLAUDE_DIR" "$HOME/.claude" && return 0
+    root=$(dirname "$(readlink -f "$CLAUDE_DIR")")
+    if [ -f "$root/.claudeignore" ]; then
+        warning "[CLAUDEIGNORE-NO-EFFECT] .claudeignore: Claude Code does not read a .claudeignore file — move its entries into permissions.deny Read(...) rules"
+    fi
+    return 0
 }
 
 # Flag hook scripts on disk that no settings file registers. pre-commit.sh and
@@ -925,8 +1210,7 @@ check_memory_stale_refs() {
     while IFS= read -r memf; do
         [ -f "$memf" ] || continue
         disp="projects/${memf#"$CLAUDE_DIR"/projects/}"
-        # shellcheck disable=SC2088  # the "~/.claude/" here is a literal regex matched in the file body, not a path to expand
-        cites=$(grep -oE '~/\.claude/[A-Za-z0-9._/-]+\.(md|sh|json|ts|js)' "$memf" 2>/dev/null | sort -u || true)
+        cites=$(grep -oE '[~]/\.claude/[A-Za-z0-9._/-]+\.(md|sh|json|ts|js)' "$memf" 2>/dev/null | sort -u || true)
         [ -z "$cites" ] && continue
         while IFS= read -r p; do
             [ -z "$p" ] && continue
@@ -937,28 +1221,79 @@ check_memory_stale_refs() {
     done < <(find "$CLAUDE_DIR/projects" -path '*/memory/*.md' 2>/dev/null | sort)
 }
 
-# Flag hook timeouts above 2x the documented per-type default. Defaults:
-# command/http/mcp_tool 600s, prompt 30s, agent 60s — but a command hook under
-# a UserPromptSubmit event defaults to 30s.
+# Flag hook matchers Claude Code silently ignores or rejects: an array matcher
+# (invalid under any event), a lowercase tool name, or a bare MCP server name.
+# The case and bare-MCP checks apply only to the five tool events and only to the
+# exact-string path (matcher made of letters, digits, _ - space , |), where
+# matching is case-sensitive; any other character makes it a JavaScript regex.
+check_hook_matchers() {
+    local json_file="$1" display="$2" ev m
+    [ -f "$json_file" ] || return 0
+    command -v jq >/dev/null 2>&1 || return 0
+    while IFS=$'\t' read -r ev m; do
+        [ -z "$ev" ] && continue
+        case "$ev" in
+            PreToolUse|PermissionRequest)
+                error "[HOOK-MATCHER-ARRAY] $display: $ev matcher is a JSON array ($m) — it must be one string such as \"Edit|Write\"; Claude Code rejects the entry and none of this file's other hooks load" ;;
+            *)
+                error "[HOOK-MATCHER-ARRAY] $display: $ev matcher is a JSON array ($m) — it must be one string such as \"Edit|Write\"; Claude Code lists the entry as an invalid setting and the hook never fires" ;;
+        esac
+    done < <(jq -r '(.hooks // {}) | if type=="object" then to_entries[] else empty end | .key as $ev | .value | if type=="array" then .[] else empty end | select(type=="object" and ((.matcher|type)=="array")) | "\($ev)\t\(.matcher|tojson)"' "$json_file" 2>/dev/null || true)
+    while IFS=$'\t' read -r ev m; do
+        [ -z "$ev" ] && continue
+        warning "[HOOK-MATCHER-CASE] $display: $ev matcher segment '$m' starts lowercase — tool names are case-sensitive and capitalised (Bash, Edit, Write, Read), so it matches nothing"
+    done < <(jq -r '
+        (.hooks // {}) | if type=="object" then to_entries[] else empty end
+        | select(.key | test("^(PreToolUse|PostToolUse|PostToolUseFailure|PermissionRequest|PermissionDenied)$"))
+        | .key as $ev | .value | if type=="array" then .[] else empty end
+        | select(type=="object" and ((.matcher|type)=="string"))
+        | .matcher as $m | select($m | test("^[A-Za-z0-9_ ,|-]+$"))
+        | ($m | split("[|,]"; null) | map(gsub("^ +| +$"; "")) | map(select(test("^[a-z]") and (test("^mcp__") | not))))[]
+        | "\($ev)\t\(.)"' "$json_file" 2>/dev/null || true)
+    while IFS=$'\t' read -r ev m; do
+        [ -z "$ev" ] && continue
+        warning "[HOOK-MATCHER-BARE-MCP] $display: $ev matcher segment '$m' names a server but no tool: it is compared as an exact string and matches nothing; write '${m}__.*'"
+    done < <(jq -r '
+        (.hooks // {}) | if type=="object" then to_entries[] else empty end
+        | select(.key | test("^(PreToolUse|PostToolUse|PostToolUseFailure|PermissionRequest|PermissionDenied)$"))
+        | .key as $ev | .value | if type=="array" then .[] else empty end
+        | select(type=="object" and ((.matcher|type)=="string"))
+        | .matcher as $m | select($m | test("^[A-Za-z0-9_ ,|-]+$"))
+        | ($m | split("[|,]"; null) | map(gsub("^ +| +$"; "")) | map(select(startswith("mcp__") and (ltrimstr("mcp__") | contains("__") | not))))[]
+        | "\($ev)\t\(.)"' "$json_file" 2>/dev/null || true)
+    return 0
+}
+
+# Flag hook timeouts above 2x the documented default. command/http/mcp_tool 600s
+# (30s on UserPromptSubmit, PreModelSwitch, PostModelSwitch; 10s on
+# MessageDisplay), prompt 30s, agent 60s. SessionEnd hooks share a budget Claude
+# Code raises to the longest per-hook timeout, up to 60s, so they are capped.
 check_hook_timeouts() {
     local json_file="$1" display="$2" ev typ t def
     [ -f "$json_file" ] || return 0
     command -v jq >/dev/null 2>&1 || return 0
     while IFS=$'\t' read -r ev typ t; do
         case "${t:-}" in ''|*[!0-9]*) continue ;; esac
+        if [ "$ev" = "SessionEnd" ]; then
+            [ "$t" -gt "$HOOK_TIMEOUT_SESSIONEND_CAP" ] && warning "[SUSPICIOUS-TIMEOUT] $display: a $typ hook (SessionEnd) has timeout ${t}s — SessionEnd shares a budget Claude Code raises to the highest per-hook timeout only up to ${HOOK_TIMEOUT_SESSIONEND_CAP}s"
+            continue
+        fi
         case "$typ" in
-            command|http|mcp_tool) def=$HOOK_TIMEOUT_COMMAND ;;
-            prompt)                def=$HOOK_TIMEOUT_PROMPT ;;
-            agent)                 def=$HOOK_TIMEOUT_AGENT ;;
+            command|http|mcp_tool)
+                case "$ev" in
+                    UserPromptSubmit|PreModelSwitch|PostModelSwitch) def=$HOOK_TIMEOUT_FAST_EVENT ;;
+                    MessageDisplay)                                  def=$HOOK_TIMEOUT_MESSAGEDISPLAY ;;
+                    *)                                               def=$HOOK_TIMEOUT_COMMAND ;;
+                esac ;;
+            prompt) def=$HOOK_TIMEOUT_PROMPT ;;
+            agent)  def=$HOOK_TIMEOUT_AGENT ;;
             *) continue ;;
         esac
-        if [ "$typ" = "command" ] && [ "$ev" = "UserPromptSubmit" ]; then
-            def=$HOOK_TIMEOUT_PROMPT
-        fi
         if [ "$t" -gt $((def * 2)) ]; then
             warning "[SUSPICIOUS-TIMEOUT] $display: a $typ hook ($ev) has timeout ${t}s (>2x the ${def}s default)"
         fi
-    done < <(jq -r '.hooks // {} | to_entries[] | .key as $ev | .value[]? | .hooks[]? | select(has("type") and has("timeout")) | "\($ev)\t\(.type)\t\(.timeout)"' "$json_file" 2>/dev/null || true)
+    done < <(jq -r '.hooks // {} | to_entries[] | select(.value|type=="array") | .key as $ev | .value[] | select(type=="object") | (.hooks // [])[]? | select(type=="object" and has("type") and ((.timeout|type)=="number") and ((.type=="command" and .async==true and .asyncRewake!=true)|not)) | "\($ev)\t\(.type)\t\(.timeout)"' "$json_file" 2>/dev/null || true)
+    return 0
 }
 
 # Flag http hooks that carry an auth-bearing header but scope no env vars. Without
@@ -995,8 +1330,9 @@ check_http_hook_allowlist() {
         matched=0
         while IFS= read -r pat; do
             [ -z "$pat" ] && continue
-            # shellcheck disable=SC2254  # the allowlist entry IS a glob — * is the documented wildcard
-            case "$url" in $pat) matched=1; break ;; esac
+            # the allowlist entry IS a glob (* is the documented wildcard): stripping the whole
+            # URL with it leaves nothing exactly when it matches
+            [ -z "${url##$pat}" ] && { matched=1; break; }
         done <<<"$HTTP_URL_ALLOWLIST"
         [ "$matched" -eq 1 ] && continue
         warning "[HOOK-HTTP-BLOCKED] $display: http hook url '$url' matches no allowedHttpHookUrls pattern — Claude Code blocks it, so the hook never runs"
@@ -1012,9 +1348,14 @@ check_settings_security() {
     local json_file="$1" display="$2" mode broad
     [ -f "$json_file" ] || return 0
     command -v jq >/dev/null 2>&1 || return 0
-    mode=$(jq -r '(.permissions.defaultMode // .defaultMode) // empty' "$json_file" 2>/dev/null)
+    mode=$(jq -r '(if type == "object" then ((.permissions | if type == "object" then .defaultMode else null end) // .defaultMode) else null end) | strings' "$json_file" 2>/dev/null || true)
     if [ "$mode" = "bypassPermissions" ]; then
-        error "[SETTINGS-BYPASS-MODE] $display: defaultMode is \"bypassPermissions\" — every tool call is auto-approved with no prompt"
+        # Since v2.1.257 only user or managed settings can switch it on.
+        if [ "$(_settings_file_scope "$json_file")" = "user" ]; then
+            error "[SETTINGS-BYPASS-MODE] $display: defaultMode is \"bypassPermissions\" — every tool call is auto-approved with no prompt"
+        else
+            warning "[SETTINGS-BYPASS-MODE] $display: defaultMode \"bypassPermissions\" in a project or local file is ignored since v2.1.257 (the session starts in Manual mode) — set it in user or managed settings, or pass --permission-mode"
+        fi
     fi
     if [ "$(jq -r '.enableAllProjectMcpServers // false' "$json_file" 2>/dev/null)" = "true" ]; then
         warning "[SETTINGS-MCP-AUTOAPPROVE] $display: enableAllProjectMcpServers is true — every project MCP server is trusted without review"
@@ -1022,13 +1363,216 @@ check_settings_security() {
     if [ "$(jq -r '.sandbox.disabled // false' "$json_file" 2>/dev/null)" = "true" ]; then
         warning "[SETTINGS-SANDBOX-OFF] $display: sandbox.disabled is true — tool calls run unsandboxed with full filesystem and network access"
     fi
-    if [ "$(jq -r '.permissions.disableAutoMode // false' "$json_file" 2>/dev/null)" != "true" ]; then
+    # autoMode is a user-or-managed key: a project/local autoMode.allow is inert
+    if [ "$(_settings_file_scope "$json_file")" = "user" ] && [ "$(jq -r '.permissions.disableAutoMode // false' "$json_file" 2>/dev/null)" != "true" ]; then
         broad=$(jq -r '(.autoMode.allow // []) | if type=="array" then .[] else empty end' "$json_file" 2>/dev/null \
                 | grep -xE '\*|Bash|Bash\(\*\)' | head -1 || true)
         if [ -n "$broad" ]; then
             warning "[SETTINGS-AUTOMODE-BROAD] $display: autoMode.allow contains '$broad' — auto mode then runs every matching command with no prompt"
         fi
     fi
+}
+
+# --- settings scope (source: settings-reference "Scope" column; refresh recipe in
+# references/permission-hygiene.md "Settings scope table") -----------------------
+# Dotted entries are nested paths. A parent already listed makes its children redundant.
+# Scope "Managed": ignored in user, project and local files (38 keys + the alias allowedMarketplaces = 39 entries)
+SETTINGS_KEYS_MANAGED_ONLY=(allowAllClaudeAiMcps allowClaudeInChromeWithManagedMcp allowedChannelPlugins allowedProviders allowManagedHooksOnly allowManagedMcpServersOnly allowManagedPermissionRulesOnly availableModelsMatch blockedMarketplaces browserExternalPageTools channelsEnabled claudeMd deniedModels disableBrowserExternalNavigation disableCommandPluginSources disableDesktopLocalSessions disableMobileSimulatorTools disableSideloadFlags forceLoginGatewayUrl forceRemoteSettingsRefresh gatewayInternalNetworks managedMcpServers managedSourcesBehavior modelPricing parentSettingsBehavior pluginSuggestionMarketplaces pluginTrustMessage policyHelper requiredMaximumVersion requiredMinimumVersion sandbox.bwrapPath sandbox.filesystem.allowManagedReadPathsOnly sandbox.network.allowManagedDomainsOnly sandbox.socatPath sshHostAllowlist strictKnownMarketplaces allowedMarketplaces strictPluginOnlyCustomization wslInheritsWindowsSettings)
+# Scope "User or managed": ignored in project and local files (25)
+SETTINGS_KEYS_USER_OR_MANAGED=(askUserQuestionTimeout appendPlugins autoContinueAtUsageLimit autoMode bashEditDiffEnabled desktopSessionCleanupPeriodDays dialogExpiry feedbackDrafts footerLinksRegexes modelPicker pluginConfigs prependPlugins processWrapper sandbox.allowAppleEvents sandbox.credentials.allowPlaintextInject sandbox.credentials.awsPairs sandbox.credentials.sigv4 sandbox.filesystem.disabled sandbox.network.strictAllowlist sandbox.network.tlsTerminate sandbox.ripgrep skipAutoPermissionPrompt spellcheck sshConfigs vimInsertModeRemaps)
+# Scope "User, local, or managed": ignored in project files only (4)
+SETTINGS_KEYS_USER_LOCAL_MANAGED=(skipDangerousModePermissionPrompt syncClaudeAiPlugins syncClaudeAiSkills useAutoModeDuringPlan)
+# env variables (matched on the NAME) that project and local settings may not set
+SETTINGS_ENV_DROPPED_PROJECT_RE='^(CLAUDE_CONFIG_DIR|CLAUDE_CODE_TMPDIR|HOME|TMPDIR|TMP|TEMP|XDG_[A-Z0-9_]+|OTEL_LOG_RAW_API_BODIES|ENABLE_BETA_TRACING_DETAILED|BETA_TRACING_ENDPOINT|CLAUDE_CODE_ENABLE_TELEMETRY|CLAUDE_CODE_ENHANCED_TELEMETRY_BETA|ENABLE_ENHANCED_TELEMETRY_BETA|OTEL_(LOGS|METRICS|TRACES)_EXPORTER|OTEL_LOG_(USER_PROMPTS|ASSISTANT_RESPONSES|TOOL_CONTENT|TOOL_DETAILS)|OTEL_EXPORTER_OTLP(_[A-Z0-9]+)*_(ENDPOINT|HEADERS|PROTOCOL|CERTIFICATE|CLIENT_KEY|INSECURE)|OTEL_EXPORTER_PROMETHEUS_(HOST|PORT)|CLAUDE_CODE_PROCESS_WRAPPER|CLAUDE_CODE_SYNC_SKILLS|CLAUDE_CODE_SYNC_PLUGINS|CLAUDE_CODE_PLUGIN_CACHE_DIR|CLAUDE_CODE_PLUGIN_SEED_DIR)$'
+# Windows variable names are case-insensitive: matched with grep -i
+SETTINGS_ENV_DROPPED_WINDOWS_RE='^(SystemRoot|ComSpec|ProgramData|LOCALAPPDATA|PATHEXT|PSModulePath|ProgramFiles([A-Za-z0-9()]*)?)$'
+# ignored from EVERY settings file (user too)
+SETTINGS_ENV_DROPPED_ALL_RE='^(CLAUDE_CODE_REMOTE|CLAUDE_CODE_ACCOUNT_UUID|CLAUDE_CODE_MESSAGING_SOCKET|CLAUDE_CODE_MESSAGING_TOKEN|CLAUDE_CODE_PROJECT_DIR_NAME|CLAUDE_CODE_RESTRICTED|CLAUDE_CODE_DISABLE_POWERSHELL_CMD_RM_DENY|CLAUDE_CODE_DISABLE_DANGEROUS_RM_TIMEOUT|CLAUDE_CODE_DISABLE_SUBSTITUTION_RM_PROMPT|CLAUDE_CODE_DISABLE_INLINE_SHELL_RM_PROMPT)$'
+# The only values project/local settings may still set, because they turn something off
+# (settings-reference "Variables Claude Code ignores in env"; env-vars.md defines off):
+# the three exporter selectors accept exactly `none`; the three OTEL_LOG_* accept 0/false/no/off in any casing.
+SETTINGS_ENV_EXPORTER_RE='^OTEL_(LOGS|METRICS|TRACES)_EXPORTER$'
+SETTINGS_ENV_LOG_RE='^OTEL_LOG_(USER_PROMPTS|TOOL_CONTENT|TOOL_DETAILS)$'
+# Keys that no longer do anything: key<TAB>message, checked in every settings file
+SETTINGS_KEYS_REMOVED='includeCoAuthoredBy	deprecated since v2.0.62 — use attribution (attribution.commit / attribution.pr)
+disableArtifact	deprecated — use enableArtifact (enableArtifact: false replaces disableArtifact: true)
+keybindingFlavor	deprecated since v2.1.261 and has no effect — remove it
+voiceEnabled	deprecated since v2.1.92 — use voice.enabled
+permissionExplainerEnabled	removed in v2.1.257 and has no effect — remove it
+taskOutputMaxChars	removed in v2.1.277 and has no effect — remove it
+teammateDefaultModel	removed in v2.1.234 and has no effect — remove it'
+# Of those, the "Global config" keys also live in ~/.claude.json
+SETTINGS_KEYS_GLOBAL_CONFIG_REMOVED=(permissionExplainerEnabled teammateDefaultModel)
+
+# user | project | local — how the file relates to the tree being audited.
+_settings_file_scope() {
+    local f="$1"
+    if _mhc_same_path "$(dirname "$f")" "$HOME/.claude"; then
+        echo user
+    elif [ "$(basename "$f")" = "settings.local.json" ]; then
+        echo local
+    else
+        echo project
+    fi
+    return 0
+}
+
+# Warn for each dotted key of the given list present in a settings file.
+_settings_scan_keys() { # <file> <display> <scope> <allowed-from label> <key>...
+    local json_file="$1" display="$2" scope="$3" from="$4" k
+    shift 4
+    for k in "$@"; do
+        if jq -e --arg k "$k" 'getpath($k | split(".")) != null' "$json_file" >/dev/null 2>&1; then
+            warning "[SETTINGS-SCOPE-IGNORED] $display: '$k' is ignored in $scope settings — Claude Code reads it only from $from"
+        fi
+    done
+    return 0
+}
+
+check_settings_scope_ignored() {
+    local json_file="$1" display="$2" scope ev val
+    [ -f "$json_file" ] || return 0
+    command -v jq >/dev/null 2>&1 || return 0
+    scope=$(_settings_file_scope "$json_file")
+    _settings_scan_keys "$json_file" "$display" "$scope" "managed settings" "${SETTINGS_KEYS_MANAGED_ONLY[@]}"
+    if [ "$scope" != user ]; then _settings_scan_keys "$json_file" "$display" "$scope" "user or managed settings" "${SETTINGS_KEYS_USER_OR_MANAGED[@]}"; fi
+    if [ "$scope" = project ]; then _settings_scan_keys "$json_file" "$display" "$scope" "user, local or managed settings" "${SETTINGS_KEYS_USER_LOCAL_MANAGED[@]}"; fi
+    # env: variables a checked-out repository may not set (project/local) or nobody may set (all).
+    # Tab/newline in a value would forge extra records, and a key outside the identifier
+    # alphabet (parentheses allowed for ProgramFiles(x86)) is not a variable name at all.
+    while IFS=$'\t' read -r ev val; do
+        [ -z "$ev" ] && continue
+        if printf '%s' "$ev" | grep -qE "$SETTINGS_ENV_DROPPED_ALL_RE"; then
+            warning "[SETTINGS-SCOPE-IGNORED] $display: env.$ev is ignored in every settings file — Claude Code reads it from its launch environment only"
+        elif [ "$scope" != user ] && { printf '%s' "$ev" | grep -qE "$SETTINGS_ENV_DROPPED_PROJECT_RE" || printf '%s' "$ev" | grep -qiE "$SETTINGS_ENV_DROPPED_WINDOWS_RE"; }; then
+            if printf '%s' "$ev" | grep -qE "$SETTINGS_ENV_EXPORTER_RE" && [ "$val" = "none" ]; then
+                continue
+            fi
+            if printf '%s' "$ev" | grep -qE "$SETTINGS_ENV_LOG_RE" && printf '%s' "$val" | grep -qiE '^(0|false|no|off)$'; then
+                continue
+            fi
+            warning "[SETTINGS-SCOPE-IGNORED] $display: env.$ev is dropped in $scope settings — set it in user or managed settings instead"
+        fi
+    done < <(jq -r '(.env // {}) | if type=="object" then to_entries[] | select(.key | test("^[A-Za-z_][A-Za-z0-9_()]*$")) | "\(.key)\t\(.value|tostring|gsub("[\\n\\r\\t]";" "))" else empty end' "$json_file" 2>/dev/null || true)
+    # defaultMode auto only counts from user/managed (bypassPermissions: see check_settings_security)
+    if [ "$scope" != user ]; then
+        val=$(jq -r '(.permissions.defaultMode // .defaultMode) // empty' "$json_file" 2>/dev/null || true)
+        if [ "$val" = "auto" ]; then
+            warning "[SETTINGS-SCOPE-IGNORED] $display: defaultMode \"auto\" does not take effect from $scope settings — set it in ~/.claude/settings.json"
+        fi
+    fi
+    return 0
+}
+
+# --- deprecated / removed keys --------------------------------------------
+check_settings_deprecated_keys() {
+    local json_file="$1" display="$2" k msg
+    [ -f "$json_file" ] || return 0
+    command -v jq >/dev/null 2>&1 || return 0
+    while IFS=$'\t' read -r k msg; do
+        if jq -e --arg k "$k" 'has($k)' "$json_file" >/dev/null 2>&1; then
+            warning "[SETTINGS-DEPRECATED-KEY] $display: '$k' is $msg"
+        fi
+    done <<<"$SETTINGS_KEYS_REMOVED"
+    return 0
+}
+
+# The "Global config" keys live in ~/.claude.json, which is not a settings file: look
+# there too, user tree only (the only tree that reads it).
+check_global_config_removed() {
+    local gc="$HOME/.claude.json" k msg
+    [ -f "$gc" ] || return 0
+    command -v jq >/dev/null 2>&1 || return 0
+    _mhc_same_path "$CLAUDE_DIR" "$HOME/.claude" || return 0
+    while IFS=$'\t' read -r k msg; do
+        case " ${SETTINGS_KEYS_GLOBAL_CONFIG_REMOVED[*]} " in *" $k "*) ;; *) continue ;; esac
+        if jq -e --arg k "$k" 'has($k)' "$gc" >/dev/null 2>&1; then
+            warning "[SETTINGS-DEPRECATED-KEY] .claude.json: '$k' is $msg"
+        fi
+    done <<<"$SETTINGS_KEYS_REMOVED"
+    return 0
+}
+
+# --- claudeMdExcludes -----------------------------------------------------
+# Patterns match absolute paths (memory.md); no tilde expansion is documented, so only
+# `/...` and `**...` are anchored. `**`-leading / absolute globs must also be able to match
+# some CLAUDE.md on disk (project/local files only: a user-scope exclude may target another repo).
+check_claudemd_excludes() {
+    local json_file="$1" display="$2" pat scope root cand d hit have_cands=0
+    local -a cands=()
+    [ -f "$json_file" ] || return 0
+    command -v jq >/dev/null 2>&1 || return 0
+    scope=$(_settings_file_scope "$json_file")
+    while IFS= read -r pat; do
+        [ -z "$pat" ] && continue
+        case "$pat" in
+            /*|'**'*) ;;
+            *) warning "[CLAUDEMD-EXCLUDE-DEAD] $display: claudeMdExcludes pattern '$pat' is relative — patterns match absolute paths, so it never matches (prefix it with **/)"; continue ;;
+        esac
+        case "$pat" in
+            *[\*\?\[]*)
+                [ "$scope" = user ] && continue
+                # brace expansion is not evaluated here: skip rather than guess
+                case "$pat" in *'{'*) continue ;; esac
+                if [ "$have_cands" -eq 0 ]; then
+                    have_cands=1
+                    root=$(git -C "$(dirname "$CLAUDE_DIR")" rev-parse --show-toplevel 2>/dev/null || true)
+                    [ -n "$root" ] || root=$(dirname "$CLAUDE_DIR")
+                    while IFS= read -r cand; do
+                        [ -n "$cand" ] && cands+=("$cand")
+                    done < <(find "$root" -maxdepth 8 \( -name node_modules -o -name .git \) -prune -o \( -name CLAUDE.md -o -name CLAUDE.local.md -o -name AGENTS.md -o \( -path '*/.claude/rules/*' -name '*.md' \) \) -type f -print 2>/dev/null || true)
+                    d=$(cd "$root" 2>/dev/null && pwd -P || true)
+                    while [ -n "$d" ] && [ "$d" != "/" ]; do
+                        for cand in "$d/CLAUDE.md" "$d/CLAUDE.local.md" "$d/AGENTS.md" "$d/.claude/CLAUDE.md" "$d/.claude/AGENTS.md"; do
+                            [ -f "$cand" ] && cands+=("$cand")
+                        done
+                        d=$(dirname "$d")
+                    done
+                    [ -f "/CLAUDE.md" ] && cands+=("/CLAUDE.md")
+                    for cand in "$HOME/.claude/CLAUDE.md" "$HOME/.claude/AGENTS.md"; do
+                        [ -f "$cand" ] && cands+=("$cand")
+                    done
+                    while IFS= read -r cand; do
+                        [ -n "$cand" ] && cands+=("$cand")
+                    done < <(find "$HOME/.claude/rules" -type f -name '*.md' 2>/dev/null || true)
+                fi
+                # bash `==` lets `*` cross `/`: deliberately more permissive than the real glob,
+                # so a warning means no file could match
+                hit=0
+                for cand in ${cands[@]+"${cands[@]}"}; do
+                    # the longest-prefix strip leaves nothing only when the whole path matches the glob
+                    if [ -z "${cand##$pat}" ]; then hit=1; break; fi
+                done
+                [ "$hit" -eq 1 ] || warning "[CLAUDEMD-EXCLUDE-DEAD] $display: claudeMdExcludes pattern '$pat' matches no CLAUDE.md or other instruction file on disk (CLAUDE.local.md, AGENTS.md, .claude/rules/**/*.md)"
+                ;;
+            *)
+                [ -e "$pat" ] || warning "[CLAUDEMD-EXCLUDE-DEAD] $display: claudeMdExcludes path '$pat' does not exist on disk"
+                ;;
+        esac
+    done < <(jq -r '(.claudeMdExcludes // []) | if type=="array" then .[] else empty end | select(type=="string")' "$json_file" 2>/dev/null || true)
+    return 0
+}
+
+# --- worktree.sparsePaths -------------------------------------------------
+# sparsePaths entries are repo-root-relative (large-codebases.md). A sparse worktree checks
+# out only the listed directories plus root-level files, so a committed repo-root .claude/
+# vanishes unless listed. Only the tree the worktree actually reads is judged: the repo-root
+# .claude, and only when it is committed.
+check_worktree_sparse() {
+    local json_file="$1" display="$2" root has_claude
+    [ -f "$json_file" ] || return 0
+    command -v jq >/dev/null 2>&1 || return 0
+    [ "$(_settings_file_scope "$json_file")" = user ] && return 0
+    jq -e '(.worktree.sparsePaths // []) | type == "array" and length > 0' "$json_file" >/dev/null 2>&1 || return 0
+    root=$(git -C "$(dirname "$CLAUDE_DIR")" rev-parse --show-toplevel 2>/dev/null || true)
+    [ -n "$root" ] || return 0
+    _mhc_same_path "$CLAUDE_DIR" "$root/.claude" || return 0
+    [ -n "$(git -C "$root" ls-files -- .claude 2>/dev/null | head -n 1 || true)" ] || return 0
+    has_claude=$(jq -r '[.worktree.sparsePaths[] | select(type=="string") | sub("^\\./";"") | sub("/+$";"")] | any(. == ".claude")' "$json_file" 2>/dev/null || echo false)
+    if [ "$has_claude" != "true" ]; then
+        warning "[WORKTREE-SPARSE-NO-CLAUDE] $display: worktree.sparsePaths omits '.claude': sparse worktrees check out only the listed directories plus root-level files, so the committed .claude/settings.json and .claude/rules/ are missing there (large-codebases: include .claude in the list); untracked skills, agents and commands are still read through from the main checkout"
+    fi
+    return 0
 }
 
 # Audit .claude/rules/ path-scoped rule files. A rule with a `paths:` key that
@@ -1130,6 +1674,65 @@ _body_stream() {
         fence { next }
         { print }
     ' "$1" 2>/dev/null
+}
+
+# Print `NR:text` for prose lines only (line numbers kept, unlike _body_stream).
+# Mode `fence`: skip frontmatter and fenced code (``` and ~~~). Mode `full`: also
+# skip <details> blocks (a single-line <details>...</details> is skipped without
+# setting the flag) and Old patterns / legacy / deprecated sections, which end at
+# the next heading of the same or a higher level.
+_prose_lines() {
+    awk -v mode="$2" '
+        NR == 1 && /^---[[:space:]]*$/ { fm = 1; next }
+        fm { if (/^---[[:space:]]*$/) fm = 0; next }
+        /^[[:space:]]*(```|~~~)/ {
+            # CommonMark: a fence closes only on the same character, at least as
+            # long as the opener, with nothing but whitespace after the run.
+            ln = $0; sub(/^[[:space:]]+/, "", ln)
+            ch = substr(ln, 1, 1); n = 0
+            while (substr(ln, n + 1, 1) == ch) n++
+            if (!fence) { fence = 1; fch = ch; flen = n }
+            else if (ch == fch && n >= flen && substr(ln, n + 1) ~ /^[[:space:]]*$/) fence = 0
+            next
+        }
+        fence { next }
+        mode == "full" {
+            if (/^#+[[:space:]]/) {
+                match($0, /^#+/); lvl = RLENGTH
+                if (legacy && lvl <= legacy_lvl) legacy = 0
+                if (!legacy && tolower($0) ~ /^#+ +(old patterns?|legacy|deprecated)([^a-z0-9_-]|$)/) {
+                    legacy = 1; legacy_lvl = lvl
+                }
+            }
+            if (legacy) next
+            if (/^[[:space:]]*<details/ && /<\/details>/) next
+            if (/^[[:space:]]*<details/) { det = 1; next }
+            if (/<\/details>/) { det = 0; next }
+            if (det) next
+        }
+        { print NR ":" $0 }
+    ' "$1" 2>/dev/null
+}
+
+# Flag backslash paths (WINDOWS-PATH) and date-conditioned wording (TIME-SENSITIVE)
+# in a skill's prose: SKILL.md and its references. One finding per file per tag.
+check_time_and_paths() {
+    local file="$1" display="$2" hit
+    [ -f "$file" ] || return 0
+    # Regex escapes (`doc\d.md`, `^v\d\.json$`) are not paths: strip \d \w \s \b (and
+    # upper-case forms) when not followed by an alphanumeric (`scripts\build.py` stays
+    # a path), and `\.`, before matching.
+    hit=$(_prose_lines "$file" fence \
+          | sed -E ':a;s/\\[dwsbDWSB]([^A-Za-z0-9]|$)/\1/;ta;s/\\\././g' \
+          | grep -E "$WINDOWS_PATH_RE" | head -1 || true)
+    if [ -n "$hit" ]; then
+        warning "[WINDOWS-PATH] $display: Windows-style backslash path at line ${hit%%:*} — use forward slashes (scripts/helper.py)"
+    fi
+    hit=$(_prose_lines "$file" full | grep -Ei "$TIME_SENSITIVE_RE" | head -1 || true)
+    if [ -n "$hit" ]; then
+        warning "[TIME-SENSITIVE] $display: date-conditioned wording at line ${hit%%:*} — it will rot; move legacy behaviour under an 'Old patterns' section"
+    fi
+    return 0
 }
 
 # Flag instruction files whose prose is mostly hard rules. Newer models resolve
@@ -1547,7 +2150,7 @@ compute_listing_cost() {
 if [ "$LISTING_COST_ONLY" = 1 ]; then
     # settings.json maxSkillDescriptionChars overrides the per-entry cap.
     if [ -f "$CLAUDE_DIR/settings.json" ] && command -v jq >/dev/null 2>&1; then
-        msdc=$(jq -r '.maxSkillDescriptionChars // empty' "$CLAUDE_DIR/settings.json" 2>/dev/null)
+        msdc=$(jq -r 'if type == "object" then .maxSkillDescriptionChars else null end | scalars // empty' "$CLAUDE_DIR/settings.json" 2>/dev/null || true)
         case "$msdc" in ''|*[!0-9]*) ;; *) DESC_SOFT_MAX=$msdc ;; esac
     fi
     read -r LIST_TOTAL LIST_COUNT < <(compute_listing_cost)
@@ -1558,7 +2161,7 @@ if [ "$LISTING_COST_ONLY" = 1 ]; then
         FRACTION="$LISTING_BUDGET_FRACTION_DEFAULT"
         SETTINGS_JSON="$CLAUDE_DIR/settings.json"
         if [ -f "$SETTINGS_JSON" ] && command -v jq >/dev/null 2>&1; then
-            v=$(jq -r '.skillListingBudgetFraction // empty' "$SETTINGS_JSON" 2>/dev/null)
+            v=$(jq -r 'if type == "object" then .skillListingBudgetFraction else null end | scalars // empty' "$SETTINGS_JSON" 2>/dev/null || true)
             [ -n "$v" ] && FRACTION="$v"
         fi
         EFFECTIVE_BUDGET=$(awk -v f="$FRACTION" -v c="$CONTEXT_TOKENS" -v floor="$LISTING_BUDGET_FLOOR" \
@@ -1616,6 +2219,7 @@ if [ -d "$CLAUDE_DIR/documentation/guides" ]; then
     done < <(find "$CLAUDE_DIR/documentation/guides" -name '*.md' 2>/dev/null | sort)
 fi
 check_local_md_tracked
+check_claudeignore
 echo ""
 
 # --- Check 2: Skills (SKILL.md files) ---
@@ -1639,6 +2243,7 @@ else
         validate_skill_md "$skill_file" "$skill_name/SKILL.md"
     done
 fi
+check_plugin_skill_risk
 echo ""
 
 # --- Check 3: Commands (unified with skills per current docs) ---
@@ -1698,6 +2303,11 @@ for ref_file in "$SKILLS_DIR"/*/references/*.md; do
         fi
     fi
 
+    # Check: non-descriptive reference filename (doc2.md, file1.md).
+    if printf '%s' "$(basename "$ref_file")" | grep -Eiq "$VAGUE_REF_NAME_RE"; then
+        warning "[VAGUE-NAME] $ref_name: reference filename is non-descriptive — name it for its content (form_validation_rules.md, not doc2.md)"
+    fi
+
     # Allow refs to the skill's own data dir (`.claude/<skill_name>/...`),
     # its sibling config files (`.claude/<skill_name>.json`, etc.), and the
     # conventional shared output dir `.claude/reports/` — these are
@@ -1713,6 +2323,7 @@ for ref_file in "$SKILLS_DIR"/*/references/*.md; do
 
     check_embedded_secrets      "$ref_file" "$ref_name"
     check_unflagged_destructive "$ref_file" "$ref_name"
+    check_time_and_paths        "$ref_file" "$ref_name"
 done
 
 # Command-support reference trees (e.g. ~/.claude/review-all/references/).
@@ -1764,16 +2375,25 @@ for settings_file in "$CLAUDE_DIR/settings.json" "$CLAUDE_DIR/settings.local.jso
         check_json_duplicate_keys    "$settings_file" "$sdisp"
         check_json_duplicate_entries "$settings_file" "$sdisp"
         check_settings_guide_refs    "$settings_file" "$sdisp"
-        check_mcp_preapproved        "$settings_file" "$sdisp"
+        check_inert_permission_rules  "$settings_file" "$sdisp"
         check_hook_timeouts          "$settings_file" "$sdisp"
+        check_hook_matchers          "$settings_file" "$sdisp"
         check_http_hook_env          "$settings_file" "$sdisp"
         check_http_hook_allowlist    "$settings_file" "$sdisp"
         check_settings_security      "$settings_file" "$sdisp"
+        check_settings_scope_ignored   "$settings_file" "$sdisp"
+        check_settings_deprecated_keys "$settings_file" "$sdisp"
+        check_claudemd_excludes        "$settings_file" "$sdisp"
+        check_worktree_sparse          "$settings_file" "$sdisp"
     fi
 done
+check_global_config_removed
 # hooks/hooks.json holds hook definitions but no allowlist of its own, so it is
 # checked against the allowlist merged from the settings files above.
 check_http_hook_allowlist "$CLAUDE_DIR/hooks/hooks.json" "hooks/hooks.json"
+check_hook_timeouts "$CLAUDE_DIR/hooks/hooks.json" "hooks/hooks.json"
+check_hook_matchers "$CLAUDE_DIR/hooks/hooks.json" "hooks/hooks.json"
+check_mcp_preapproved_live
 if [ "$settings_checked" -eq 0 ]; then
     ok "No settings.json found (skipped)"
 fi
@@ -1794,6 +2414,7 @@ echo ""
 # --- Check 8: Path-scoped rules ---
 bold "--- Rules ---"
 check_rules
+check_rule_path_lost_on_compact
 echo ""
 
 # --- Check 9: Name collisions (commands vs skills) ---

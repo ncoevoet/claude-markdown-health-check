@@ -1,6 +1,6 @@
 {
   "id": "83-history-signals",
-  "command": "claude-markdown-health-check",
+  "command": "markdown-health-check",
   "fixture": {
     "kind": "synthetic-jsonl",
     "dir": "tests/fixtures/history-signals",

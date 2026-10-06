@@ -40,6 +40,9 @@ for f in "$EVALS"/*.json; do
 
     dir=$(jq -r '.fixture.dir' "$f")
     needs_home=$(jq -r '.fixture.needs_home_override // false' "$f")
+    git_init=$(jq -r '.fixture.git_init // false' "$f")
+    scan_subdir=$(jq -r '.fixture.scan_subdir // ""' "$f")
+    home_project_tree=$(jq -r '.fixture.home_project_tree // false' "$f")
     mapfile -t scanners < <(jq -r '.fixture.scanners[]?' "$f")
     expect_clean=$(jq -r '.success_criteria.expect_clean // false' "$f")
 
@@ -59,13 +62,30 @@ for f in "$EVALS"/*.json; do
     mv "$tmp/target/dot-claude" "$tmp/target/.claude"
     if [ "$needs_home" = "true" ]; then
         mkdir -p "$tmp/home"
-        mv "$tmp/target/.claude" "$tmp/home/.claude"
+        if [ "$home_project_tree" = "true" ]; then
+            # home_project_tree: dot-claude/ is a PROJECT tree scanned in place at
+            # $tmp/target/.claude (repo marker planted so ancestor walks stop there);
+            # home/ holds the fake HOME's contents (home/dot-claude/ -> ~/.claude,
+            # home/dot-claude.json -> ~/.claude.json, home/dot-claudeignore -> ~/.claudeignore).
+            mkdir -p "$tmp/target/.git"
+            cp -r "$tmp/target/home/." "$tmp/home/"
+            rm -rf "$tmp/target/home"
+            mv "$tmp/home/dot-claude" "$tmp/home/.claude"
+            [ -f "$tmp/home/dot-claude.json" ] && mv "$tmp/home/dot-claude.json" "$tmp/home/.claude.json"
+            [ -f "$tmp/home/dot-claudeignore" ] && mv "$tmp/home/dot-claudeignore" "$tmp/home/.claudeignore"
+        else
+            mv "$tmp/target/.claude" "$tmp/home/.claude"
+        fi
         # installed_plugins.json carries absolute installPaths, which a fixture cannot
         # know ahead of the temp copy. Fixtures write the literal token __HOME__ and we
         # expand it here so a case can point at a real directory inside the fake HOME.
         [ -f "$tmp/home/.claude/plugins/installed_plugins.json" ] &&
             sed -i "s|__HOME__|$tmp/home|g" "$tmp/home/.claude/plugins/installed_plugins.json"
+        # Opt-in home siblings: dot-claude.json -> ~/.claude.json, dot-claudeignore -> ~/.claudeignore.
+        [ -f "$tmp/target/dot-claude.json" ] && mv "$tmp/target/dot-claude.json" "$tmp/home/.claude.json"
+        [ -f "$tmp/target/dot-claudeignore" ] && mv "$tmp/target/dot-claudeignore" "$tmp/home/.claudeignore"
         target="$tmp/home/.claude"
+        [ "$home_project_tree" = "true" ] && target="$tmp/target/.claude"
         run_env=(env "HOME=$tmp/home" "CLAUDE_PLUGIN_DATA=$cache")
     else
         # check_local_md_tracked (validate-skills.sh) walks up from CLAUDE_DIR
@@ -73,8 +93,20 @@ for f in "$EVALS"/*.json; do
         # is worth flagging. Fixtures used to be scanned in place inside this
         # repo's own git tree, so plant a marker here to keep that check exercised
         # the same way now that the scan runs against a temp copy instead.
-        mkdir -p "$tmp/target/.git"
+        if [ "$git_init" = "true" ]; then
+            # Opt-in real repo (index only, no commit): rev-parse / ls-files work.
+            GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null git -C "$tmp/target" init -q
+            GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null git -C "$tmp/target" "add" -A
+        else
+            mkdir -p "$tmp/target/.git"
+        fi
         target="$tmp/target/.claude"
+        if [ -n "$scan_subdir" ]; then
+            # Opt-in nested scan: .claude lives under <rel>; the repo root stays at $tmp/target.
+            mkdir -p "$tmp/target/$scan_subdir"
+            mv "$tmp/target/.claude" "$tmp/target/$scan_subdir/.claude"
+            target="$tmp/target/$scan_subdir/.claude"
+        fi
         run_env=(env "CLAUDE_PLUGIN_DATA=$cache")
     fi
 
@@ -146,6 +178,19 @@ else
     no "listing-cost: expected 1 entry with non-zero chars, got '$lc_total $lc_count'"
 fi
 rm -rf "$tmp_lc"
+
+# The scan-graph cache must not answer for a different tree of the same scope:
+# two project scans within the TTL, sharing one cache dir, each report their own dir.
+tmp_gc=$(mktemp -d)
+mkdir -p "$tmp_gc/a/.claude" "$tmp_gc/b/.claude" "$tmp_gc/cache"
+CLAUDE_PLUGIN_DATA="$tmp_gc/cache" bash "$GRAPH" "$tmp_gc/a/.claude" >/dev/null 2>&1
+gc_dir=$(CLAUDE_PLUGIN_DATA="$tmp_gc/cache" bash "$GRAPH" "$tmp_gc/b/.claude" 2>/dev/null | jq -r '.meta.claude_dir')
+if [ "$gc_dir" = "$tmp_gc/b/.claude" ]; then
+    ok "scan-graph cache: keyed on the scanned dir"
+else
+    no "scan-graph cache: scanning b returned the cached result for '$gc_dir'"
+fi
+rm -rf "$tmp_gc"
 
 echo
 echo "deterministic: $PASS passed, $FAIL failed"

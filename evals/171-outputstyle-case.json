@@ -1,0 +1,19 @@
+{
+  "id": "171-outputstyle-case",
+  "command": "markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/outputstyle-case",
+    "needs_home_override": true,
+    "scanners": ["scan-graph"]
+  },
+  "grader": { "method": "code" },
+  "success_criteria": {
+    "must_detect": [ { "tag": "OUTPUTSTYLE-CASE", "path_substring": "settings" } ],
+    "must_not_flag": ["OUTPUTSTYLE-MISSING"],
+    "expect_clean": false
+  },
+  "expected_behavior": [
+    "scan-graph.sh emits [OUTPUTSTYLE-CASE] because 'explanatory' matches the built-in 'Explanatory' only case-insensitively, so Claude Code falls back to Default; it must NOT also emit OUTPUTSTYLE-MISSING"
+  ]
+}

@@ -52,7 +52,7 @@ It points at the opt-in mode but never auto-runs.
 
 ## --compress-bodies mode (opt-in only)
 
-Phase 13 runs only when the user invokes `/claude-markdown-health-check --compress-bodies` (alone or combined with depth flags). Sequence:
+Phase 13 runs only when the user invokes `/markdown-health-check --compress-bodies` (alone or combined with depth flags). Sequence:
 
 ### Step 1 — Precondition checks
 

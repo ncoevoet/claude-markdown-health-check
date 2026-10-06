@@ -1,0 +1,8 @@
+{
+  "claudeMdExcludes": [
+    "vendor/**/CLAUDE.md",
+    "**/vendor/**/CLAUDE.md",
+    "~/shared/CLAUDE.md",
+    "/nonexistent-mhc-root/other-team/CLAUDE.md"
+  ]
+}

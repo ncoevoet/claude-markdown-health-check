@@ -1,0 +1,19 @@
+{
+  "id": "220-mcp-relative-claudejson",
+  "command": "markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/mcp-relative-claudejson",
+    "needs_home_override": true,
+    "scanners": ["scan-graph"]
+  },
+  "grader": { "method": "code" },
+  "success_criteria": {
+    "must_detect": [ { "tag": "MCP-RELATIVE-PATH", "path_substring": "./a.js" }, { "tag": "MCP-RELATIVE-PATH", "path_substring": "scripts/run.sh" } ],
+    "must_not_flag": [],
+    "expect_clean": false
+  },
+  "expected_behavior": [
+    "scan-graph.sh emits [MCP-RELATIVE-PATH] for the top-level server (node ./a.js) and for the project-scoped server projects./p.mcpServers.x (scripts/run.sh) of ~/.claude.json"
+  ]
+}

@@ -1,0 +1,26 @@
+{
+  "id": "201-worktree-sparse-untracked",
+  "command": "markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/worktree-sparse-untracked",
+    "needs_home_override": false,
+    "git_init": true,
+    "scanners": [
+      "validate-skills"
+    ]
+  },
+  "grader": {
+    "method": "code"
+  },
+  "success_criteria": {
+    "must_detect": [],
+    "must_not_flag": [
+      "WORKTREE-SPARSE-NO-CLAUDE"
+    ],
+    "expect_clean": true
+  },
+  "expected_behavior": [
+    "a .claude directory ignored by the repository is not checked out in the worktree, so there is nothing to lose"
+  ]
+}

@@ -1,0 +1,44 @@
+{
+  "id": "133-hook-timeout-defaults",
+  "command": "markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/hook-timeout-defaults",
+    "needs_home_override": false,
+    "scanners": [
+      "validate-skills"
+    ]
+  },
+  "grader": {
+    "method": "code"
+  },
+  "success_criteria": {
+    "must_detect": [
+      {
+        "tag": "SUSPICIOUS-TIMEOUT",
+        "path_substring": "PreModelSwitch"
+      },
+      {
+        "tag": "SUSPICIOUS-TIMEOUT",
+        "path_substring": "PostModelSwitch"
+      },
+      {
+        "tag": "SUSPICIOUS-TIMEOUT",
+        "path_substring": "MessageDisplay"
+      },
+      {
+        "tag": "SUSPICIOUS-TIMEOUT",
+        "path_substring": "UserPromptSubmit"
+      },
+      {
+        "tag": "SUSPICIOUS-TIMEOUT",
+        "path_substring": "SessionEnd"
+      }
+    ],
+    "must_not_flag": [],
+    "expect_clean": false
+  },
+  "expected_behavior": [
+    "SUSPICIOUS-TIMEOUT uses the per-event defaults (30s fast events for command/http/mcp_tool, 10s MessageDisplay) and caps SessionEnd at 60s"
+  ]
+}

@@ -1,0 +1,23 @@
+{
+  "id": "203-claudemd-excludes-glob-ok",
+  "command": "markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/claudemd-excludes-glob-ok",
+    "needs_home_override": false,
+    "scanners": [
+      "validate-skills"
+    ]
+  },
+  "grader": {
+    "method": "code"
+  },
+  "success_criteria": {
+    "must_detect": [],
+    "must_not_flag": [],
+    "expect_clean": true
+  },
+  "expected_behavior": [
+    "a glob matching a CLAUDE.md on disk and a brace pattern (not evaluated) are not reported"
+  ]
+}

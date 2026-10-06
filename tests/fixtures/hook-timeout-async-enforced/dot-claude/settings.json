@@ -1,0 +1,1 @@
+{ "hooks": { "PreToolUse": [ { "matcher": "Bash", "hooks": [ { "type": "command", "command": "echo a", "async": true, "asyncRewake": true, "timeout": 5000 } ] } ] } }

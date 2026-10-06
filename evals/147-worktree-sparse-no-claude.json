@@ -1,0 +1,29 @@
+{
+  "id": "147-worktree-sparse-no-claude",
+  "command": "markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/worktree-sparse-no-claude",
+    "needs_home_override": false,
+    "git_init": true,
+    "scanners": [
+      "validate-skills"
+    ]
+  },
+  "grader": {
+    "method": "code"
+  },
+  "success_criteria": {
+    "must_detect": [
+      {
+        "tag": "WORKTREE-SPARSE-NO-CLAUDE",
+        "path_substring": "omits '.claude'"
+      }
+    ],
+    "must_not_flag": [],
+    "expect_clean": false
+  },
+  "expected_behavior": [
+    "a committed .claude with a sparsePaths list that omits .claude is reported"
+  ]
+}

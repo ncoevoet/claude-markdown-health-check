@@ -1,0 +1,1 @@
+{ "name": "team.tools_2026", "owner": { "name": "Team" }, "plugins": [ { "name": "myofficial-claude", "source": "./" } ] }

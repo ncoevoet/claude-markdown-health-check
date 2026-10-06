@@ -1,0 +1,19 @@
+{
+  "id": "180-plugin-name-reserved-prefix",
+  "command": "markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/plugin-name-reserved-prefix",
+    "needs_home_override": false,
+    "scanners": ["scan-graph"]
+  },
+  "grader": { "method": "code" },
+  "success_criteria": {
+    "must_detect": [ { "tag": "PLUGIN-RESERVED-NAME", "path_substring": "plugin.json" } ],
+    "must_not_flag": ["PLUGIN-NAME-LOOKALIKE","PLUGIN-NAME-FORMAT"],
+    "expect_clean": false
+  },
+  "expected_behavior": [
+    "scan-graph.sh emits [PLUGIN-RESERVED-NAME]: a plugin name starting with claude- is an Error row of the manifest-reference name table"
+  ]
+}

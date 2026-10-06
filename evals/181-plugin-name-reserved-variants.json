@@ -1,0 +1,19 @@
+{
+  "id": "181-plugin-name-reserved-variants",
+  "command": "markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/plugin-name-reserved-variants",
+    "needs_home_override": false,
+    "scanners": ["scan-graph"]
+  },
+  "grader": { "method": "code" },
+  "success_criteria": {
+    "must_detect": [ { "tag": "PLUGIN-RESERVED-NAME", "path_substring": "plugin.json" }, { "tag": "PLUGIN-NAME-NOT-KEBAB", "path_substring": "plugin.json" } ],
+    "must_not_flag": [],
+    "expect_clean": false
+  },
+  "expected_behavior": [
+    "scan-graph.sh normalises case and separator runs (Anthropic_Tools -> anthropic-tools) before applying the reserved-name table, and also reports the non-kebab-case spelling"
+  ]
+}

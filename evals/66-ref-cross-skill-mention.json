@@ -1,6 +1,6 @@
 {
   "id": "66-ref-cross-skill-mention",
-  "command": "claude-markdown-health-check",
+  "command": "markdown-health-check",
   "fixture": {
     "kind": "claude-tree",
     "dir": "tests/fixtures/ref-cross-skill-mention",

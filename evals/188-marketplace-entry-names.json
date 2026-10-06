@@ -1,0 +1,19 @@
+{
+  "id": "188-marketplace-entry-names",
+  "command": "markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/marketplace-entry-names",
+    "needs_home_override": false,
+    "scanners": ["scan-graph"]
+  },
+  "grader": { "method": "code" },
+  "success_criteria": {
+    "must_detect": [ { "tag": "PLUGIN-RESERVED-NAME", "path_substring": "marketplace.json" }, { "tag": "PLUGIN-NAME-FORMAT", "path_substring": "marketplace.json" } ],
+    "must_not_flag": ["MARKETPLACE-NAME-RESERVED","MARKETPLACE-NAME-FORMAT"],
+    "expect_clean": false
+  },
+  "expected_behavior": [
+    "scan-graph.sh applies the plugin-name rules to each marketplace entry: anthropic-helper is reserved, ship@it is malformed"
+  ]
+}

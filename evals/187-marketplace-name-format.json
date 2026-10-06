@@ -1,0 +1,19 @@
+{
+  "id": "187-marketplace-name-format",
+  "command": "markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/marketplace-name-format",
+    "needs_home_override": false,
+    "scanners": ["scan-graph"]
+  },
+  "grader": { "method": "code" },
+  "success_criteria": {
+    "must_detect": [ { "tag": "MARKETPLACE-NAME-FORMAT", "path_substring": "marketplace.json" } ],
+    "must_not_flag": ["MARKETPLACE-NAME-RESERVED"],
+    "expect_clean": false
+  },
+  "expected_behavior": [
+    "scan-graph.sh emits [MARKETPLACE-NAME-FORMAT] for a marketplace name containing a space"
+  ]
+}

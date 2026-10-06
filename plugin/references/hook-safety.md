@@ -11,8 +11,13 @@ Static safety scan of hook scripts (`$CLAUDE_DIR/hooks/*.sh`) and http hook conf
 | `HOOK-ENV-LEAK` | an `http`-type hook carries an auth-bearing header (`Authorization`, an api-key/token/secret header, or a `${...}` interpolation) but sets neither per-hook `allowedEnvVars` nor top-level `httpHookAllowedEnvVars` — Claude Code then forwards the **entire environment** to the hook URL | Structural |
 | `HOOK-HTTP-BLOCKED` | an `http`-type hook whose `url` matches no entry of the `allowedHttpHookUrls` allowlist merged across `settings.json` + `settings.local.json` (`*` is the documented wildcard). Claude Code blocks a non-matching handler, so the hook never runs and never errors; an allowlist defined as `[]` blocks every http hook. No allowlist anywhere = no restriction, and the check stays silent | Structural |
 | `HOOK-NO-SHEBANG` | the hook script's first line is not a `#!` shebang | Hygiene |
+| `HOOK-MATCHER-ARRAY` | a matcher group's `matcher` is a JSON array under any event — Claude Code lists it as an invalid setting; under `PreToolUse` or `PermissionRequest` none of that file's other hooks load | Critical |
+| `HOOK-MATCHER-CASE` | a tool-event matcher on the exact-string path has a segment starting lowercase (`bash`, `Edit|write`); matching is case-sensitive, so it matches nothing | Structural |
+| `HOOK-MATCHER-BARE-MCP` | a tool-event exact-string matcher has an `mcp__server` segment with no tool part; it matches no tool, `mcp__server__.*` is required | Structural |
 
 Full-line comments (and the shebang) are stripped before the block/exit/eval heuristics run, so a documented or commented-out `eval "$x"` or sample block decision is not flagged. (An `eval $...` after an *inline* `#` on a line of real code is a known, accepted edge — contrived enough to leave to recall over precision.)
+
+SessionEnd budget: `SessionEnd` hooks share a 1.5s budget, which Claude Code raises to the longest per-hook `timeout`, up to 60s. `SUSPICIOUS-TIMEOUT` therefore flags any `SessionEnd` hook above 60s (other events: more than 2x the per-event default). Async command hooks (`async: true`, no `asyncRewake`) are excluded — Claude Code does not enforce their timeout — and plugin `hooks/hooks.json` is checked too.
 
 ## Deliberately NOT checked
 

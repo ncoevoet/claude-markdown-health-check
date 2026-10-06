@@ -1,0 +1,19 @@
+{
+  "id": "150-perm-inert-rule",
+  "command": "markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/perm-inert-rule",
+    "needs_home_override": false,
+    "scanners": ["validate-skills"]
+  },
+  "grader": { "method": "code" },
+  "success_criteria": {
+    "must_detect": [{ "tag": "PERM-INERT-RULE", "path_substring": "Write(src/**)" }, { "tag": "PERM-INERT-RULE", "path_substring": "mcp__srv__tool(arg)" }, { "tag": "PERM-INERT-RULE", "path_substring": "Bash(command:rm *)" }, { "tag": "PERM-INERT-RULE", "path_substring": "Glob(secrets/**)" }],
+    "must_not_flag": [],
+    "expect_clean": false
+  },
+  "expected_behavior": [
+    "validate-skills.sh emits [PERM-INERT-RULE] for a Write/Glob path rule, an mcp__ rule with parentheses and a Tool(param:value) rule, in allow and deny"
+  ]
+}

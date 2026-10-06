@@ -1,6 +1,6 @@
 {
   "id": "111-no-unique-anchor-with-trigger",
-  "command": "claude-markdown-health-check",
+  "command": "markdown-health-check",
   "fixture": {
     "kind": "claude-tree",
     "dir": "tests/fixtures/anchor-unanchorable",

@@ -1,0 +1,6 @@
+{
+  "permissions": {
+    "allow": ["Write(src/**)", "mcp__srv__tool(arg)", "Bash(command:rm *)", "Read"],
+    "deny": ["Glob(secrets/**)"]
+  }
+}

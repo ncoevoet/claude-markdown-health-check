@@ -1,0 +1,19 @@
+{
+  "id": "186-marketplace-name-spelling",
+  "command": "markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/marketplace-name-spelling",
+    "needs_home_override": false,
+    "scanners": ["scan-graph"]
+  },
+  "grader": { "method": "code" },
+  "success_criteria": {
+    "must_detect": [ { "tag": "MARKETPLACE-NAME-RESERVED", "path_substring": "marketplace.json" } ],
+    "must_not_flag": ["MARKETPLACE-NAME-FORMAT"],
+    "expect_clean": false
+  },
+  "expected_behavior": [
+    "scan-graph.sh emits [MARKETPLACE-NAME-RESERVED]: claude.code.plugins is another spelling of claude-code-plugins"
+  ]
+}

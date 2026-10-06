@@ -1,0 +1,25 @@
+{
+  "id": "158-agent-yaml-ok",
+  "command": "markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/agent-yaml-ok",
+    "needs_home_override": false,
+    "scanners": [
+      "validate-skills"
+    ]
+  },
+  "grader": {
+    "method": "code"
+  },
+  "success_criteria": {
+    "must_detect": [],
+    "must_not_flag": [
+      "AGENT-YAML-UNPARSED"
+    ],
+    "expect_clean": true
+  },
+  "expected_behavior": [
+    "the same description wrapped in double quotes parses as YAML and stays clean"
+  ]
+}

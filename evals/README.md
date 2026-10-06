@@ -1,4 +1,4 @@
-# Evals for `/claude-markdown-health-check`
+# Evals for `/markdown-health-check`
 
 Data-driven test cases, following Anthropic's
 [develop-tests](https://platform.claude.com/docs/en/test-and-evaluate/develop-tests)
@@ -19,13 +19,16 @@ Two grading tiers (develop-tests: code-grading > LLM-grading):
 ```jsonc
 {
   "id": "02-dead-ref",
-  "command": "claude-markdown-health-check",
+  "command": "markdown-health-check",
   "fixture": {
     "kind": "claude-tree",            // fixture is tests/fixtures/<dir>/dot-claude, materialized
                                       //       as .claude at run time (never a live-loaded skill)
     "dir": "tests/fixtures/dead-ref",
     "needs_home_override": false,     // true: copy tree into a temp $HOME/.claude
                                       //       (user-tree-gated scans: plugins, scan-graph memory)
+    "home_project_tree": false,       // true (with needs_home_override): dot-claude/ is a PROJECT tree
+                                      //       scanned at <tmp>/target/.claude; home/dot-claude/ (+ home/dot-claude.json,
+                                      //       home/dot-claudeignore) becomes the fake $HOME's ~/.claude (~/.claude.json, ...)
     "scanners": ["validate-skills"]   // validate-skills | scan-graph  (code cases)
   },
   "grader": { "method": "code" },     // code | llm-rubric
@@ -34,7 +37,7 @@ Two grading tiers (develop-tests: code-grading > LLM-grading):
     "must_not_flag": [ "MISSING-DESC" ],   // tags that must be ABSENT (false-positive guard)
     "expect_clean": false             // true: the whole tag set must be empty
   },
-  "query": "/claude-markdown-health-check",   // llm-rubric cases
+  "query": "/markdown-health-check",   // llm-rubric cases
   "grader_rubric": "PASS only if ... last line PASS|FAIL",
   "expected_behavior": [ "..." ],
   "expected_not_behavior": [ "..." ],

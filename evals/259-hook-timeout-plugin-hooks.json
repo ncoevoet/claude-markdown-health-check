@@ -1,0 +1,19 @@
+{
+  "id": "259-hook-timeout-plugin-hooks",
+  "command": "markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/hook-timeout-plugin-hooks",
+    "needs_home_override": false,
+    "scanners": ["validate-skills"]
+  },
+  "grader": { "method": "code" },
+  "success_criteria": {
+    "must_detect": [{ "tag": "SUSPICIOUS-TIMEOUT", "path_substring": "hooks/hooks.json" }],
+    "must_not_flag": [],
+    "expect_clean": false
+  },
+  "expected_behavior": [
+    "a plugin hooks/hooks.json gets the per-event timeout check too"
+  ]
+}

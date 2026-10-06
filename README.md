@@ -1,7 +1,7 @@
-# /claude-markdown-health-check
+# /markdown-health-check
 
 [![CI](https://github.com/ncoevoet/claude-markdown-health-check/actions/workflows/ci.yml/badge.svg)](https://github.com/ncoevoet/claude-markdown-health-check/actions/workflows/ci.yml)
-[![version](https://img.shields.io/badge/version-0.18.0-blue)](plugin/.claude-plugin/plugin.json)
+[![version](https://img.shields.io/badge/version-0.20.0-blue)](plugin/.claude-plugin/plugin.json)
 [![license](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Claude Code plugin](https://img.shields.io/badge/Claude%20Code-plugin-8A2BE2)](https://code.claude.com/docs/en/plugins)
 
@@ -15,7 +15,7 @@ It reports first and waits. Nothing is edited, moved, or deleted until you reply
 
 ## Demo
 
-![/claude-markdown-health-check report](docs/demo.png)
+![/markdown-health-check report](docs/demo.png)
 
 A scorecard with a letter grade, an always-on per-file CLAUDE.md score, and findings grouped by area — each a plain-language line led by a colored 🔴 / 🟠 / 🟡 / 🔵 badge with the trailing machine tag. It reports first and waits — nothing is touched until you reply.
 
@@ -23,22 +23,23 @@ A scorecard with a letter grade, an always-on per-file CLAUDE.md score, and find
 
 | Area | Examples of findings |
 |---|---|
-| **Skills** | missing or oversized `description`, frontmatter `name` ≠ directory, triggers that don't match real usage, oversized `SKILL.md` with no `references/`, dead internal paths |
+| **Skills** | missing or oversized `description`, frontmatter `name` ≠ directory, triggers that don't match real usage, oversized `SKILL.md` with no `references/`, dead internal paths, XML tags / reserved words in names, Windows paths, time-sensitive wording, vague names, skill bodies over the post-`/compact` 5,000-token cap, and (plugin trees) bundled scripts with a network surface, hidden-behaviour wording, `Server:tool_name` MCP references, or a hard directive in a path-scoped rule |
 | **Context engineering** | prose that is mostly shouted absolutes (`NEVER` / `MUST` / `DO NOT`) where judgement would do, the same directive repeated verbatim across CLAUDE.md and a skill, and directives that contradict each other across files |
 | **Skill-listing budget** | cumulative `description` + `when_to_use` block exceeding Claude Code's 1%-of-context budget; low-relevance and duplicate-domain skills |
 | **Skill usage** | dormant skills (no fires in 30d), never-fired skills, misfiring skills (loaded but no follow-through), orphan ledger entries |
 | **Skill–tool contract** | tools declared in `allowed-tools` but never called, tools called but not declared |
 | **Frontmatter schema** | `description` too short, `model` not in whitelist (`opus`/`sonnet`/`haiku`/`fable` families), `model` outside the org's `availableModels` when `enforceAvailableModels` is on, `allowed-tools` malformed, unknown fields |
-| **Hooks** | files on disk not registered in `settings.json`, duplicate logic, suspicious timeouts, matchers that match no real tool |
+| **Hooks** | files on disk not registered in `settings.json`, duplicate logic, suspicious timeouts, matchers that match no real tool, array or lower-case matchers and a bare `mcp__server` matcher that match nothing, and per-event timeout defaults (`UserPromptSubmit` 30s, `MessageDisplay` 10s, `SessionEnd` capped at 60s) |
 | **Hook reliability** | high failure-rate hooks, hooks registered but never fired, event-type mismatches (suppressed when `disableAllHooks` is set) |
 | **Hook safety** | hook script with no `#!` shebang, a script that emits a block/deny decision but exits 1 (non-blocking) instead of 2, `eval` of dynamic input, an http hook leaking the whole environment (auth header, no `allowedEnvVars`), an http hook whose URL matches no `allowedHttpHookUrls` pattern (Claude Code blocks it, so it never runs) |
 | **Agents** | triggers unreachable from `CLAUDE.md`, overlapping agents, agents on disk never spawned in 30d |
-| **Agent frontmatter** | subagent schema violations — bad `model`/`color`/`permissionMode`/`tools` value, missing `description`, duplicate agent `name`, `permissionMode: bypassPermissions`, plugin agents declaring silently-ignored `hooks`/`mcpServers`/`permissionMode` |
-| **Settings** | malformed JSON, duplicate JSON keys, duplicate array entries, MCP servers missing from `preApprovedTools`, over-broad Bash patterns, stale reminders, risky security keys (`defaultMode: bypassPermissions`, `enableAllProjectMcpServers: true`, `sandbox.disabled: true`, a whole-tool wildcard in `autoMode.allow`) |
-| **Permission hygiene** | dead allowlist entries (zero grants), over-broad `:*` patterns, name collisions between `commands/` and `skills/` |
-| **Plugins & MCP** | `installed_plugins.json` entries with missing `installPath`, missing `plugin.json` manifest, version drift between manifest and on-disk, deprecated `sse` MCP transport, an MCP server declaring neither `command` nor `url`, a hardcoded credential in an MCP `env`/`headers` value, a declared `dependencies` plugin that is not installed, a plugin whose marketplace is blocked or unknown under `strictKnownMarketplaces` |
-| **Plugin structure** | (when auditing a plugin root) component dir misplaced inside `.claude-plugin/`, missing or non-semver `version`, component path not relative-with-`./` (across `skills`/`commands`/`agents`/`outputStyles`/`lspServers`/`workflows`/`hooks`/`mcpServers`/`experimental.*`), a hook or monitor command interpolating `${user_config.…}` where Claude Code rejects it, dangling local `marketplace.json` `source` |
-| **Output styles** | `outputStyle` setting naming a non-existent (and non-built-in) style |
+| **Agent frontmatter** | subagent schema violations — bad `model`/`color`/`permissionMode`/`tools` value, missing `description`, duplicate agent `name`, `permissionMode: bypassPermissions`, plugin agents declaring silently-ignored `hooks`/`mcpServers`/`permissionMode`, agent files whose YAML does not parse |
+| **Settings** | malformed JSON, duplicate JSON keys, duplicate array entries, MCP servers missing from `preApprovedTools`, over-broad Bash patterns, stale reminders, risky security keys (`defaultMode: bypassPermissions`, `enableAllProjectMcpServers: true`, `sandbox.disabled: true`, a whole-tool wildcard in `autoMode.allow`), keys set in a scope that ignores them, deprecated or removed keys (also in `~/.claude.json`), dead `claudeMdExcludes` patterns, and `worktree.sparsePaths` omitting `.claude` |
+| **Permission hygiene** | dead allowlist entries (zero grants), over-broad `:*` patterns, name collisions between `commands/` and `skills/`, permission rules Claude Code never consults or skips, and a `.claudeignore` file (not read) |
+| **Plugins & MCP** | `installed_plugins.json` entries with missing `installPath`, missing `plugin.json` manifest, version drift between manifest and on-disk, deprecated `sse` MCP transport (only in locations Claude Code loads; misplaced MCP config is `MCP-MISPLACED`), an MCP server declaring neither `command` nor `url`, a hardcoded credential in an MCP `env`/`headers` value, a declared `dependencies` plugin that is not installed, a plugin whose marketplace is blocked or unknown under `strictKnownMarketplaces`, an MCP config in a place Claude Code never reads (`.claude/.mcp.json`, a `servers` key, `settings.json#mcpServers`), relative MCP command paths, reserved or malformed plugin and marketplace names |
+| **Plugin structure** | (when auditing a plugin root) component dir misplaced inside `.claude-plugin/`, missing or non-semver `version`, component path not relative-with-`./` (across `skills`/`commands`/`agents`/`outputStyles`/`lspServers`/`workflows`/`hooks`/`mcpServers`/`experimental.*`), a hook or monitor command interpolating `${user_config.…}` where Claude Code rejects it, dangling local `marketplace.json` `source`, unknown `plugin.json` / `marketplace.json` keys (and unknown keys in strict objects, which stop the plugin loading), manifest keys that shadow a default directory, component paths escaping the plugin root |
+| **Output styles** | `outputStyle` setting naming a non-existent (and non-built-in) style, case-mismatched selections, unknown or malformed style frontmatter, `force-for-plugin` outside a plugin; built-ins are `Default`/`Proactive`/`Concise`/`Explanatory`/`Learning` (case-sensitive) |
+| **Plugin evals** | (when auditing a plugin root) an eval case with no grader, a suite with no skill-invocation grader, a model-invocable plugin skill with no eval cases at all |
 | **Cross-references** | dead paths in `settings.json` / `CLAUDE.md` / skill `references/`, orphaned guides and patterns, missing triggers |
 | **Reference graph** | cycles in `references/*.md`, depth exceeding `MAX_REF_DEPTH`, orphan reference files (in-degree 0) |
 | **Memory** | `MEMORY.md` over the loaded-slice line/byte budget |
@@ -57,7 +58,7 @@ Thresholds — line counts, description caps, budget fractions, hook timeouts �
 - 🟡 **polish** (Hygiene) — cosmetic / token efficiency (over-broad patterns, stale reminders, low cache-hit, unused declared tools)
 - 🔵 **idea** (Discovery) — additive suggestions surfaced from the current session (new rules, patterns, triggers)
 
-The chat report groups findings by **area** (Skills, Hooks, Settings & Permissions, Memory, References, Plugins, CLAUDE.md, …) under a scorecard, each rendered as a plain-language line led by a colored 🔴 / 🟠 / 🟡 badge; the canonical tag stays as a trailing machine code (e.g. ` · DEAD-REF`). When a CLAUDE.md is in scope, its block also carries an always-on per-file score (`score: 88/100 (B) — …`). See [`references/report-format.md`](commands/claude-markdown-health-check/references/report-format.md).
+The chat report groups findings by **area** (Skills, Hooks, Settings & Permissions, Memory, References, Plugins, CLAUDE.md, …) under a scorecard, each rendered as a plain-language line led by a colored 🔴 / 🟠 / 🟡 badge; the canonical tag stays as a trailing machine code (e.g. ` · DEAD-REF`). When a CLAUDE.md is in scope, its block also carries an always-on per-file score (`score: 88/100 (B) — …`). See [`references/report-format.md`](plugin/references/report-format.md).
 
 Before the report prints, every **judgment** finding (the heuristic calls — weak descriptions, orphaned guides, stale CLAUDE.md commands, …) passes an **evidence-grounding gate**: 
 
@@ -75,14 +76,16 @@ In Claude Code, add the marketplace and install:
 
 ```
 /plugin marketplace add ncoevoet/claude-markdown-health-check
-/plugin install claude-markdown-health-check@ncoevoet-health-check
+/plugin install markdown-health-check@ncoevoet-health-check
 ```
 
-`/claude-markdown-health-check` is available right away. 
+`/markdown-health-check` is available right away. 
 
-Update with `/plugin update claude-markdown-health-check@ncoevoet-health-check`, remove with `/plugin uninstall claude-markdown-health-check@ncoevoet-health-check`. 
+Update with `/plugin update markdown-health-check@ncoevoet-health-check`, remove with `/plugin uninstall markdown-health-check@ncoevoet-health-check`. 
 
-CLI equivalents: `claude plugin marketplace add ncoevoet/claude-markdown-health-check` then `claude plugin install claude-markdown-health-check@ncoevoet-health-check`. 
+CLI equivalents: `claude plugin marketplace add ncoevoet/claude-markdown-health-check` then `claude plugin install markdown-health-check@ncoevoet-health-check`. 
+
+Upgrading from <= 0.19.0: the plugin was renamed, so `claude-markdown-health-check@ncoevoet-health-check` no longer resolves; run `/plugin uninstall claude-markdown-health-check@ncoevoet-health-check` then `/plugin install markdown-health-check@ncoevoet-health-check`, and invoke `/markdown-health-check`. The old command name is gone (no alias). `make install` users: run `make uninstall` on the old checkout first.
 
 The plugin is self-contained — the command resolves its scripts and reference docs from `${CLAUDE_PLUGIN_ROOT}`, so `make install` is **not** needed.
 
@@ -98,11 +101,12 @@ make install
 
 `make install` copies five things into `~/.claude/`:
 
-- `commands/claude-markdown-health-check.md` → `~/.claude/commands/`
-- the reference docs → `~/.claude/claude-markdown-health-check/references/`
+- `commands/markdown-health-check.md` → `~/.claude/commands/`
+- the reference docs → `~/.claude/markdown-health-check/references/`
 - `validate-skills.sh` → `~/.claude/commands/scripts/`
 - `scan-graph.sh` → `~/.claude/commands/scripts/`
 - `scan-history.sh` → `~/.claude/commands/scripts/`
+- `lib-common.sh` → `~/.claude/commands/scripts/` (sourced by the two scripts above)
 
 `make uninstall` removes the command and its reference tree. The bundled scripts are left in place — they live in a shared directory and other commands may depend on them.
 
@@ -117,7 +121,7 @@ This command works in Claude Code only — it depends on filesystem access and b
 Inside Claude Code:
 
 ```
-/claude-markdown-health-check
+/markdown-health-check
 ```
 
 | Argument | Effect |
@@ -133,13 +137,13 @@ Inside Claude Code:
 Examples:
 
 ```
-/claude-markdown-health-check
-/claude-markdown-health-check quick
-/claude-markdown-health-check deep
-/claude-markdown-health-check --refresh
-/claude-markdown-health-check --compress-bodies
-/claude-markdown-health-check --window-days=7
-/claude-markdown-health-check check that every skill has a Troubleshooting section
+/markdown-health-check
+/markdown-health-check quick
+/markdown-health-check deep
+/markdown-health-check --refresh
+/markdown-health-check --compress-bodies
+/markdown-health-check --window-days=7
+/markdown-health-check check that every skill has a Troubleshooting section
 ```
 
 The report prints in chat. Reply naming the findings to fix and the command applies them; until then it touches nothing.
@@ -171,8 +175,8 @@ The phase sequence runs flat from 1 to 25, renumbered from the previous 5a / 5b 
 
 | Phase | What it does | Depth |
 |---|---|---|
-| 1 — Load Config + Thresholds | Reads optional `markdown-health-check.json`, then fetches skill / memory / settings / hooks limits from the Anthropic docs; caches at `~/.claude/.cache/claude-markdown-health-check-guidance.json` | All |
-| 2 — Plugin + MCP Integrity | `installed_plugins.json` vs on-disk cache: broken refs, missing manifests, version drift; deprecated `sse` MCP transport in `.mcp.json` | Standard + Deep |
+| 1 — Load Config + Thresholds | Reads optional `markdown-health-check.json`, then fetches skill / memory / settings / hooks limits from the Anthropic docs; caches at `~/.claude/.cache/markdown-health-check-guidance.json` | All |
+| 2 — Plugin + MCP Integrity | `installed_plugins.json` vs on-disk cache: broken refs, missing manifests, version drift; deprecated `sse` MCP transport in `.mcp.json` / `~/.claude.json` | Standard + Deep |
 | 3 — Select Depth | Standard by default, Deep for a large ecosystem, Quick only when you ask for it | All |
 | 4 — Focus + History | Reads the focus message (if any) and mines the current session for recurring bugs, corrections, uncovered patterns | Standard + Deep |
 | 5 — Run validate-skills.sh | Deterministic layer: name regex, line counts, voice, TOC, description sizes, frontmatter schema, name collisions | All |
@@ -196,7 +200,7 @@ The phase sequence runs flat from 1 to 25, renumbered from the previous 5a / 5b 
 | 23 — Token Trend | Per-session input/output/cache tokens — low cache-hit, output bloat | Deep |
 | 24 — Report | A mandatory pre-print pass first **grounds every judgment finding** (drop / downgrade / keep-with-`Evidence:`), then renders a scorecard + findings grouped by area, each a plain-language line with a must-fix / should / polish chip and a trailing tag code; optional summary blocks per active phase | All |
 | 25 — Post-Report Menu | Pick a fix scope, apply, re-validate, loop until done | All |
-| 26 — Output Styles | `.claude/output-styles/*.md` vs the selected `outputStyle`: flags a selection with no matching style file (runs in the scan band, feeds the Phase 24 report) | Standard + Deep |
+| 26 — Output Styles | `.claude/output-styles/*.md` vs the selected `outputStyle` (built-ins `Default`/`Proactive`/`Concise`/`Explanatory`/`Learning`, case-sensitive; a style is named by frontmatter `name:` else file name; resolved from the scanned tree, the user tree, ancestor `.claude/output-styles/`, manifest `outputStyles` and installed plugins): flags a selection with no matching style, a case mismatch, unknown fields, bad YAML (runs in the scan band, feeds the Phase 24 report) | Standard + Deep |
 | 27 — Context Coherence | The assembled context judged as one document: over-constrained prose, a directive repeated verbatim in two files, and directives that contradict each other | Standard + Deep |
 
 ## Migration note
@@ -225,17 +229,17 @@ Two layers, following Anthropic's [develop-tests](https://platform.claude.com/do
 
 - **Deterministic (code-graded, CI-safe, no API key).** Synthetic `dot-claude/` fixture trees (materialized as `.claude/` at test time, so a fixture's SKILL.md never registers as a live skill in this repo) under `tests/fixtures/<case>/` each plant one defect; the suite runs `validate-skills.sh` / `scan-graph.sh` against them and asserts the exact `[TAG]` set. A `clean/` fixture asserts **zero** findings — the false-positive guard. Paired guards cover both directions, e.g. cases 73/74 (a `npm run <script>` absent from `package.json` must be flagged `CLAUDEMD-DEAD-SCRIPT`, while one that resolves must **not** be) cases 75/76 (a memory body citing a missing `.claude/…` path is flagged `MEMORY-STALE-CONTENT`, while one whose path resolves is not), and cases 88/90 (a bare file-tree dump in CLAUDE.md is flagged `CLAUDEMD-OBVIOUS`, while an architecture map whose entries carry relationships is not). A third code-graded layer covers `scan-history.sh`: `synthetic-jsonl` fixtures plant `.claude/projects/*/*.jsonl` transcripts that `tests/test_history.sh` aggregates and asserts field-by-field against `history-scan.json` (e.g. hook failure rates, token sums, ledger folding, window-cutoff exclusion).
   ```bash
-  make test              # bash tests/run.sh — anonymization + eval-schema gates, then the code-graded cases (241 scanner + 13 history assertions)
+  make test              # bash tests/run.sh — anonymization + eval-schema gates, then the code-graded cases (940 scanner + 48 history assertions)
   bash tests/run.sh 02   # run one case / id-prefix (deterministic suite only)
   ```
-  `tests/run.sh` also runs two release gates first: an **anonymization** check (no real scanned-project names in the published `plugin/`, `evals/`, `tests/fixtures/`, `README.md` — the real blocklist is gitignored, a placeholder ships) and **eval-schema validation** (`validate-evals.sh` asserts every case matches the contract before an expensive run is wasted on a malformed one).
-- **Behavioural (LLM-graded, opt-in, costs tokens).** Runs the full `/claude-markdown-health-check` headless against a fixture to exercise the judgment phases (weak descriptions, thin CLAUDE.md, autonomy-gate compliance) and the evidence-grounding gate — including paired guards (cases 36–41: a referenced guide and a live CLAUDE.md command must _not_ be flagged, while a genuinely-orphaned guide and a missing-script command must _still_ be; case 77: CLAUDE.md self-referential count drift plus the always-on per-file score), graded by an LLM rubric and scored by majority over N runs.
+  `tests/run.sh` also runs a **tag-registration** gate last (`tests/check-tag-registration.sh`: every tag a script can emit must be listed in the command file's tier lists, `report-format.md` and `finding-verification.md`; `tests/judgment-tags.txt` holds the reviewed exceptions) and two release gates first: an **anonymization** check (no real scanned-project names in the published `plugin/`, `evals/`, `tests/fixtures/`, `README.md` — the real blocklist is gitignored, a placeholder ships) and **eval-schema validation** (`validate-evals.sh` asserts every case matches the contract before an expensive run is wasted on a malformed one).
+- **Behavioural (LLM-graded, opt-in, costs tokens).** Runs the full `/markdown-health-check` headless against a fixture to exercise the judgment phases (weak descriptions, thin CLAUDE.md, autonomy-gate compliance) and the evidence-grounding gate — including paired guards (cases 36–41: a referenced guide and a live CLAUDE.md command must _not_ be flagged, while a genuinely-orphaned guide and a missing-script command must _still_ be; case 77: CLAUDE.md self-referential count drift plus the always-on per-file score), graded by an LLM rubric and scored by majority over N runs.
   ```bash
   make evals                            # needs the authenticated `claude` CLI
   HEALTH_CHECK_EVAL_RUNS=3 make evals   # majority vote to smooth LLM noise
   ```
 
-Cases live in `evals/*.json` (104 cases: 92 `grader.method: code` + 12 `llm-rubric`; numbered 01–105 with 43 & 50 retired and 91 used twice); fixtures in `tests/fixtures/`. 
+Cases live in `evals/*.json` (236 cases: 224 `grader.method: code` + 12 `llm-rubric`; numbered 01–267 with 31 ids unused — 43, 50, 113, 138–139, 208–209, 218–219, 222–229, 233–239, 243–249); fixtures in `tests/fixtures/`. 
 
 Tags are the stable machine contract, so the code-graded cases are immune to report-format changes. CI (`.github/workflows/ci.yml`) runs shellcheck + `bash -n` + the anonymization gate + eval-schema validation + the deterministic suite + the history aggregation suite on every push; it does **not** run the token-spending LLM evals. Every real-world miss or false positive should become a new case.
 
@@ -254,11 +258,12 @@ plugin/                                      # the installed tree — a plugin i
 ├── .claude-plugin/plugin.json
 ├── LICENSE
 ├── commands/
-│   ├── claude-markdown-health-check.md      # the slash command (~440 lines, orchestrator)
+│   ├── markdown-health-check.md      # the slash command (~440 lines, orchestrator)
 │   └── scripts/
 │       ├── validate-skills.sh               # deterministic compliance validator (Phase 5)
 │       ├── scan-graph.sh                    # static graph scanner (Phases 2, 11, 20, 26)
 │       ├── scan-history.sh                  # session-log miner (Phases 7, 9, 15, 16, 19, 22, 23)
+│       ├── lib-common.sh                    # sourced helpers shared by validate-skills.sh + scan-graph.sh (not run directly)
 │       ├── validate-evals.sh                # eval-case schema/contract gate (CI)
 │       ├── run-evals-headless.sh            # opt-in LLM-graded eval runner
 │       └── run-evals.sh                     # manual eval runner
@@ -284,10 +289,11 @@ plugin/                                      # the installed tree — a plugin i
     ├── context-coherence.md                 # Phase 27
     ├── finding-verification.md              # Pre-print evidence-grounding gate (judgment findings)
     ├── report-format.md                     # Phase 24 report rendering — domain map + scorecard
-    └── post-report-menu.md                  # Phase 25 menu
+    ├── post-report-menu.md                  # Phase 25 menu
+    └── command-phase-details.md             # Phases 1, 3-23, 26, 27 detail moved out of the command file
 
 evals/                                       # data-driven eval cases (dev-only, never installed)
-├── 01-clean-zero-findings.json … 83-history-signals.json  (71 code + 10 LLM; 43 & 50 retired)
+├── 01-clean-zero-findings.json … 267-hook-timeout-asyncrewake.json  (236 cases: 224 code + 12 LLM; 31 ids unused)
 └── README.md                                # eval schema + how to run
 
 tests/                                       # deterministic test suite (dev-only, CI)
@@ -317,7 +323,9 @@ project by Ásgeir Thor Johnson, found four defects that are fixed here:
   budget even though Claude Code keeps their description out of context entirely
   (backported as-is, so the commit carries their authorship)
 - `RESERVED-NAME` matched `anthropic` and `claude` as substrings of a skill name, which
-  the docs do not reserve — it now matches the one name they do, the `synced` folder
+  the docs do not reserve — it now matches the one name they do, the `synced` folder; the portability concern
+  (the API / claude.ai upload rejects these words) has its own Hygiene tag,
+  `RESERVED-WORD-PORTABILITY`
 - the 40-char `description` floor was reported as a schema violation; the docs set no
   minimum, so it is now a Hygiene advisory
 - the plugin shipped its whole repository to every user cache, and `references/` nested

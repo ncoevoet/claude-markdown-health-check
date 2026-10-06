@@ -1,0 +1,25 @@
+{
+  "id": "204-settings-env-injection",
+  "command": "markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/settings-env-injection",
+    "needs_home_override": false,
+    "scanners": [
+      "validate-skills"
+    ]
+  },
+  "grader": {
+    "method": "code"
+  },
+  "success_criteria": {
+    "must_detect": [],
+    "must_not_flag": [
+      "SETTINGS-SCOPE-IGNORED"
+    ],
+    "expect_clean": true
+  },
+  "expected_behavior": [
+    "a newline and tab inside an env value cannot forge a second env record, and the off value 0 still applies"
+  ]
+}

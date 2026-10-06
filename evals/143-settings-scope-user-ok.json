@@ -1,0 +1,23 @@
+{
+  "id": "143-settings-scope-user-ok",
+  "command": "markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/settings-scope-user-ok",
+    "needs_home_override": true,
+    "scanners": [
+      "validate-skills"
+    ]
+  },
+  "grader": {
+    "method": "code"
+  },
+  "success_criteria": {
+    "must_detect": [],
+    "must_not_flag": [],
+    "expect_clean": true
+  },
+  "expected_behavior": [
+    "keys and env variables that the user scope may set are not flagged"
+  ]
+}

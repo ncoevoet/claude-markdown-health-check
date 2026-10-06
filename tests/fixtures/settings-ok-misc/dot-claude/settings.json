@@ -1,0 +1,8 @@
+{
+  "attribution": { "commit": "", "pr": "" },
+  "enableArtifact": false,
+  "voice": { "enabled": true },
+  "additionalMarketplaces": {},
+  "claudeMdExcludes": ["**/vendor/**/CLAUDE.md", "/**/CLAUDE.md"],
+  "worktree": { "sparsePaths": [".claude", "packages/api"] }
+}

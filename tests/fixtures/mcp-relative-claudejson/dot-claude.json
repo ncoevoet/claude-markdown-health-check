@@ -1,0 +1,4 @@
+{
+  "mcpServers": { "top": { "command": "node", "args": ["./a.js"] } },
+  "projects": { "/p": { "mcpServers": { "x": { "command": "scripts/run.sh" } } } }
+}

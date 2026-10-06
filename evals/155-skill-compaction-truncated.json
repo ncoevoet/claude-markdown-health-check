@@ -1,0 +1,31 @@
+{
+  "id": "155-skill-compaction-truncated",
+  "command": "markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/skill-compaction-truncated",
+    "needs_home_override": false,
+    "scanners": [
+      "validate-skills"
+    ]
+  },
+  "grader": {
+    "method": "code"
+  },
+  "success_criteria": {
+    "must_detect": [
+      {
+        "tag": "SKILL-COMPACTION-TRUNCATED",
+        "path_substring": "big-skill/SKILL.md"
+      }
+    ],
+    "must_not_flag": [
+      "OVER-500-LINES"
+    ],
+    "expect_clean": false
+  },
+  "expected_behavior": [
+    "validate-skills.sh emits [SKILL-COMPACTION-TRUNCATED] when a SKILL.md body (frontmatter excluded) exceeds 20,000 bytes, about the 5,000 tokens re-attached per skill after /compact",
+    "the fixture body is under 500 lines, so OVER-500-LINES does not fire: the compaction cap is a byte budget, not a line budget"
+  ]
+}

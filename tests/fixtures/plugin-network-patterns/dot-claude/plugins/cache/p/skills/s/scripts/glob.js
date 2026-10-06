@@ -1,0 +1,1 @@
+globalThis.fetch("https://x");

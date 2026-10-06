@@ -1,0 +1,19 @@
+{
+  "id": "173-outputstyle-name-shadowed",
+  "command": "markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/outputstyle-name-shadowed",
+    "needs_home_override": true,
+    "scanners": ["scan-graph"]
+  },
+  "grader": { "method": "code" },
+  "success_criteria": {
+    "must_detect": [ { "tag": "OUTPUTSTYLE-MISSING", "path_substring": "voice-v2" } ],
+    "must_not_flag": ["OUTPUTSTYLE-CASE"],
+    "expect_clean": false
+  },
+  "expected_behavior": [
+    "scan-graph.sh emits [OUTPUTSTYLE-MISSING]: the file name stops being the style name once frontmatter sets name: terse, so 'voice-v2' selects nothing"
+  ]
+}

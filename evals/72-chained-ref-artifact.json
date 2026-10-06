@@ -1,6 +1,6 @@
 {
   "id": "72-chained-ref-artifact",
-  "command": "claude-markdown-health-check",
+  "command": "markdown-health-check",
   "fixture": {
     "kind": "claude-tree",
     "dir": "tests/fixtures/chained-ref-artifact",

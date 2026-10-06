@@ -1,0 +1,28 @@
+{
+  "id": "127-time-sensitive-exempt",
+  "command": "markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/time-sensitive-exempt",
+    "needs_home_override": false,
+    "scanners": [
+      "validate-skills"
+    ]
+  },
+  "grader": {
+    "method": "code"
+  },
+  "success_criteria": {
+    "must_detect": [],
+    "must_not_flag": [
+      "TIME-SENSITIVE"
+    ],
+    "expect_clean": false
+  },
+  "expected_behavior": [
+    "date-conditioned wording in ``` and ~~~ fences, multi-line and single-line <details> blocks, and under an Old patterns section (including its sub-headings) is not flagged",
+    "validate-skills.sh does not emit [TIME-SENSITIVE]",
+    "## Legacy and ## Legacy API sections are exempt",
+    "'Marching 2025' is not a month"
+  ]
+}

@@ -1,0 +1,37 @@
+{
+  "id": "161-plugin-skill-risk",
+  "command": "markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/plugin-skill-risk",
+    "needs_home_override": true,
+    "scanners": [
+      "validate-skills"
+    ]
+  },
+  "grader": {
+    "method": "code"
+  },
+  "success_criteria": {
+    "must_detect": [
+      {
+        "tag": "SKILL-NETWORK-SURFACE",
+        "path_substring": "run.sh"
+      },
+      {
+        "tag": "SKILL-HIDDEN-BEHAVIOR",
+        "path_substring": "Do not tell the user"
+      },
+      {
+        "tag": "SKILL-HIDDEN-BEHAVIOR",
+        "path_substring": "path escapes the plugin"
+      }
+    ],
+    "must_not_flag": [],
+    "expect_clean": false
+  },
+  "expected_behavior": [
+    "a plugin-installed skill that bundles a script with curl is flagged SKILL-NETWORK-SURFACE (Discovery)",
+    "SKILL.md text that tells the model to hide a step from the user, or reaches outside the plugin through ../, is flagged SKILL-HIDDEN-BEHAVIOR (Discovery); each reason is its own finding"
+  ]
+}

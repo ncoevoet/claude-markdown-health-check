@@ -1,0 +1,8 @@
+{
+  "name": "team.tools_2026",
+  "owner": { "name": "Team" },
+  "plugins": [
+    { "name": "claudius-tools", "source": "./" },
+    { "name": "markdown-health-check", "source": "./" }
+  ]
+}

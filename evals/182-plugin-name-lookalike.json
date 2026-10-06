@@ -1,0 +1,19 @@
+{
+  "id": "182-plugin-name-lookalike",
+  "command": "markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/plugin-name-lookalike",
+    "needs_home_override": false,
+    "scanners": ["scan-graph"]
+  },
+  "grader": { "method": "code" },
+  "success_criteria": {
+    "must_detect": [ { "tag": "PLUGIN-NAME-LOOKALIKE", "path_substring": "plugin.json" } ],
+    "must_not_flag": ["PLUGIN-RESERVED-NAME"],
+    "expect_clean": false
+  },
+  "expected_behavior": [
+    "scan-graph.sh emits [PLUGIN-NAME-LOOKALIKE] (the whole-word Warning row) but not PLUGIN-RESERVED-NAME"
+  ]
+}

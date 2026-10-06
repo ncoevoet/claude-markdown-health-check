@@ -1,6 +1,6 @@
 {
   "id": "103-history-usage-dedup",
-  "command": "claude-markdown-health-check",
+  "command": "markdown-health-check",
   "fixture": {
     "kind": "synthetic-jsonl",
     "dir": "tests/fixtures/history-usage-dedup",

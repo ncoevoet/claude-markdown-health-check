@@ -1,0 +1,19 @@
+{
+  "id": "250-eval-skills-path-no-grader",
+  "command": "markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/skills-path-no-grader",
+    "needs_home_override": false,
+    "scanners": ["scan-graph"]
+  },
+  "grader": { "method": "code" },
+  "success_criteria": {
+    "must_detect": [ { "tag": "EVAL-NO-SKILL-GRADER", "path_substring": "extra/triage" } ],
+    "must_not_flag": ["EVAL-CASE-NO-GRADER","PLUGIN-NO-EVALS"],
+    "expect_clean": false
+  },
+  "expected_behavior": [
+    "scan-graph.sh follows the manifest skills entry ./extra: the triage skill there is model-invocable and no tool_used Skill grader names it"
+  ]
+}

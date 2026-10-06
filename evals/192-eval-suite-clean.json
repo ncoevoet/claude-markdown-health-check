@@ -1,0 +1,19 @@
+{
+  "id": "192-eval-suite-clean",
+  "command": "markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/eval-suite-clean",
+    "needs_home_override": false,
+    "scanners": ["scan-graph"]
+  },
+  "grader": { "method": "code" },
+  "success_criteria": {
+    "must_detect": [],
+    "must_not_flag": ["EVAL-CASE-NO-GRADER","EVAL-NO-SKILL-GRADER","PLUGIN-NO-EVALS"],
+    "expect_clean": true
+  },
+  "expected_behavior": [
+    "scan-graph.sh stays silent: the case grades through a graders: list in case.yaml that names triage; deploy sets disable-model-invocation so needs no trigger grader; results/ and mocks/ are not cases"
+  ]
+}

@@ -1,6 +1,6 @@
 {
   "id": "119-history-anchor-artifact-filter",
-  "command": "claude-markdown-health-check",
+  "command": "markdown-health-check",
   "fixture": {
     "kind": "synthetic-jsonl",
     "dir": "tests/fixtures/history-bare-noun-filter",

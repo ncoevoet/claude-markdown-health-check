@@ -1,0 +1,60 @@
+{
+  "id": "140-settings-scope-ignored",
+  "command": "markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/settings-scope-ignored",
+    "needs_home_override": false,
+    "scanners": [
+      "validate-skills"
+    ]
+  },
+  "grader": {
+    "method": "code"
+  },
+  "success_criteria": {
+    "must_detect": [
+      {
+        "tag": "SETTINGS-SCOPE-IGNORED",
+        "path_substring": "'blockedMarketplaces' is ignored in project"
+      },
+      {
+        "tag": "SETTINGS-SCOPE-IGNORED",
+        "path_substring": "'modelPicker' is ignored in project"
+      },
+      {
+        "tag": "SETTINGS-SCOPE-IGNORED",
+        "path_substring": "'modelPicker' is ignored in local"
+      },
+      {
+        "tag": "SETTINGS-SCOPE-IGNORED",
+        "path_substring": "env.OTEL_EXPORTER_OTLP_ENDPOINT"
+      },
+      {
+        "tag": "SETTINGS-SCOPE-IGNORED",
+        "path_substring": "env.CLAUDE_CONFIG_DIR"
+      },
+      {
+        "tag": "SETTINGS-SCOPE-IGNORED",
+        "path_substring": "env.CLAUDE_CODE_RESTRICTED"
+      },
+      {
+        "tag": "SETTINGS-SCOPE-IGNORED",
+        "path_substring": "env.CLAUDE_CODE_ENABLE_TELEMETRY"
+      },
+      {
+        "tag": "SETTINGS-SCOPE-IGNORED",
+        "path_substring": "defaultMode \"auto\""
+      },
+      {
+        "tag": "SETTINGS-SCOPE-IGNORED",
+        "path_substring": "'skipDangerousModePermissionPrompt' is ignored in project"
+      }
+    ],
+    "must_not_flag": [],
+    "expect_clean": false
+  },
+  "expected_behavior": [
+    "validate-skills.sh emits [SETTINGS-SCOPE-IGNORED] for managed-only and user-only keys, dropped env variables and defaultMode auto in project and local settings; CLAUDE_CODE_ENABLE_TELEMETRY is dropped even with an off value because the docs exempt only the exporter selectors and the three OTEL_LOG_* variables"
+  ]
+}

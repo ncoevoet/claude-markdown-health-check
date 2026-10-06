@@ -1,6 +1,6 @@
 {
   "id": "11-ref-orphan",
-  "command": "claude-markdown-health-check",
+  "command": "markdown-health-check",
   "fixture": {
     "kind": "claude-tree",
     "dir": "tests/fixtures/ref-orphan",

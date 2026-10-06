@@ -1,0 +1,7 @@
+{
+  "name": "path-escape",
+  "version": "1.0.0",
+  "agents": ["../outside/a.md"],
+  "skills": "/etc",
+  "workflows": ["./a/../../x"]
+}

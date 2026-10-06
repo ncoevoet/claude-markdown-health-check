@@ -1,0 +1,52 @@
+{
+  "id": "212-plugin-network-patterns",
+  "command": "markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/plugin-network-patterns",
+    "needs_home_override": true,
+    "scanners": [
+      "validate-skills"
+    ]
+  },
+  "grader": {
+    "method": "code"
+  },
+  "success_criteria": {
+    "must_detect": [
+      {
+        "tag": "SKILL-NETWORK-SURFACE",
+        "path_substring": "iwr.ps1"
+      },
+      {
+        "tag": "SKILL-NETWORK-SURFACE",
+        "path_substring": "irm.ps1"
+      },
+      {
+        "tag": "SKILL-NETWORK-SURFACE",
+        "path_substring": "win.js"
+      },
+      {
+        "tag": "SKILL-NETWORK-SURFACE",
+        "path_substring": "glob.js"
+      },
+      {
+        "tag": "SKILL-NETWORK-SURFACE",
+        "path_substring": "httpx.py"
+      },
+      {
+        "tag": "SKILL-NETWORK-SURFACE",
+        "path_substring": "uo.py"
+      },
+      {
+        "tag": "SKILL-NETWORK-SURFACE",
+        "path_substring": "https.js"
+      }
+    ],
+    "must_not_flag": [],
+    "expect_clean": false
+  },
+  "expected_behavior": [
+    "each bundled script is flagged individually, one per network pattern: iwr, Invoke-RestMethod, window.fetch, globalThis.fetch, httpx., urlopen(, https.get("
+  ]
+}

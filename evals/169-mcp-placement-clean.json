@@ -1,0 +1,19 @@
+{
+  "id": "169-mcp-placement-clean",
+  "command": "markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/mcp-placement-clean",
+    "needs_home_override": false,
+    "scanners": ["scan-graph"]
+  },
+  "grader": { "method": "code" },
+  "success_criteria": {
+    "must_detect": [],
+    "must_not_flag": ["MCP-MISPLACED","MCP-RELATIVE-PATH"],
+    "expect_clean": true
+  },
+  "expected_behavior": [
+    "scan-graph.sh stays silent: a plugin root may carry .mcp.json at its top, and the parent .mcp.json (relative ./server.js) is not a project root when the scanned tree is a plugin root"
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "name": "unknown-keys",
+  "version": "1.0.0",
+  "descripton": "typo of description",
+  "Version": "2.0.0",
+  "userConfig": {
+    "opt": {
+      "type": "string",
+      "title": "Opt",
+      "description": "An option",
+      "bogus": true
+    }
+  }
+}

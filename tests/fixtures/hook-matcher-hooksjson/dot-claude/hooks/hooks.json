@@ -1,0 +1,7 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      { "matcher": ["Edit", "Write"], "hooks": [ { "type": "command", "command": "echo lint" } ] }
+    ]
+  }
+}

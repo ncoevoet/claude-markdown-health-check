@@ -12,6 +12,10 @@
 
 set -uo pipefail
 
+# Shared helpers (path normalisers, manifest walker) — ships beside this script.
+# shellcheck source=lib-common.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib-common.sh"
+
 NO_CACHE=0; REFRESH=0; POS_ARGS=()
 for a in "$@"; do
     case "$a" in
@@ -43,7 +47,8 @@ command -v jq >/dev/null 2>&1 || { echo '{"meta":{"partial":true,"reason":"jq mi
 
 if [ "$NO_CACHE" = 0 ] && [ "$REFRESH" = 0 ] && [ -s "$CACHE_FILE" ]; then
     cache_scope=$(jq -r '.meta.scope // empty' "$CACHE_FILE" 2>/dev/null || echo "")
-    if [ "$cache_scope" = "$SCOPE" ]; then
+    cache_dir=$(jq -r '.meta.claude_dir // empty' "$CACHE_FILE" 2>/dev/null || echo "")
+    if [ "$cache_scope" = "$SCOPE" ] && [ "$cache_dir" = "$CLAUDE_DIR" ]; then
         age=$(( $(date +%s) - $(stat -c %Y "$CACHE_FILE" 2>/dev/null || echo 0) ))
         if [ "$age" -lt "$TTL_SECONDS" ]; then
             cat "$CACHE_FILE"
@@ -220,6 +225,142 @@ _ref_base() {
             printf '%s' "$(dirname "$src")"
             ;;
     esac
+}
+
+# Did-you-mean for an unknown key: succeeds, printing the documented key, when the key
+# equals a known one after lower-casing and dropping `_` and `-` (descriptionURL, Home_Page).
+_manifest_key_suggest() {
+    local key="$1" known="$2" want cand k
+    want=$(printf '%s' "$key" | tr 'A-Z' 'a-z' | tr -d '_-')
+    for k in $known; do
+        cand=$(printf '%s' "$k" | tr 'A-Z' 'a-z' | tr -d '_-')
+        [ "$cand" = "$want" ] && { printf '%s' "$k"; return 0; }
+    done
+    return 1
+}
+
+# Plugin manifest key checks (phase 2). Runs when CLAUDE_DIR holds a .claude-plugin/plugin.json
+# and/or marketplace.json, any scope, like scan_plugin_self. Key sets below were read from
+# https://code.claude.com/docs/en/plugins/manifest-reference (plugins-reference) and
+# .../plugins/marketplace-reference on 2026-10-06; refresh them from the `Fields`, `User
+# configuration`, `Channels`, `lspServers`, `monitors`, `Top-level fields` and `Plugin entries`
+# tables when the docs move (recipe in plugin/references/plugin-integrity.md).
+scan_plugin_manifest_keys() {
+    local pdir="$CLAUDE_DIR/.claude-plugin" pj mp root
+    pj="$pdir/plugin.json"; mp="$pdir/marketplace.json"
+    [ -f "$pj" ] || [ -f "$mp" ] || return 0
+    local sep=$'\x1f' loc key sug dir fld ek p n entries hit
+
+    # manifest-reference `Fields` table: "The table lists the top-level keys in `plugin.json`."
+    # `themes` and `monitors` are kept: "A top-level `themes` key still loads, with a
+    # `claude plugin validate` warning" (same for `monitors`), so they are deprecated, not unknown.
+    local PJ_KEYS='$schema name displayName version description author homepage repository license keywords metadata icon documentationUrl supportUrl privacyPolicyUrl termsOfServiceUrl defaultEnabled dependencies settings userConfig types channels skills commands agents hooks mcpServers lspServers outputStyles workflows experimental themes monitors'
+    # "## User configuration": "Each value is a strict object with these fields. An unknown key fails validation."
+    # (`min` / `max` share one table row.)
+    local UC_KEYS='type title description required default options multiple sensitive min max'
+    # "## Channels": "Each entry is a strict object bound to one of the plugin's MCP servers, with these fields:"
+    local CH_KEYS='server displayName userConfig'
+    # "### `lspServers`": "Each server config is a strict object with these fields. An unknown key fails validation."
+    local LSP_KEYS='command extensionToLanguage args transport env initializationOptions settings workspaceFolder startupTimeout shutdownTimeout requestTimeout restartOnCrash maxRestarts diagnostics'
+    # "### `monitors`": "Each entry is a strict object with these fields."
+    local MON_KEYS='name command description when'
+    # marketplace-reference "Top-level fields": "The table lists every key Claude Code reads from `marketplace.json`."
+    local MP_KEYS='name owner plugins $schema description version metadata forceRemoveDeletedPlugins allowCrossMarketplaceDependenciesOn renames'
+    # "Plugin entries": an entry "also accepts every `plugin.json` field" apart from the directory
+    # listing fields (icon, documentationUrl, supportUrl, privacyPolicyUrl, termsOfServiceUrl: "In a
+    # marketplace entry, `claude plugin validate` reports each one as an unknown field"), plus its own.
+    local ENTRY_KEYS='name source description version category tags strict relevance dependencies defaultEnabled displayName metadata headers headersHelper $schema author homepage repository license keywords settings userConfig types channels skills commands agents hooks mcpServers lspServers outputStyles workflows experimental themes monitors'
+
+    if [ -f "$pj" ]; then
+        # Unrecognised top-level keys. manifest-reference "Unrecognized fields": "the field is
+        # stripped and the plugin loads. `claude plugin validate` reports each unrecognized
+        # top-level field as a warning".
+        while IFS= read -r key; do
+            [ -z "$key" ] && continue
+            sug=$(_manifest_key_suggest "$key" "$PJ_KEYS") && sug=" — did you mean '$sug'?"
+            emit_finding 2 "PLUGIN-UNKNOWN-KEY" ".claude-plugin/plugin.json" "unrecognized top-level key '$key' is stripped at load${sug:-}"
+            sug=""
+        done < <(jq -r --arg known "$PJ_KEYS" 'objects | keys_unsorted[] | select(. as $k | ($known | split(" ") | index($k)) == null)' "$pj" 2>/dev/null || true)
+
+        # Strict objects. manifest-reference: "`userConfig` options, `channels` entries, `lspServers`
+        # configs, and `monitors` entries are strict. An unknown key inside one is an error, and the
+        # plugin doesn't load". Only inline definitions are visible here (a .json file named by
+        # `lspServers` is not read).
+        while IFS="$sep" read -r loc key; do
+            [ -z "$key" ] && continue
+            emit_finding 2 "PLUGIN-STRICT-OBJECT-UNKNOWN-KEY" ".claude-plugin/plugin.json" "$loc has unknown key '$key' — strict object, an unknown key is an error and the plugin doesn't load"
+        done < <(jq -r --arg uc "$UC_KEYS" --arg ch "$CH_KEYS" --arg lsp "$LSP_KEYS" --arg mon "$MON_KEYS" '
+            def unknown($loc; $known):
+                objects | keys_unsorted[] | select(. as $k | ($known | split(" ") | index($k)) == null) | "\($loc)\u001f\(.)";
+            def options($loc):
+                objects | to_entries[] | select(.value | type == "object") | .key as $o | .value | unknown("\($loc).\($o)"; $uc);
+            def monitors: arrays | to_entries[] | select(.value | type == "object") | .key as $i | .value | unknown("monitors[\($i)]"; $mon);
+            objects
+            | ( (.userConfig | options("userConfig")),
+                ( .channels | arrays | to_entries[] | select(.value | type == "object") | .key as $i | .value
+                  | unknown("channels[\($i)]"; $ch), (.userConfig | options("channels[\($i)].userConfig")) ),
+                ( .lspServers | (if type == "object" then [.] elif type == "array" then [.[] | objects] else [] end)[]
+                  | to_entries[] | select(.value | type == "object") | .key as $n | .value | unknown("lspServers.\($n)"; $lsp) ),
+                ( (.experimental | objects | .monitors | monitors), (.monitors | monitors) ) )' "$pj" 2>/dev/null || true)
+
+        # Component paths. manifest-reference "Containment and existence": "a path that resolves
+        # outside the plugin root doesn't load, and the `/plugin` Errors tab shows `<component> path
+        # escapes plugin directory: <path>`. A path containing `..` is the usual case". A `..` that
+        # stays inside the root loads (validate-only error) and is not flagged. Each line is
+        # `key<US>path`; a path-less line marks a key that is set (its value may be inline config).
+        root=$(cd -P "$CLAUDE_DIR" 2>/dev/null && pwd -P)
+        entries=$(jq -r '
+            def paths($k):
+                if type == "string" then .
+                elif type == "array" then .[] | if type == "string" then . elif type == "object" and $k == "commands" then (.source? | strings) else empty end
+                elif type == "object" and $k == "commands" then .[]? | objects | (.source? | strings)
+                else empty end;
+            objects | . as $r
+            | ( ("skills","commands","agents","outputStyles","workflows","hooks","mcpServers","lspServers") as $k | select(has($k)) | [$k, .[$k]] ),
+              ( .experimental | objects | to_entries[] | ["experimental." + .key, .value] )
+            | .[0] as $k | "\($k)\u001f", (.[1] | paths($k) | select(startswith("http://") or startswith("https://") | not) | "\($k)\u001f\(.)")' "$pj" 2>/dev/null || true)
+        while IFS="$sep" read -r key p; do
+            [ -z "$p" ] && continue
+            _plugin_path_norm "$p" "$root" >/dev/null \
+                || emit_finding 2 "PLUGIN-PATH-ESCAPE" ".claude-plugin/plugin.json" "$key path '$p' resolves outside the plugin root — it doesn't load (path escapes plugin directory)"
+        done <<<"$entries"
+
+        # Default folders a key replaces. manifest-reference "How each key combines with its
+        # default location": "**Replaces the default**: `commands`, `agents`, `outputStyles`,
+        # `workflows`, `experimental.themes`, `experimental.monitors`. When you set `commands`, the
+        # default `commands/` directory isn't scanned." and "To avoid the warning, set the key to a
+        # path inside that folder". `skills` ("Adds to the default") and `hooks`/`mcpServers`/
+        # `lspServers` ("Merges") are never flagged.
+        for fld in commands:commands agents:agents outputStyles:output-styles workflows:workflows experimental.themes:themes experimental.monitors:monitors; do
+            key="${fld%%:*}"; dir="${fld#*:}"
+            [ -d "$CLAUDE_DIR/$dir" ] || continue
+            printf '%s\n' "$entries" | grep -qxF "$key$sep" || continue
+            hit=0
+            while IFS="$sep" read -r ek p; do
+                [ "$ek" = "$key" ] && [ -n "$p" ] || continue
+                n=$(_plugin_path_norm "$p" "$root") || continue
+                case "$n" in ""|"$dir"|"$dir"/*) hit=1 ;; esac
+            done <<<"$entries"
+            [ "$hit" = 1 ] \
+                || emit_finding 2 "PLUGIN-DEFAULT-DIR-SHADOWED" ".claude-plugin/plugin.json" "Default $dir/ folder is ignored because the manifest sets \"$key\" — list \"./$dir/\" in it to keep the folder"
+        done
+    fi
+
+    if [ -f "$mp" ]; then
+        # marketplace-reference: "Claude Code ignores an unknown top-level key or plugin-entry key
+        # rather than rejecting it, so a typo loads silently. `claude plugin validate` reports each
+        # unknown key as a warning." `metadata` and an entry's `relevance` are free objects.
+        while IFS="$sep" read -r loc key; do
+            [ -z "$key" ] && continue
+            if [ "$loc" = "top-level" ]; then sug=$(_manifest_key_suggest "$key" "$MP_KEYS")
+            else sug=$(_manifest_key_suggest "$key" "$ENTRY_KEYS"); fi && sug=" — did you mean '$sug'?"
+            emit_finding 2 "MARKETPLACE-UNKNOWN-KEY" ".claude-plugin/marketplace.json" "unknown $loc key '$key' is ignored at load time${sug:-}"
+            sug=""
+        done < <(jq -r --arg top "$MP_KEYS" --arg ent "$ENTRY_KEYS" '
+            objects
+            | ( keys_unsorted[] | select(. as $k | ($top | split(" ") | index($k)) == null) | "top-level\u001f\(.)" ),
+              ( .plugins | arrays | .[] | objects | keys_unsorted[] | select(. as $k | ($ent | split(" ") | index($k)) == null) | "plugin-entry\u001f\(.)" )' "$mp" 2>/dev/null || true)
+    fi
 }
 
 scan_ref_graph() {
@@ -402,27 +543,142 @@ scan_memory() {
     done < <(find "$mem_root" -mindepth 3 -maxdepth 3 -name 'MEMORY.md' -type f 2>/dev/null)
 }
 
-# Output-style hygiene: a settings `outputStyle` naming a style with no file
-# (and not a built-in) is a dead selection. Built-in styles ship with Claude
-# Code and have no file; documented values are capitalized (e.g. "Explanatory"),
-# so the match is case-insensitive. Runs on any tree.
-OUTPUT_STYLE_BUILTINS="default proactive explanatory learning"
+# Output-style hygiene (Phase 26). Runs on any tree.
+#   OUTPUTSTYLE-MISSING — `outputStyle` names no style: not a built-in, and no
+#                         output-styles/*.md whose frontmatter `name:` (else file name) equals it.
+#   OUTPUTSTYLE-CASE    — the value matches a style only case-insensitively. The settings
+#                         value is case-sensitive, so Claude Code falls back to Default.
+# Built-ins are exactly the documented spellings; lowercase `default` is tolerated because
+# output-styles.md lists `default` among the `/output-style` entries, so it is selected the same way.
+OUTPUT_STYLE_BUILTINS="Default Proactive Concise Explanatory Learning"
+OUTPUT_STYLE_FIELDS="name description keep-coding-instructions force-for-plugin"
+
+# Frontmatter body (between the first two `---` lines); empty when the file has no fence.
+_output_style_frontmatter() {
+    awk 'NR == 1 { if ($0 !~ /^---[[:space:]]*$/) exit; infm = 1; next }
+         infm && /^---[[:space:]]*$/ { exit }
+         infm { print }' "$1" 2>/dev/null
+}
+
+# The style's name: frontmatter `name:` when set, else the file name without .md.
+_output_style_name() {
+    local n
+    n=$(_output_style_frontmatter "$1" | sed -nE 's/^name:[[:space:]]*(.*)$/\1/p' | head -1 \
+        | sed -E 's/[[:space:]]+$//; s/^"(.*)"$/\1/; s/^'"'"'(.*)'"'"'$/\1/' | tr -d '\r')
+    if [ -n "$n" ]; then printf '%s\n' "$n"; else basename "$1" .md; fi
+}
+
+# The style files of one root (a .claude tree or a plugin root). A plugin manifest's
+# `outputStyles` (files or directories, relative, no `..`) REPLACES the default output-styles/ scan.
+_output_style_files() {
+    local root="$1" pj="$1/.claude-plugin/plugin.json" entry p f has=0
+    if [ -f "$pj" ] && jq -e 'has("outputStyles")' "$pj" >/dev/null 2>&1; then
+        has=1
+        while IFS= read -r entry; do
+            case "$entry" in /*|*..*) continue ;; esac
+            p="$root/${entry#./}"
+            if [ -d "$p" ]; then
+                for f in "$p"/*.md; do [ -f "$f" ] && printf '%s\n' "$f"; done
+            elif [ -f "$p" ]; then
+                printf '%s\n' "$p"
+            fi
+        done < <(jq -r '.outputStyles | if type == "array" then .[] else . end | strings' "$pj" 2>/dev/null)
+    fi
+    [ "$has" = 1 ] && return 0
+    for f in "$root"/output-styles/*.md; do [ -f "$f" ] && printf '%s\n' "$f"; done
+    return 0
+}
+
+# Every root whose styles Claude Code would load for this tree: the scanned one, the user's,
+# each ancestor project's up to the repository root (docs: "every .claude/output-styles/
+# between the working directory and the repository root"), and every plugin installed under the
+# user tree (user-scope plugin styles load in all projects; no per-file checks run on them).
+_output_style_roots() {
+    local d
+    printf '%s\n' "$CLAUDE_DIR" "$USER_TREE"
+    if [ -f "$USER_TREE/plugins/installed_plugins.json" ]; then
+        jq -r '.plugins // {} | to_entries[] | .value[]? | .installPath // empty' \
+            "$USER_TREE/plugins/installed_plugins.json" 2>/dev/null
+    fi
+    d=$(cd "$CLAUDE_DIR/.." 2>/dev/null && pwd -P) || return 0
+    while [ -n "$d" ] && [ "$d" != "/" ]; do
+        printf '%s\n' "$d/.claude"
+        { [ -e "$d/.git" ] || [ "$d" = "$HOME" ]; } && break
+        d=$(dirname "$d")
+    done
+}
+
 scan_output_styles() {
-    local styles_dir="$CLAUDE_DIR/output-styles"
-    local selected="" sf v sel_lc
+    local selected="" sf v root f names="" b hit="" sel_lc b_lc
+    scan_output_style_files
     for sf in "$CLAUDE_DIR/settings.json" "$CLAUDE_DIR/settings.local.json"; do
         [ -f "$sf" ] || continue
         v=$(jq -r '.outputStyle // empty' "$sf" 2>/dev/null)
         [ -n "$v" ] && selected="$v"
     done
     [ -n "$selected" ] || return 0
-    sel_lc=$(printf '%s' "$selected" | tr '[:upper:]' '[:lower:]')
+    [ "$selected" = "default" ] && return 0
     case " $OUTPUT_STYLE_BUILTINS " in
-        *" $sel_lc "*) return 0 ;;
+        *" $selected "*) return 0 ;;
     esac
-    if [ ! -f "$styles_dir/$selected.md" ]; then
-        emit_finding 26 "OUTPUTSTYLE-MISSING" "settings.json" "outputStyle '$selected' has no file at output-styles/$selected.md and is not a built-in style"
+    while IFS= read -r root; do
+        [ -d "$root" ] || continue
+        while IFS= read -r f; do
+            names+="$(_output_style_name "$f")"$'\n'
+        done < <(_output_style_files "$root")
+    done < <(_output_style_roots)
+    if printf '%s' "$names" | grep -qxF -- "$selected"; then
+        return 0
     fi
+    sel_lc=$(printf '%s' "$selected" | tr '[:upper:]' '[:lower:]')
+    for b in $OUTPUT_STYLE_BUILTINS; do
+        b_lc=$(printf '%s' "$b" | tr '[:upper:]' '[:lower:]')
+        [ "$b_lc" = "$sel_lc" ] && hit="$b"
+    done
+    [ -z "$hit" ] && hit=$(printf '%s' "$names" | grep -ixF -- "$selected" | head -1)
+    if [ -n "$hit" ]; then
+        emit_finding 26 "OUTPUTSTYLE-CASE" "settings.json" "outputStyle '$selected' matches style '$hit' only case-insensitively — the value is case-sensitive, so Claude Code falls back to the Default style; write '$hit'"
+    else
+        emit_finding 26 "OUTPUTSTYLE-MISSING" "settings.json" "outputStyle '$selected' names no style: it is not a built-in and no output-styles/*.md has that file name or frontmatter name:"
+    fi
+}
+
+#   OUTPUTSTYLE-UNKNOWN-FIELD       — a frontmatter key outside name/description/keep-coding-instructions/
+#                                     force-for-plugin: ignored without any error.
+#   OUTPUTSTYLE-BAD-YAML            — frontmatter that cannot parse (unclosed fence, tab indent, plain scalar
+#                                     containing `: `): the style loads under its file name with no fields.
+#   OUTPUTSTYLE-FORCE-OUTSIDE-PLUGIN — `force-for-plugin` outside a plugin root is inert.
+# Only the scanned tree's own style files are checked (never the user tree, ancestors or other plugins).
+scan_output_style_files() {
+    local f rel fm key norm want suggestion plugin_root=0
+    [ -f "$CLAUDE_DIR/.claude-plugin/plugin.json" ] && plugin_root=1
+    while IFS= read -r f; do
+        rel="${f#"$CLAUDE_DIR"/}"
+        head -1 "$f" | grep -qE '^---[[:space:]]*$' || continue
+        fm=$(_output_style_frontmatter "$f")
+        if ! sed -n '2,$p' "$f" | grep -qE '^---[[:space:]]*$'; then
+            emit_finding 26 "OUTPUTSTYLE-BAD-YAML" "$rel" "frontmatter fence is never closed — the style loads under its file name with no fields set (run claude --debug to see the parse error)"
+            continue
+        fi
+        if printf '%s\n' "$fm" | grep -qE $'^[ ]*\t' \
+            || printf '%s\n' "$fm" | grep -qE '^[A-Za-z][A-Za-z0-9_-]*:[[:space:]]+[^"'"'"'|>[{#&*!%@`-][^#]*:[[:space:]]'; then
+            emit_finding 26 "OUTPUTSTYLE-BAD-YAML" "$rel" "frontmatter does not parse as YAML (tab indent, or an unquoted value containing ': ') — the style loads under its file name with no fields set"
+            continue
+        fi
+        while IFS= read -r key; do
+            [ -z "$key" ] && continue
+            case " $OUTPUT_STYLE_FIELDS " in *" $key "*) continue ;; esac
+            norm=$(printf '%s' "$key" | tr -d '_-' | tr '[:upper:]' '[:lower:]')
+            suggestion=""
+            for want in $OUTPUT_STYLE_FIELDS; do
+                [ "$(printf '%s' "$want" | tr -d '-')" = "$norm" ] && suggestion=" — did you mean '$want'?"
+            done
+            emit_finding 26 "OUTPUTSTYLE-UNKNOWN-FIELD" "$rel" "frontmatter key '$key' is not an output-style field and is silently ignored$suggestion"
+        done < <(printf '%s\n' "$fm" | sed -nE 's/^([A-Za-z_][A-Za-z0-9_-]*):.*/\1/p')
+        if [ "$plugin_root" = 0 ] && printf '%s\n' "$fm" | grep -qE '^force-for-plugin:'; then
+            emit_finding 26 "OUTPUTSTYLE-FORCE-OUTSIDE-PLUGIN" "$rel" "force-for-plugin only applies to plugin output styles — in a user/project style it has no effect"
+        fi
+    done < <(_output_style_files "$CLAUDE_DIR")
 }
 
 # MCP server hygiene across the project/user MCP config files. Runs on any tree.
@@ -435,9 +691,13 @@ MCP_SECRET_RE='\b(sk-[A-Za-z0-9_-]{20,}|AKIA[0-9A-Z]{16}|gh[pousr]_[A-Za-z0-9]{2
 MCP_PLACEHOLDER_RE='(example|placeholder|your[-_]?(key|token|secret|api)|<your|xxxx|0000|redacted|replace[-_]?me|\$\{?[A-Z][A-Z0-9_]*\}?)'
 
 scan_mcp() {
-    local f rel srv val snippet
-    for f in "$CLAUDE_DIR/.mcp.json" "$CLAUDE_DIR/../.mcp.json" "$CLAUDE_DIR/../.claude.json" \
-             "$CLAUDE_DIR/settings.json" "$CLAUDE_DIR/settings.local.json"; do
+    local f rel srv val snippet files
+    # Only locations Claude Code loads: the repo-root .mcp.json, ~/.claude.json, and a plugin
+    # root's own .mcp.json. settings*.json and a project .claude/.mcp.json are never read —
+    # scan_mcp_placement reports them (MCP-MISPLACED), so their entries get no content checks.
+    files=("$CLAUDE_DIR/../.mcp.json" "$CLAUDE_DIR/../.claude.json")
+    [ -f "$CLAUDE_DIR/.claude-plugin/plugin.json" ] && files+=("$CLAUDE_DIR/.mcp.json")
+    for f in "${files[@]}"; do
         [ -f "$f" ] || continue
         rel="${f#$CLAUDE_DIR/}"
         case "$f" in "$CLAUDE_DIR/../"*) rel="${f##*/}" ;; esac
@@ -466,6 +726,53 @@ scan_mcp() {
     done
 }
 
+# ── L5: MCP config placement ────────────────────────────────────────────────
+#   MCP-MISPLACED      — a config Claude Code never reads: `.claude/.mcp.json`, a project-root
+#                        `.mcp.json` whose servers sit under `servers` (VS Code shape) with no
+#                        `mcpServers`, or an `mcpServers` key in settings.json/settings.local.json.
+#   MCP-RELATIVE-PATH  — `command`/`args` is a relative file path (`./x`, `scripts/x`): it resolves
+#                        against the launch directory, not against the .mcp.json. `~/.claude.json`
+#                        is read at the top level and under every `projects.<path>`.
+# A plugin root legitimately carries `.mcp.json` at its top, so the `.claude/.mcp.json` rule and the
+# relative-path rule are skipped when CLAUDE_DIR holds .claude-plugin/plugin.json.
+MCP_RELPATH_RE='^(\.{1,2}/|[A-Za-z0-9_-]+=\.{1,2}/)'
+scan_mcp_placement() {
+    local plugin_root=0 f sf rel srv val
+    [ -f "$CLAUDE_DIR/.claude-plugin/plugin.json" ] && plugin_root=1
+    if [ "$plugin_root" = 0 ] && [ -f "$CLAUDE_DIR/.mcp.json" ]; then
+        emit_finding 2 "MCP-MISPLACED" ".claude/.mcp.json" "project MCP config sits inside .claude/ — Claude Code reads .mcp.json only at the repository root, so these servers never load"
+    fi
+    f="$CLAUDE_DIR/../.mcp.json"
+    if [ -f "$f" ] && jq -e 'type == "object" and has("servers") and (has("mcpServers") | not)' "$f" >/dev/null 2>&1; then
+        emit_finding 2 "MCP-MISPLACED" ".mcp.json" "servers sit under a top-level 'servers' key (VS Code layout) — Claude Code reads only 'mcpServers', so none of them load"
+    fi
+    for sf in settings.json settings.local.json; do
+        f="$CLAUDE_DIR/$sf"
+        [ -f "$f" ] || continue
+        jq -e 'type == "object" and has("mcpServers")' "$f" >/dev/null 2>&1 \
+            && emit_finding 2 "MCP-MISPLACED" "$sf" "'mcpServers' in $sf is never read — define project servers in .mcp.json at the repository root, or run 'claude mcp add --scope user'"
+    done
+    [ "$plugin_root" = 1 ] && return 0
+    for f in "$CLAUDE_DIR/../.mcp.json" "$CLAUDE_DIR/../.claude.json"; do
+        [ -f "$f" ] || continue
+        rel="${f##*/}"
+        while IFS=$'\t' read -r srv val; do
+            [ -z "$srv" ] && continue
+            emit_finding 2 "MCP-RELATIVE-PATH" "$rel" "MCP server '$srv' uses relative path '$val' — it resolves against the directory Claude Code was launched from, not against $rel; use an absolute path or a PATH executable"
+        done < <(jq -r --arg re "$MCP_RELPATH_RE" '
+            def servers: if type == "object" then . else {} end;
+            ( ((.mcpServers // {}) | servers)
+              + ( [ (.projects // {}) | if type == "object" then .[] else empty end
+                    | select(type == "object") | (.mcpServers // {}) | servers ] | add // {} ) )
+            | to_entries[] | select(.value | type == "object") | .key as $k
+            | ( [ (.value.command // empty), ((.value.args // []) | if type == "array" then .[] else empty end) ]
+                | map(select(type == "string"))
+                | map(select(test($re))) ) as $args
+            | ( (.value.command // "") | if type == "string" and test("^[A-Za-z0-9_.-]+/") then [.] else [] end ) as $cmd
+            | ($args + $cmd) | select(length > 0) | "\($k)\t\(.[0])"' "$f" 2>/dev/null || true)
+    done
+}
+
 # Emit `display<TAB>command` for every shell command a hooks-shaped or monitors-shaped
 # JSON document declares. Handles the three layouts: inline `hooks` (plugin.json or
 # hooks/hooks.json), inline `experimental.monitors`, and a bare monitors array.
@@ -481,6 +788,123 @@ _plugin_shell_commands() {
             ( ($o.monitors // []) | if type == "array" then [ .[]? | (.command // empty) ] else [] end ),
             ( if type == "array" then [ .[]? | if type == "object" then (.command // empty) else empty end ] else [] end ) ]
         | add | .[]? | select(type == "string" and . != "") | "\($d)\t\(.)"' "$f" 2>/dev/null || true
+}
+
+# ── L7: plugin and marketplace names ────────────────────────────────────────
+# Rule tables: plugins/manifest-reference#name and plugins/marketplace-reference#reserved-names.
+#   PLUGIN-RESERVED-NAME       (Structural) — passes as one of Anthropic's own: prefix claude-/anthropic-/
+#                              anthropics-/cc-plugin-, exact claude/anthropic/anthropics/claude-code/
+#                              claude-mods, or `official` beside claude/anthropic. claude plugin
+#                              init/tag refuse it; install and load still work.
+#   PLUGIN-NAME-LOOKALIKE      (Hygiene)    — claude/anthropic/anthropics as a whole word elsewhere (warning).
+#   PLUGIN-NAME-FORMAT         (Structural) — empty, or a space, @, :, path separator, control or
+#                              bidirectional-formatting character, or a leading `-` (heuristic, not in the
+#                              docs: `claude plugin install -x` would parse it as an option).
+#   PLUGIN-NAME-NOT-KEBAB      (Hygiene)    — valid but not lower-case kebab-case.
+#   MARKETPLACE-NAME-FORMAT    (Critical)   — not letters/digits/./_/-, not starting alphanumeric, contains `..`,
+#                              or a control/bidi character: nothing can be installed from it.
+#   MARKETPLACE-NAME-RESERVED  (Critical)   — reserved or impersonating name, any casing/spelling variant.
+# A marketplace entry's `name` gets the plugin rules plus the plugin-id alphabet.
+# Limits: the github.com/anthropics/ exemption is not evaluated (no git-remote parsing); the impersonation
+# heuristic goes no further than the documented examples; a missing `name` is left to claude plugin validate.
+# Control and bidi characters are matched by jq (already a hard dependency): its \u ranges are multibyte-safe
+# and need neither grep -P (absent on macOS) nor a UTF-8 locale. The docs do not enumerate the set, so it is
+# C0, DEL, C1 and the Unicode bidi formatting characters (ALM, LRM, RLM, LRE..RLO, LRI..PDI).
+NAME_BAD_JQ='test("[\u0001-\u001f\u007f-\u009f؜‎‏‪-‮⁦-⁩]")'
+MKT_RESERVED_NAMES="claude-code-marketplace claude-code-plugins claude-plugins-official anthropic-marketplace anthropic-plugins agent-skills anthropic-agent-skills life-sciences knowledge-work-plugins claude-for-legal claude-for-financial-services financial-services-plugins first-party-plugins claude-tag-plugins claude-community claude-plugins-community healthcare anthropic-plugin-directory claude-plugin-directory inline builtin skills-dir synced claude-plugin-test npm pip uv cargo github gh"
+
+# Prints "error" | "warning" | nothing for a plugin name (normalised: lower case, separator runs -> one `-`).
+# The docs say only "ignores case and treats any run of separators as one", so edge hyphens are NOT trimmed.
+_plugin_name_reserved() {
+    local n
+    n=$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g')
+    case "$n" in
+        claude|anthropic|anthropics|claude-code|claude-mods) echo error; return ;;
+        claude-*|anthropic-*|anthropics-*|cc-plugin-*) echo error; return ;;
+    esac
+    if printf '%s' "$n" | grep -qE '(^|-)official-(claude|anthropic|anthropics)(-|$)|(^|-)(claude|anthropic|anthropics)-official(-|$)'; then echo error; return; fi
+    if printf '%s' "$n" | grep -qE '(^|-)(claude|anthropic|anthropics)(-|$)'; then echo warning; fi
+}
+
+# Emits plugin-name findings for $1=name $2=display path $3=1 when the plugin-id alphabet applies
+# (marketplace entry) $4=true when the name holds a control or bidi character (decided by jq).
+_check_plugin_name() {
+    local name="$1" where="$2" idrule="${3:-0}" bad="${4:-false}" verdict
+    if [ -z "$name" ]; then
+        emit_finding 2 "PLUGIN-NAME-FORMAT" "$where" "plugin name is empty"; return
+    fi
+    if [ "$bad" = true ] || printf '%s' "$name" | grep -qE '[[:space:]@:/\\]'; then
+        emit_finding 2 "PLUGIN-NAME-FORMAT" "$where" "plugin name '$name' contains a space, @, :, path separator, control or bidirectional-formatting character — use kebab-case"; return
+    fi
+    case "$name" in -*)
+        emit_finding 2 "PLUGIN-NAME-FORMAT" "$where" "plugin name '$name' starts with '-' (heuristic: claude plugin install would read it as an option)"; return ;;
+    esac
+    if [ "$idrule" = 1 ] && ! printf '%s' "$name" | grep -qE '^[A-Za-z0-9][A-Za-z0-9._-]*$'; then
+        emit_finding 2 "PLUGIN-NAME-FORMAT" "$where" "plugin name '$name' is not a valid plugin-id part (letters, digits, '.', '_', '-'; must start alphanumeric) — Claude Code cannot install it"; return
+    fi
+    verdict=$(_plugin_name_reserved "$name")
+    case "$verdict" in
+        error)   emit_finding 2 "PLUGIN-RESERVED-NAME" "$where" "plugin name '$name' is reserved: it passes as one of Anthropic's own — claude plugin validate/init/tag report an error" ;;
+        warning) emit_finding 2 "PLUGIN-NAME-LOOKALIKE" "$where" "plugin name '$name' reads as one of Anthropic's own (claude/anthropic as a whole word) — claude plugin validate warns" ;;
+    esac
+    printf '%s' "$name" | grep -qE '^[a-z0-9]+(-[a-z0-9]+)*$' \
+        || emit_finding 2 "PLUGIN-NAME-NOT-KEBAB" "$where" "plugin name '$name' is not kebab-case (lower-case words joined by single hyphens)"
+}
+
+# $1=name $2=display path $3=true when the name holds a control or bidi character.
+_check_marketplace_name() {
+    local name="$1" where="$2" bad="${3:-false}" n r canon
+    if [ -z "$name" ]; then
+        emit_finding 2 "MARKETPLACE-NAME-FORMAT" "$where" "marketplace name is empty"; return
+    fi
+    if [ "$bad" = true ]; then
+        # before the non-ASCII branch: a bidi character is non-ASCII too, but the docs list it as a format error
+        emit_finding 2 "MARKETPLACE-NAME-FORMAT" "$where" "marketplace name '$name' contains a control or bidirectional-formatting character — Claude Code cannot install plugins from it"; return
+    fi
+    if printf '%s' "$name" | LC_ALL=C grep -qE '[^A-Za-z0-9._-]' \
+        || ! printf '%s' "$name" | grep -qE '^[A-Za-z0-9]' \
+        || printf '%s' "$name" | grep -qF '..'; then
+        # non-ASCII is reported as impersonation by the docs, everything else as a format error
+        if [ -n "$(printf '%s' "$name" | LC_ALL=C tr -d '\000-\177')" ]; then
+            emit_finding 2 "MARKETPLACE-NAME-RESERVED" "$where" "marketplace name '$name' contains a non-ASCII character — Claude Code treats it as impersonating an official marketplace"
+        else
+            emit_finding 2 "MARKETPLACE-NAME-FORMAT" "$where" "marketplace name '$name' must use only letters, digits, '.', '_' and '-', start alphanumeric and contain no '..' — Claude Code cannot install plugins from it"
+        fi
+        return
+    fi
+    n=$(printf '%s' "$name" | tr '[:upper:]' '[:lower:]')
+    canon=$(printf '%s' "$n" | sed -E 's/[^a-z0-9_]/-/g; s/-+$//')
+    for r in $MKT_RESERVED_NAMES; do
+        if [ "$n" = "$r" ]; then
+            emit_finding 2 "MARKETPLACE-NAME-RESERVED" "$where" "marketplace name '$name' is reserved (unless the marketplace is hosted under github.com/anthropics/)"; return
+        fi
+        if [ "$canon" = "$r" ]; then
+            emit_finding 2 "MARKETPLACE-NAME-RESERVED" "$where" "marketplace name '$name' is another spelling of reserved name '$r'"; return
+        fi
+    done
+    case "$n" in claudeai-*)
+        emit_finding 2 "MARKETPLACE-NAME-RESERVED" "$where" "marketplace names starting with 'claudeai-' are reserved for marketplaces hosted on claude.ai"; return ;;
+    esac
+    if printf '%s' "$canon" | grep -qE '(^|-)official-(claude|anthropic)(-|$)|(^|-)(claude|anthropic)-official(-|$)|^(claude|anthropic)-plugins?(-|$)'; then
+        emit_finding 2 "MARKETPLACE-NAME-RESERVED" "$where" "marketplace name '$name' impersonates an official Anthropic/Claude marketplace"
+    fi
+}
+
+# Names are read as `bad<TAB>json-string` so a newline or a control character inside a name cannot split the line.
+scan_plugin_names() {
+    local pj="$CLAUDE_DIR/.claude-plugin/plugin.json" mp="$CLAUDE_DIR/.claude-plugin/marketplace.json" bad enc
+    if [ -f "$pj" ]; then
+        while IFS=$'\t' read -r bad enc; do
+            _check_plugin_name "$(printf '%s' "$enc" | jq -r .)" ".claude-plugin/plugin.json" 0 "$bad"
+        done < <(jq -r 'select(type == "object" and (.name | type == "string")) | .name | "\('"$NAME_BAD_JQ"')\t\(@json)"' "$pj" 2>/dev/null || true)
+    fi
+    [ -f "$mp" ] || return 0
+    while IFS=$'\t' read -r bad enc; do
+        _check_marketplace_name "$(printf '%s' "$enc" | jq -r .)" ".claude-plugin/marketplace.json" "$bad"
+    done < <(jq -r 'select(type == "object" and (.name | type == "string")) | .name | "\('"$NAME_BAD_JQ"')\t\(@json)"' "$mp" 2>/dev/null || true)
+    while IFS=$'\t' read -r bad enc; do
+        _check_plugin_name "$(printf '%s' "$enc" | jq -r .)" ".claude-plugin/marketplace.json" 1 "$bad"
+    done < <(jq -r 'select(type == "object") | (.plugins // []) | if type == "array" then .[] else empty end | select(type == "object" and (.name | type == "string")) | .name | "\('"$NAME_BAD_JQ"')\t\(@json)"' "$mp" 2>/dev/null || true)
 }
 
 # Validate a plugin repo's OWN manifest + structure when CLAUDE_DIR is a plugin
@@ -508,12 +932,16 @@ scan_plugin_self() {
     # Declared component paths must be relative and start with ./. The one documented
     # exception is `skills: "."` (the plugin root itself). Inline object values for
     # hooks/mcpServers/lspServers are configuration, not paths — the jq drops them.
+    local abs_root
+    abs_root=$(cd -P "$CLAUDE_DIR" 2>/dev/null && pwd -P)
     while IFS=$'\t' read -r fld p; do
         [ -z "$p" ] && continue
         case "$p" in
             ./*) continue ;;
             .) [ "$fld" = "skills" ] && continue ;;
         esac
+        # A path that leaves the plugin root is already PLUGIN-PATH-ESCAPE (Critical): one defect, one finding.
+        _plugin_path_norm "$p" "$abs_root" >/dev/null || continue
         emit_finding 2 "PLUGIN-ABS-PATH" ".claude-plugin/plugin.json" "$fld path '$p' must be relative and start with ./"
     done < <(jq -r '
         ( to_entries[]
@@ -561,13 +989,115 @@ scan_plugin_self() {
     fi
 }
 
+# ── L8: plugin eval suite (claude plugin eval) ──────────────────────────────
+# Doc: plugin-evals. A case is a directory under the eval dir holding prompt.md and/or case.yaml;
+# it needs >= 1 grader (graders/<name>.md or a `graders:` entry in case.yaml) or it fails to load.
+#   EVAL-CASE-NO-GRADER  (Structural) — a case directory with no grader.
+#   EVAL-NO-SKILL-GRADER (Hygiene)    — the suite has cases, yet no `type: tool_used` + `tool: Skill`
+#                                       grader names a model-invocable skill of the plugin.
+#   PLUGIN-NO-EVALS      (Discovery)  — plugin ships a model-invocable skill but its eval dir holds no case.
+# Eval dir: experimental.evals (first entry when an array; plain relative dir names, no `..`, optional
+# leading ./) else `evals/`. An unusable manifest value falls back to evals/, as claude plugin eval does.
+# Skill census: `skills/` plus every manifest `skills` entry (`.` = the plugin root); entries with `..`
+# or absolute are ignored (the manifest checks flag those). Runs only when CLAUDE_DIR is a plugin root.
+_plugin_eval_dir() {
+    local pj="$CLAUDE_DIR/.claude-plugin/plugin.json" v
+    v=$(jq -r '(.experimental // {}) | if type == "object" then .evals else null end
+               | if type == "array" then .[0] else . end | select(type == "string")' "$pj" 2>/dev/null || true)
+    v="${v#./}"; v="${v%/}"
+    case "$v" in ""|/*|..|../*|*/..|*/../*) v="evals" ;; esac
+    printf '%s\n' "$v"
+}
+
+# Model-invocable SKILL.md files of the plugin, one per line (disable-model-invocation: true skipped,
+# Claude never chooses those so they have no trigger to eval). Roots: skills/ + manifest skills entries.
+_plugin_eval_skills() {
+    local r root f
+    {
+        printf 'skills\n'
+        _plugin_manifest_entries "$CLAUDE_DIR" skills
+    } | while IFS= read -r r; do
+        root="$CLAUDE_DIR"
+        { [ -z "$r" ] || [ "$r" = "." ]; } || root="$CLAUDE_DIR/$r"
+        for f in "$root"/*/SKILL.md "$root"/SKILL.md; do
+            [ -f "$f" ] && ! grep -qE '^disable-model-invocation:[[:space:]]*true' "$f" && printf '%s\n' "$f"
+        done
+    done | sort -u
+}
+
+# A case dir has graders when graders/*.md exists or case.yaml carries a non-empty top-level `graders:`.
+_eval_case_has_grader() {
+    local c="$1" g
+    for g in "$c"/graders/*.md; do [ -f "$g" ] && return 0; done
+    [ -f "$c/case.yaml" ] || return 1
+    awk '/^graders:[[:space:]]*(#.*)?$/ { inl = 1; next }
+         /^graders:[[:space:]]*\[[[:space:]]*\]/ { exit 1 }
+         /^graders:[[:space:]]*[^[:space:]#]/ { found = 1; exit }
+         inl && /^[[:space:]]*-[[:space:]]/ { found = 1; exit }
+         inl && /^[^[:space:]#-]/ { inl = 0 }
+         END { exit(found ? 0 : 1) }' "$c/case.yaml"
+}
+
+scan_plugin_evals() {
+    local pj="$CLAUDE_DIR/.claude-plugin/plugin.json" edir_rel edir c p nested cases="" case_n=0 skill sname sk_files gf skills named
+    [ -f "$pj" ] || return 0
+    edir_rel=$(_plugin_eval_dir)
+    edir="$CLAUDE_DIR/$edir_rel"
+    skills=$(_plugin_eval_skills)
+    if [ -d "$edir" ]; then
+        while IFS= read -r c; do
+            case "$c" in "$edir/results"/*|"$edir/mocks"/*) continue ;; esac
+            # nested inside an earlier case: it belongs to that case, not a case of its own
+            nested=0
+            while IFS= read -r p; do
+                [ -n "$p" ] && [[ "$c" == "$p"/* ]] && nested=1
+            done <<<"$cases"
+            [ "$nested" = 1 ] && continue
+            cases+="$c"$'\n'; case_n=$((case_n + 1))
+        done < <(find "$edir" \( -name prompt.md -o -name case.yaml \) -type f -exec dirname {} \; 2>/dev/null | sort -u)
+    fi
+    if [ "$case_n" = 0 ]; then
+        [ -n "$skills" ] \
+            && emit_finding 2 "PLUGIN-NO-EVALS" ".claude-plugin/plugin.json" "plugin ships skills but $edir_rel/ holds no eval case (a <case>/prompt.md or case.yaml) — claude plugin eval has nothing to run, so skill triggering is untested"
+        return 0
+    fi
+    while IFS= read -r c; do
+        [ -z "$c" ] && continue
+        _eval_case_has_grader "$c" \
+            || emit_finding 2 "EVAL-CASE-NO-GRADER" "${c#"$CLAUDE_DIR"/}" "eval case has no grader (graders/<name>.md or a graders: entry in case.yaml) — claude plugin eval fails to load it"
+    done <<<"$cases"
+    # every grader file of the suite: graders/*.md plus case.yaml
+    sk_files=$(find "$edir" \( -path '*/graders/*.md' -o -name case.yaml \) -type f 2>/dev/null | sort)
+    while IFS= read -r skill; do
+        [ -z "$skill" ] && continue
+        sname=$(basename "$(dirname "$skill")")
+        # a SKILL.md at the plugin root (skills: ".") has no dir of its own: use its frontmatter name
+        [ "$(dirname "$skill")" = "$CLAUDE_DIR" ] \
+            && sname=$(awk '/^name:/ { sub(/^name:[[:space:]]*/, ""); gsub(/["'"'"']/, ""); print; exit }' "$skill")
+        [ -n "$sname" ] || continue
+        named=0
+        while IFS= read -r gf; do
+            [ -z "$gf" ] && continue
+            grep -qE '^[[:space:]-]*type:[[:space:]]*tool_used' "$gf" \
+                && grep -qE '^[[:space:]-]*tool:[[:space:]]*"?Skill"?[[:space:]]*$' "$gf" \
+                && grep -qF -- "$sname" "$gf" && { named=1; break; }
+        done <<<"$sk_files"
+        [ "$named" = 1 ] \
+            || emit_finding 2 "EVAL-NO-SKILL-GRADER" "${skill#"$CLAUDE_DIR"/}" "no eval grader (type: tool_used, tool: Skill) names skill '$sname' — the suite cannot show Claude picks it on natural phrasing"
+    done <<<"$skills"
+}
+
 GEN_AT=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 scan_plugins
+scan_plugin_names
 scan_plugin_self
+scan_plugin_evals
 scan_ref_graph
 scan_memory
+scan_plugin_manifest_keys
 scan_output_styles
 scan_mcp
+scan_mcp_placement
 
 NUM_FINDINGS=$(wc -l <"$TMP_FINDINGS" | tr -d ' ')
 META=$(jq -n --arg gen "$GEN_AT" --arg s "$SCOPE" --arg cd "$CLAUDE_DIR" --argjson n "${NUM_FINDINGS:-0}" \
