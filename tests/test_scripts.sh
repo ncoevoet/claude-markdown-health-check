@@ -40,6 +40,8 @@ for f in "$EVALS"/*.json; do
 
     dir=$(jq -r '.fixture.dir' "$f")
     needs_home=$(jq -r '.fixture.needs_home_override // false' "$f")
+    git_init=$(jq -r '.fixture.git_init // false' "$f")
+    scan_subdir=$(jq -r '.fixture.scan_subdir // ""' "$f")
     mapfile -t scanners < <(jq -r '.fixture.scanners[]?' "$f")
     expect_clean=$(jq -r '.success_criteria.expect_clean // false' "$f")
 
@@ -65,6 +67,9 @@ for f in "$EVALS"/*.json; do
         # expand it here so a case can point at a real directory inside the fake HOME.
         [ -f "$tmp/home/.claude/plugins/installed_plugins.json" ] &&
             sed -i "s|__HOME__|$tmp/home|g" "$tmp/home/.claude/plugins/installed_plugins.json"
+        # Opt-in home siblings: dot-claude.json -> ~/.claude.json, dot-claudeignore -> ~/.claudeignore.
+        [ -f "$tmp/target/dot-claude.json" ] && mv "$tmp/target/dot-claude.json" "$tmp/home/.claude.json"
+        [ -f "$tmp/target/dot-claudeignore" ] && mv "$tmp/target/dot-claudeignore" "$tmp/home/.claudeignore"
         target="$tmp/home/.claude"
         run_env=(env "HOME=$tmp/home" "CLAUDE_PLUGIN_DATA=$cache")
     else
@@ -73,8 +78,20 @@ for f in "$EVALS"/*.json; do
         # is worth flagging. Fixtures used to be scanned in place inside this
         # repo's own git tree, so plant a marker here to keep that check exercised
         # the same way now that the scan runs against a temp copy instead.
-        mkdir -p "$tmp/target/.git"
+        if [ "$git_init" = "true" ]; then
+            # Opt-in real repo (index only, no commit): rev-parse / ls-files work.
+            GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null git -C "$tmp/target" init -q
+            GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null git -C "$tmp/target" "add" -A
+        else
+            mkdir -p "$tmp/target/.git"
+        fi
         target="$tmp/target/.claude"
+        if [ -n "$scan_subdir" ]; then
+            # Opt-in nested scan: .claude lives under <rel>; the repo root stays at $tmp/target.
+            mkdir -p "$tmp/target/$scan_subdir"
+            mv "$tmp/target/.claude" "$tmp/target/$scan_subdir/.claude"
+            target="$tmp/target/$scan_subdir/.claude"
+        fi
         run_env=(env "CLAUDE_PLUGIN_DATA=$cache")
     fi
 
