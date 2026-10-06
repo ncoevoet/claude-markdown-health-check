@@ -179,6 +179,19 @@ else
 fi
 rm -rf "$tmp_lc"
 
+# The scan-graph cache must not answer for a different tree of the same scope:
+# two project scans within the TTL, sharing one cache dir, each report their own dir.
+tmp_gc=$(mktemp -d)
+mkdir -p "$tmp_gc/a/.claude" "$tmp_gc/b/.claude" "$tmp_gc/cache"
+CLAUDE_PLUGIN_DATA="$tmp_gc/cache" bash "$GRAPH" "$tmp_gc/a/.claude" >/dev/null 2>&1
+gc_dir=$(CLAUDE_PLUGIN_DATA="$tmp_gc/cache" bash "$GRAPH" "$tmp_gc/b/.claude" 2>/dev/null | jq -r '.meta.claude_dir')
+if [ "$gc_dir" = "$tmp_gc/b/.claude" ]; then
+    ok "scan-graph cache: keyed on the scanned dir"
+else
+    no "scan-graph cache: scanning b returned the cached result for '$gc_dir'"
+fi
+rm -rf "$tmp_gc"
+
 echo
 echo "deterministic: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]

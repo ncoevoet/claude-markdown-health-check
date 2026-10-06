@@ -47,7 +47,8 @@ command -v jq >/dev/null 2>&1 || { echo '{"meta":{"partial":true,"reason":"jq mi
 
 if [ "$NO_CACHE" = 0 ] && [ "$REFRESH" = 0 ] && [ -s "$CACHE_FILE" ]; then
     cache_scope=$(jq -r '.meta.scope // empty' "$CACHE_FILE" 2>/dev/null || echo "")
-    if [ "$cache_scope" = "$SCOPE" ]; then
+    cache_dir=$(jq -r '.meta.claude_dir // empty' "$CACHE_FILE" 2>/dev/null || echo "")
+    if [ "$cache_scope" = "$SCOPE" ] && [ "$cache_dir" = "$CLAUDE_DIR" ]; then
         age=$(( $(date +%s) - $(stat -c %Y "$CACHE_FILE" 2>/dev/null || echo 0) ))
         if [ "$age" -lt "$TTL_SECONDS" ]; then
             cat "$CACHE_FILE"
