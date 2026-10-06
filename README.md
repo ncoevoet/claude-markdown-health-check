@@ -36,7 +36,7 @@ A scorecard with a letter grade, an always-on per-file CLAUDE.md score, and find
 | **Agent frontmatter** | subagent schema violations — bad `model`/`color`/`permissionMode`/`tools` value, missing `description`, duplicate agent `name`, `permissionMode: bypassPermissions`, plugin agents declaring silently-ignored `hooks`/`mcpServers`/`permissionMode`, agent files whose YAML does not parse |
 | **Settings** | malformed JSON, duplicate JSON keys, duplicate array entries, MCP servers missing from `preApprovedTools`, over-broad Bash patterns, stale reminders, risky security keys (`defaultMode: bypassPermissions`, `enableAllProjectMcpServers: true`, `sandbox.disabled: true`, a whole-tool wildcard in `autoMode.allow`), keys set in a scope that ignores them, deprecated or removed keys (also in `~/.claude.json`), dead `claudeMdExcludes` patterns, and `worktree.sparsePaths` omitting `.claude` |
 | **Permission hygiene** | dead allowlist entries (zero grants), over-broad `:*` patterns, name collisions between `commands/` and `skills/`, permission rules Claude Code never consults or skips, and a `.claudeignore` file (not read) |
-| **Plugins & MCP** | `installed_plugins.json` entries with missing `installPath`, missing `plugin.json` manifest, version drift between manifest and on-disk, deprecated `sse` MCP transport, an MCP server declaring neither `command` nor `url`, a hardcoded credential in an MCP `env`/`headers` value, a declared `dependencies` plugin that is not installed, a plugin whose marketplace is blocked or unknown under `strictKnownMarketplaces`, an MCP config in a place Claude Code never reads (`.claude/.mcp.json`, a `servers` key, `settings.json#mcpServers`), relative MCP command paths, reserved or malformed plugin and marketplace names |
+| **Plugins & MCP** | `installed_plugins.json` entries with missing `installPath`, missing `plugin.json` manifest, version drift between manifest and on-disk, deprecated `sse` MCP transport (only in locations Claude Code loads; misplaced MCP config is `MCP-MISPLACED`), an MCP server declaring neither `command` nor `url`, a hardcoded credential in an MCP `env`/`headers` value, a declared `dependencies` plugin that is not installed, a plugin whose marketplace is blocked or unknown under `strictKnownMarketplaces`, an MCP config in a place Claude Code never reads (`.claude/.mcp.json`, a `servers` key, `settings.json#mcpServers`), relative MCP command paths, reserved or malformed plugin and marketplace names |
 | **Plugin structure** | (when auditing a plugin root) component dir misplaced inside `.claude-plugin/`, missing or non-semver `version`, component path not relative-with-`./` (across `skills`/`commands`/`agents`/`outputStyles`/`lspServers`/`workflows`/`hooks`/`mcpServers`/`experimental.*`), a hook or monitor command interpolating `${user_config.…}` where Claude Code rejects it, dangling local `marketplace.json` `source`, unknown `plugin.json` / `marketplace.json` keys (and unknown keys in strict objects, which stop the plugin loading), manifest keys that shadow a default directory, component paths escaping the plugin root |
 | **Output styles** | `outputStyle` setting naming a non-existent (and non-built-in) style, case-mismatched selections, unknown or malformed style frontmatter, `force-for-plugin` outside a plugin; built-ins are `Default`/`Proactive`/`Concise`/`Explanatory`/`Learning` (case-sensitive) |
 | **Plugin evals** | (when auditing a plugin root) an eval case with no grader, a suite with no skill-invocation grader, a model-invocable plugin skill with no eval cases at all |
@@ -175,7 +175,7 @@ The phase sequence runs flat from 1 to 25, renumbered from the previous 5a / 5b 
 | Phase | What it does | Depth |
 |---|---|---|
 | 1 — Load Config + Thresholds | Reads optional `markdown-health-check.json`, then fetches skill / memory / settings / hooks limits from the Anthropic docs; caches at `~/.claude/.cache/markdown-health-check-guidance.json` | All |
-| 2 — Plugin + MCP Integrity | `installed_plugins.json` vs on-disk cache: broken refs, missing manifests, version drift; deprecated `sse` MCP transport in `.mcp.json` | Standard + Deep |
+| 2 — Plugin + MCP Integrity | `installed_plugins.json` vs on-disk cache: broken refs, missing manifests, version drift; deprecated `sse` MCP transport in `.mcp.json` / `~/.claude.json` | Standard + Deep |
 | 3 — Select Depth | Standard by default, Deep for a large ecosystem, Quick only when you ask for it | All |
 | 4 — Focus + History | Reads the focus message (if any) and mines the current session for recurring bugs, corrections, uncovered patterns | Standard + Deep |
 | 5 — Run validate-skills.sh | Deterministic layer: name regex, line counts, voice, TOC, description sizes, frontmatter schema, name collisions | All |
@@ -228,7 +228,7 @@ Two layers, following Anthropic's [develop-tests](https://platform.claude.com/do
 
 - **Deterministic (code-graded, CI-safe, no API key).** Synthetic `dot-claude/` fixture trees (materialized as `.claude/` at test time, so a fixture's SKILL.md never registers as a live skill in this repo) under `tests/fixtures/<case>/` each plant one defect; the suite runs `validate-skills.sh` / `scan-graph.sh` against them and asserts the exact `[TAG]` set. A `clean/` fixture asserts **zero** findings — the false-positive guard. Paired guards cover both directions, e.g. cases 73/74 (a `npm run <script>` absent from `package.json` must be flagged `CLAUDEMD-DEAD-SCRIPT`, while one that resolves must **not** be) cases 75/76 (a memory body citing a missing `.claude/…` path is flagged `MEMORY-STALE-CONTENT`, while one whose path resolves is not), and cases 88/90 (a bare file-tree dump in CLAUDE.md is flagged `CLAUDEMD-OBVIOUS`, while an architecture map whose entries carry relationships is not). A third code-graded layer covers `scan-history.sh`: `synthetic-jsonl` fixtures plant `.claude/projects/*/*.jsonl` transcripts that `tests/test_history.sh` aggregates and asserts field-by-field against `history-scan.json` (e.g. hook failure rates, token sums, ledger folding, window-cutoff exclusion).
   ```bash
-  make test              # bash tests/run.sh — anonymization + eval-schema gates, then the code-graded cases (888 scanner + 48 history assertions)
+  make test              # bash tests/run.sh — anonymization + eval-schema gates, then the code-graded cases (940 scanner + 48 history assertions)
   bash tests/run.sh 02   # run one case / id-prefix (deterministic suite only)
   ```
   `tests/run.sh` also runs a **tag-registration** gate last (`tests/check-tag-registration.sh`: every tag a script can emit must be listed in the command file's tier lists, `report-format.md` and `finding-verification.md`; `tests/judgment-tags.txt` holds the reviewed exceptions) and two release gates first: an **anonymization** check (no real scanned-project names in the published `plugin/`, `evals/`, `tests/fixtures/`, `README.md` — the real blocklist is gitignored, a placeholder ships) and **eval-schema validation** (`validate-evals.sh` asserts every case matches the contract before an expensive run is wasted on a malformed one).
@@ -238,7 +238,7 @@ Two layers, following Anthropic's [develop-tests](https://platform.claude.com/do
   HEALTH_CHECK_EVAL_RUNS=3 make evals   # majority vote to smooth LLM noise
   ```
 
-Cases live in `evals/*.json` (221 cases: 209 `grader.method: code` + 12 `llm-rubric`; numbered 01–252 with 31 ids unused — 43, 50, 113, 138–139, 208–209, 218–219, 222–229, 233–239, 243–249); fixtures in `tests/fixtures/`. 
+Cases live in `evals/*.json` (236 cases: 224 `grader.method: code` + 12 `llm-rubric`; numbered 01–267 with 31 ids unused — 43, 50, 113, 138–139, 208–209, 218–219, 222–229, 233–239, 243–249); fixtures in `tests/fixtures/`. 
 
 Tags are the stable machine contract, so the code-graded cases are immune to report-format changes. CI (`.github/workflows/ci.yml`) runs shellcheck + `bash -n` + the anonymization gate + eval-schema validation + the deterministic suite + the history aggregation suite on every push; it does **not** run the token-spending LLM evals. Every real-world miss or false positive should become a new case.
 
@@ -291,7 +291,7 @@ plugin/                                      # the installed tree — a plugin i
     └── command-phase-details.md             # Phases 1, 3-23, 26, 27 detail moved out of the command file
 
 evals/                                       # data-driven eval cases (dev-only, never installed)
-├── 01-clean-zero-findings.json … 252-eval-skills-root-no-grader.json  (221 cases: 209 code + 12 LLM; 31 ids unused)
+├── 01-clean-zero-findings.json … 267-hook-timeout-asyncrewake.json  (236 cases: 224 code + 12 LLM; 31 ids unused)
 └── README.md                                # eval schema + how to run
 
 tests/                                       # deterministic test suite (dev-only, CI)

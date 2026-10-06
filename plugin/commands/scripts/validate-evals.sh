@@ -15,6 +15,9 @@
 #     so Claude Code's lazy nested-skills discovery never registers a
 #     fixture's SKILL.md as a live skill in this repo; test harnesses
 #     materialize it into a temp .claude/ at run time)
+#   - fixture.home_project_tree (optional bool): when true, needs_home_override must be true and
+#     fixture.dir must have a home/dot-claude/ subtree (dot-claude/ = scanned project tree,
+#     home/ = fake HOME contents)
 #   - fixture.scanners ⊆ { "validate-skills", "scan-graph" }
 #   - grader.method ∈ { "code", "llm-rubric" }
 #   - code      cases: success_criteria is an object; must_detect (if present) is an array
@@ -73,6 +76,13 @@ for f in "$EVALS"/*.json; do
     err "$base: fixture.dir '$dir' does not exist on disk"
   elif [ ! -d "$ROOT/$dir/dot-claude" ]; then
     err "$base: fixture.dir '$dir' has no dot-claude/ subtree"
+  fi
+
+  if [ "$(jq -r '.fixture.home_project_tree // false' "$f")" = "true" ]; then
+    [ "$(jq -r '.fixture.needs_home_override // false' "$f")" = "true" ] \
+      || err "$base: fixture.home_project_tree requires needs_home_override: true"
+    [ -d "$ROOT/$dir/home/dot-claude" ] \
+      || err "$base: fixture.home_project_tree needs a home/dot-claude/ subtree in '$dir'"
   fi
 
   badscan="$(jq -r '(.fixture.scanners // [])

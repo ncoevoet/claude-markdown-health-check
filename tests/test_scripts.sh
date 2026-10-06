@@ -42,6 +42,7 @@ for f in "$EVALS"/*.json; do
     needs_home=$(jq -r '.fixture.needs_home_override // false' "$f")
     git_init=$(jq -r '.fixture.git_init // false' "$f")
     scan_subdir=$(jq -r '.fixture.scan_subdir // ""' "$f")
+    home_project_tree=$(jq -r '.fixture.home_project_tree // false' "$f")
     mapfile -t scanners < <(jq -r '.fixture.scanners[]?' "$f")
     expect_clean=$(jq -r '.success_criteria.expect_clean // false' "$f")
 
@@ -61,7 +62,20 @@ for f in "$EVALS"/*.json; do
     mv "$tmp/target/dot-claude" "$tmp/target/.claude"
     if [ "$needs_home" = "true" ]; then
         mkdir -p "$tmp/home"
-        mv "$tmp/target/.claude" "$tmp/home/.claude"
+        if [ "$home_project_tree" = "true" ]; then
+            # home_project_tree: dot-claude/ is a PROJECT tree scanned in place at
+            # $tmp/target/.claude (repo marker planted so ancestor walks stop there);
+            # home/ holds the fake HOME's contents (home/dot-claude/ -> ~/.claude,
+            # home/dot-claude.json -> ~/.claude.json, home/dot-claudeignore -> ~/.claudeignore).
+            mkdir -p "$tmp/target/.git"
+            cp -r "$tmp/target/home/." "$tmp/home/"
+            rm -rf "$tmp/target/home"
+            mv "$tmp/home/dot-claude" "$tmp/home/.claude"
+            [ -f "$tmp/home/dot-claude.json" ] && mv "$tmp/home/dot-claude.json" "$tmp/home/.claude.json"
+            [ -f "$tmp/home/dot-claudeignore" ] && mv "$tmp/home/dot-claudeignore" "$tmp/home/.claudeignore"
+        else
+            mv "$tmp/target/.claude" "$tmp/home/.claude"
+        fi
         # installed_plugins.json carries absolute installPaths, which a fixture cannot
         # know ahead of the temp copy. Fixtures write the literal token __HOME__ and we
         # expand it here so a case can point at a real directory inside the fake HOME.
@@ -71,6 +85,7 @@ for f in "$EVALS"/*.json; do
         [ -f "$tmp/target/dot-claude.json" ] && mv "$tmp/target/dot-claude.json" "$tmp/home/.claude.json"
         [ -f "$tmp/target/dot-claudeignore" ] && mv "$tmp/target/dot-claudeignore" "$tmp/home/.claudeignore"
         target="$tmp/home/.claude"
+        [ "$home_project_tree" = "true" ] && target="$tmp/target/.claude"
         run_env=(env "HOME=$tmp/home" "CLAUDE_PLUGIN_DATA=$cache")
     else
         # check_local_md_tracked (validate-skills.sh) walks up from CLAUDE_DIR

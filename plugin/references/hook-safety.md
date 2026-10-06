@@ -17,7 +17,7 @@ Static safety scan of hook scripts (`$CLAUDE_DIR/hooks/*.sh`) and http hook conf
 
 Full-line comments (and the shebang) are stripped before the block/exit/eval heuristics run, so a documented or commented-out `eval "$x"` or sample block decision is not flagged. (An `eval $...` after an *inline* `#` on a line of real code is a known, accepted edge — contrived enough to leave to recall over precision.)
 
-SessionEnd budget: `SessionEnd` hooks share a 1.5s budget, which Claude Code raises to the longest per-hook `timeout`, up to 60s. `SUSPICIOUS-TIMEOUT` therefore flags any `SessionEnd` hook above 60s (other events: more than 2x the per-event default).
+SessionEnd budget: `SessionEnd` hooks share a 1.5s budget, which Claude Code raises to the longest per-hook `timeout`, up to 60s. `SUSPICIOUS-TIMEOUT` therefore flags any `SessionEnd` hook above 60s (other events: more than 2x the per-event default). Async command hooks (`async: true`, no `asyncRewake`) are excluded — Claude Code does not enforce their timeout — and plugin `hooks/hooks.json` is checked too.
 
 ## Deliberately NOT checked
 

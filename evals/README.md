@@ -26,6 +26,9 @@ Two grading tiers (develop-tests: code-grading > LLM-grading):
     "dir": "tests/fixtures/dead-ref",
     "needs_home_override": false,     // true: copy tree into a temp $HOME/.claude
                                       //       (user-tree-gated scans: plugins, scan-graph memory)
+    "home_project_tree": false,       // true (with needs_home_override): dot-claude/ is a PROJECT tree
+                                      //       scanned at <tmp>/target/.claude; home/dot-claude/ (+ home/dot-claude.json,
+                                      //       home/dot-claudeignore) becomes the fake $HOME's ~/.claude (~/.claude.json, ...)
     "scanners": ["validate-skills"]   // validate-skills | scan-graph  (code cases)
   },
   "grader": { "method": "code" },     // code | llm-rubric
