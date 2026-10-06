@@ -106,6 +106,7 @@ make install
 - `validate-skills.sh` → `~/.claude/commands/scripts/`
 - `scan-graph.sh` → `~/.claude/commands/scripts/`
 - `scan-history.sh` → `~/.claude/commands/scripts/`
+- `lib-common.sh` → `~/.claude/commands/scripts/` (sourced by the two scripts above)
 
 `make uninstall` removes the command and its reference tree. The bundled scripts are left in place — they live in a shared directory and other commands may depend on them.
 
@@ -262,6 +263,7 @@ plugin/                                      # the installed tree — a plugin i
 │       ├── validate-skills.sh               # deterministic compliance validator (Phase 5)
 │       ├── scan-graph.sh                    # static graph scanner (Phases 2, 11, 20, 26)
 │       ├── scan-history.sh                  # session-log miner (Phases 7, 9, 15, 16, 19, 22, 23)
+│       ├── lib-common.sh                    # sourced helpers shared by validate-skills.sh + scan-graph.sh (not run directly)
 │       ├── validate-evals.sh                # eval-case schema/contract gate (CI)
 │       ├── run-evals-headless.sh            # opt-in LLM-graded eval runner
 │       └── run-evals.sh                     # manual eval runner

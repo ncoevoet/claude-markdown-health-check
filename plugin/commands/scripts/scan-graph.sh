@@ -12,6 +12,10 @@
 
 set -uo pipefail
 
+# Shared helpers (path normalisers, manifest walker) — ships beside this script.
+# shellcheck source=lib-common.sh
+. "$(dirname "${BASH_SOURCE[0]}")/lib-common.sh"
+
 NO_CACHE=0; REFRESH=0; POS_ARGS=()
 for a in "$@"; do
     case "$a" in
@@ -219,37 +223,6 @@ _ref_base() {
         *)
             printf '%s' "$(dirname "$src")"
             ;;
-    esac
-}
-
-# Lexically normalise a manifest component path against the plugin root. Pure string work
-# (no realpath/readlink -m, which macOS lacks; nothing touches the filesystem, so a missing
-# path still normalises and symlinks are not followed). $2 is the physical plugin root.
-# Prints the root-relative form ("" = the root itself, no leading ./ or trailing /) and
-# returns 1 when the path leaves the root: a `..` that climbs above it, or an absolute
-# path outside it. A `..` that stays inside the root is fine here.
-_plugin_path_norm() {
-    local p="$1" root="$2" rest seg s=""
-    rest="$p/"
-    while [ -n "$rest" ]; do
-        seg="${rest%%/*}"
-        rest="${rest#*/}"
-        case "$seg" in
-            ""|.) ;;
-            ..)
-                if [ -n "$s" ]; then s="${s%/*}"
-                else case "$p" in /*) ;; *) return 1 ;; esac
-                fi ;;
-            *) s="$s/$seg" ;;
-        esac
-    done
-    case "$p" in
-        /*)
-            if [ "$s" = "$root" ]; then s=""
-            else case "$s" in "$root"/*) s="${s#"$root"/}" ;; *) return 1 ;; esac
-            fi
-            printf '%s' "$s" ;;
-        *) printf '%s' "${s#/}" ;;
     esac
 }
 
@@ -1038,13 +1011,11 @@ _plugin_eval_dir() {
 # Model-invocable SKILL.md files of the plugin, one per line (disable-model-invocation: true skipped,
 # Claude never chooses those so they have no trigger to eval). Roots: skills/ + manifest skills entries.
 _plugin_eval_skills() {
-    local pj="$CLAUDE_DIR/.claude-plugin/plugin.json" r root f
+    local r root f
     {
         printf 'skills\n'
-        jq -r '.skills // empty | if type == "array" then .[] else . end | select(type == "string")' "$pj" 2>/dev/null || true
+        _plugin_manifest_entries "$CLAUDE_DIR" skills
     } | while IFS= read -r r; do
-        r="${r#./}"; r="${r%/}"
-        case "$r" in /*|..|../*|*/..|*/../*) continue ;; esac
         root="$CLAUDE_DIR"
         { [ -z "$r" ] || [ "$r" = "." ]; } || root="$CLAUDE_DIR/$r"
         for f in "$root"/*/SKILL.md "$root"/SKILL.md; do

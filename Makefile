@@ -15,6 +15,8 @@ GRAPH_SRC   := plugin/commands/scripts/scan-graph.sh
 GRAPH_DEST  := $(CLAUDE_DIR)/commands/scripts/scan-graph.sh
 HIST_SRC    := plugin/commands/scripts/scan-history.sh
 HIST_DEST   := $(CLAUDE_DIR)/commands/scripts/scan-history.sh
+LIB_SRC     := plugin/commands/scripts/lib-common.sh
+LIB_DEST    := $(CLAUDE_DIR)/commands/scripts/lib-common.sh
 
 .PHONY: install uninstall check-self smoke-scan test evals help
 
@@ -34,20 +36,22 @@ install:
 	@cp "$(SCRIPT_SRC)" "$(SCRIPT_DEST)"
 	@cp "$(GRAPH_SRC)"  "$(GRAPH_DEST)"
 	@cp "$(HIST_SRC)"   "$(HIST_DEST)"
-	@chmod +x "$(SCRIPT_DEST)" "$(GRAPH_DEST)" "$(HIST_DEST)"
+	@cp "$(LIB_SRC)"    "$(LIB_DEST)"
+	@chmod +x "$(SCRIPT_DEST)" "$(GRAPH_DEST)" "$(HIST_DEST)" "$(LIB_DEST)"
 	@echo "Installed:"
 	@echo "  $(CMD_DEST)"
 	@echo "  $(REF_DEST)/"
 	@echo "  $(SCRIPT_DEST)"
 	@echo "  $(GRAPH_DEST)"
 	@echo "  $(HIST_DEST)"
+	@echo "  $(LIB_DEST)"
 
 uninstall:
 	@rm -f "$(CMD_DEST)"
 	@rm -rf "$(CLAUDE_DIR)/markdown-health-check"
 	@echo "Removed: $(CMD_DEST)"
 	@echo "Removed: $(CLAUDE_DIR)/markdown-health-check/"
-	@echo "Left in place (shared dir): $(SCRIPT_DEST) $(GRAPH_DEST) $(HIST_DEST)"
+	@echo "Left in place (shared dir): $(SCRIPT_DEST) $(GRAPH_DEST) $(HIST_DEST) $(LIB_DEST)"
 
 check-self: install
 	@echo "Now run /markdown-health-check inside Claude Code."
