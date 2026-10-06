@@ -1,0 +1,7 @@
+{
+  "name": "shadow-demo",
+  "version": "1.0.0",
+  "description": "Sets commands and outputStyles so the default folders are no longer scanned.",
+  "commands": "./cmds/",
+  "outputStyles": ["./styles/"]
+}

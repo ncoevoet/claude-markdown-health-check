@@ -24,6 +24,11 @@ Validates `~/.claude/plugins/installed_plugins.json` against the on-disk plugin 
 | `PLUGIN-ABS-PATH` | a declared component path (`skills`/`commands`/`agents`/`outputStyles`/`lspServers`/`workflows`/`hooks`/`mcpServers`/`experimental.themes`/`experimental.monitors`) is not relative starting with `./`. `skills: "."` is the one documented exception and is exempt; inline object values for `hooks`/`mcpServers`/`lspServers` are configuration, not paths, and are skipped | Structural |
 | `PLUGIN-USERCONFIG-IN-SHELL` | a hook `command` (inline in `plugin.json` or in `hooks/hooks.json`) or a monitor `command` (`monitors/monitors.json`, `experimental.monitors`) interpolates `${user_config.…}`. Claude Code rejects that substitution in shell commands — it is supported only in skill/agent bodies and in MCP/LSP `env` | Structural |
 | `MARKETPLACE-DEAD-SOURCE` | a `.claude-plugin/marketplace.json` plugin `source` (a local-path *string*; object sources and the remote string forms `http…`, `git@…`, `npm:…`, `github:…`, `git:…` are skipped) resolves to no directory. Resolution honours `metadata.pluginRoot`, so a bare `"source": "formatter"` under `pluginRoot: "./plugins"` resolves to `plugins/formatter/` | Critical |
+| `PLUGIN-DEFAULT-DIR-SHADOWED` | `plugin.json` sets a key that **replaces** its default folder (`commands`, `agents`, `outputStyles`, `workflows`, `experimental.themes`, `experimental.monitors`) while that folder (`commands/`, `agents/`, `output-styles/`, `workflows/`, `themes/`, `monitors/`) exists and none of the key's paths is the folder or a path inside it. Claude Code then shows `Default <folder>/ folder is ignored because the manifest sets "<key>"`. `skills` (adds to the default) and `hooks`/`mcpServers`/`lspServers` (merge) are never flagged; listing the folder explicitly (`"commands": ["./commands/", "./extras/"]`) is the fix | Hygiene |
+| `PLUGIN-UNKNOWN-KEY` | an unrecognised top-level `plugin.json` key. Claude Code strips it and the plugin loads (`claude plugin validate` warns). The message adds a did-you-mean when the key matches a documented one after lower-casing and dropping `_`/`-`. Deprecated top-level `themes`/`monitors` still load and are not flagged | Hygiene |
+| `PLUGIN-STRICT-OBJECT-UNKNOWN-KEY` | an unknown key inside an inline `userConfig` option (also the options of a `channels` entry), a `channels` entry, an `lspServers` config or an `experimental.monitors` entry. These objects are strict: the plugin does not load. A `.json` file named by `lspServers` or `mcpServers` is not read | Critical |
+| `PLUGIN-PATH-ESCAPE` | a component path (`skills`/`commands`/`agents`/`outputStyles`/`workflows`/`hooks`/`mcpServers`/`lspServers`/`experimental.*`, string entries and `commands` map `source`) whose lexical normalisation leaves the plugin root (`../x`, `./a/../../x`), or an absolute path outside it. Claude Code refuses to load it (`path escapes plugin directory`). A `..` that stays inside the root loads and is not flagged; `Path not found` (a path that does not exist) is out of scope | Critical |
+| `MARKETPLACE-UNKNOWN-KEY` | an unknown top-level or plugin-entry key in `marketplace.json`. Claude Code ignores it, so a typo (`ownr`, `sorce`) loads silently. `metadata` and an entry's `relevance` are free objects; an entry accepts every `plugin.json` field except the directory-listing ones (`icon`, `documentationUrl`, `supportUrl`, `privacyPolicyUrl`, `termsOfServiceUrl`) | Hygiene |
 
 The plugin-root checks fire only when `CLAUDE_DIR` contains `.claude-plugin/plugin.json` — i.e. when the scanner is pointed at a plugin repo (development / dogfooding), not a normal `~/.claude` tree.
 
@@ -47,3 +52,13 @@ Emit nothing when X=Y=Z=0.
 8. `PLUGIN-MISSING-DEPENDENCY` → `/plugin install <dependency>`, or drop the entry if the plugin no longer needs it.
 9. `PLUGIN-USERCONFIG-IN-SHELL` → read the value from `CLAUDE_PLUGIN_OPTION_<KEY>` in the script, or move the command to the exec form and pass the value through `args`.
 10. `PLUGIN-DISABLED` → `/plugin uninstall <name>` to reclaim disk if the plugin is unused, or `/plugin enable <name>` if it was parked by mistake. Intentionally-disabled plugins are a legitimate state — this is a polish-tier nudge, not a defect.
+
+## Refreshing the manifest key sets
+
+The key sets live in ONE place, the `PJ_KEYS`, `UC_KEYS`, `CH_KEYS`, `LSP_KEYS`, `MON_KEYS`, `MP_KEYS` and `ENTRY_KEYS` variables of `scan_plugin_manifest_keys` in `scan-graph.sh`, each commented with the doc sentence it came from. They are not copied here. To refresh one, list the first column of the matching table, for example the `plugin.json` fields:
+
+```
+curl -s https://code.claude.com/docs/en/plugins/manifest-reference.md | awk -F'|' '/^## Fields/{f=1} /^### `name`/{f=0} f && /^\| *(\[)?`/ {gsub(/[ `\[]/,"",$2); sub(/\].*/,"",$2); print $2}'
+```
+
+For the `userConfig`, `Channels`, `lspServers` and `monitors` tables, run the same awk between that section's heading and the next one. A `PLUGIN-UNKNOWN-KEY` on `plugin/` or on a fixture means the array is incomplete: fix the array, not the manifest.

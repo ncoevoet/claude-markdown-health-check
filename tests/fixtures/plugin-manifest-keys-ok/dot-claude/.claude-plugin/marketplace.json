@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
+  "name": "keys-ok-mp",
+  "owner": { "name": "Example" },
+  "description": "Only documented keys.",
+  "version": "1.0.0",
+  "metadata": { "pluginRoot": "./", "anything": "free" },
+  "plugins": [
+    {
+      "name": "keys-ok",
+      "source": "./",
+      "description": "Entry",
+      "version": "1.0.0",
+      "category": "demo",
+      "tags": ["demo"],
+      "strict": true,
+      "relevance": { "topic": "x", "signals": [], "anything": 1 },
+      "defaultEnabled": true,
+      "displayName": "Keys OK",
+      "author": { "name": "Example" },
+      "skills": ["./extra"]
+    }
+  ]
+}

@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
+  "name": "keys-ok",
+  "displayName": "Keys OK",
+  "version": "1.0.0",
+  "description": "Every key is documented, so nothing here may fire.",
+  "commands": ["./commands/", "./extras/"],
+  "agents": ["./agents/reviewer.md"],
+  "skills": ["./extra", "./a/../extra2"],
+  "userConfig": {
+    "api_token": {
+      "type": "string",
+      "title": "API token",
+      "description": "Token for the deployment API",
+      "required": true,
+      "default": "none",
+      "sensitive": true
+    },
+    "retries": {
+      "type": "number",
+      "title": "Retries",
+      "description": "How many times to retry",
+      "min": 0,
+      "max": 5
+    },
+    "tone": {
+      "type": "string",
+      "title": "Tone",
+      "description": "Voice for generated replies",
+      "options": ["neutral", "warm"],
+      "multiple": false
+    }
+  },
+  "channels": [
+    {
+      "server": "telegram",
+      "displayName": "Telegram",
+      "userConfig": {
+        "bot_token": { "type": "string", "title": "Bot token", "description": "Telegram bot token", "sensitive": true }
+      }
+    }
+  ],
+  "mcpServers": { "telegram": { "command": "node", "args": ["${CLAUDE_PLUGIN_ROOT}/server.js"] } },
+  "lspServers": {
+    "go": {
+      "command": "gopls",
+      "args": ["serve"],
+      "extensionToLanguage": { ".go": "go" },
+      "transport": "stdio",
+      "env": {},
+      "initializationOptions": {},
+      "settings": {},
+      "workspaceFolder": ".",
+      "startupTimeout": 5000,
+      "shutdownTimeout": 5000,
+      "requestTimeout": 60000,
+      "restartOnCrash": true,
+      "maxRestarts": 3,
+      "diagnostics": true
+    }
+  },
+  "experimental": {
+    "monitors": [
+      { "name": "deploy-status", "command": "echo hi", "description": "Deployment status", "when": "always" }
+    ]
+  },
+  "author": { "name": "Example" },
+  "homepage": "https://example.com",
+  "repository": "https://example.com/repo",
+  "license": "MIT",
+  "keywords": ["demo"],
+  "metadata": { "anything": "goes" },
+  "defaultEnabled": true
+}

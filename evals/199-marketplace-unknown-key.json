@@ -1,0 +1,22 @@
+{
+  "id": "199-marketplace-unknown-key",
+  "command": "claude-markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/marketplace-unknown-key",
+    "needs_home_override": false,
+    "scanners": ["scan-graph"]
+  },
+  "grader": { "method": "code" },
+  "success_criteria": {
+    "must_detect": [
+      { "tag": "MARKETPLACE-UNKNOWN-KEY", "path_substring": "ownr" },
+      { "tag": "MARKETPLACE-UNKNOWN-KEY", "path_substring": "sorce" }
+    ],
+    "must_not_flag": [],
+    "expect_clean": false
+  },
+  "expected_behavior": [
+    "scan-graph.sh emits [MARKETPLACE-UNKNOWN-KEY] for the top-level `ownr` and for the entry key `sorce`"
+  ]
+}
