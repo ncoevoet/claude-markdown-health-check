@@ -6,7 +6,9 @@ The subagent schema is distinct from the skill schema, so reusing the skill vali
 
 ## Subagent fields recognized
 
-`name`, `description` (required for routing), `tools`, `disallowedTools`, `model`, `permissionMode`, `maxTurns`, `skills`, `mcpServers`, `hooks`, `memory`, `background`, `effort`, `isolation`, `color`, `initialPrompt`.
+`name`, `description` (required for routing), `tools`, `disallowedTools`, `model`, `permissionMode`, `maxTurns`, `skills`, `mcpServers`, `hooks`, `memory`, `background`, `effort`, `isolation`, `color`, `initialPrompt`, `omitClaudeMd`.
+
+`omitClaudeMd` is valid in any agent (it keeps CLAUDE.md out of that subagent's context) and is not checked. `initialPrompt` is ignored in plugin agents (see `AGENT-PLUGIN-FORBIDDEN-FIELD`).
 
 Key differences from skills: agents use `tools`/`disallowedTools` (not `allowed-tools`), add `permissionMode` and `color`, and the command name is the **filename** (no directory). The pass does **not** flag unknown keys — the subagent schema evolves quickly, so unknown-field detection would be a false-positive magnet.
 
@@ -19,7 +21,8 @@ Key differences from skills: agents use `tools`/`disallowedTools` (not `allowed-
 | `AGENT-DUP-NAME` | two agent files resolve to the same effective `name` — Claude Code silently discards one | Structural |
 
 The filename is deliberately **not** checked against `name`: the sub-agents spec states the `name` field is the identifier and "the filename does not have to match" (e.g. `agents/01-injection.md` with `name: security-finder-injection` is valid).
-| `AGENT-PLUGIN-FORBIDDEN-FIELD` | the scanned tree is a plugin (a `.claude-plugin/plugin.json` sits at the tree root) and an agent declares `hooks`/`mcpServers`/`permissionMode`, which plugin agents silently ignore | Structural |
+| `AGENT-PLUGIN-FORBIDDEN-FIELD` | the scanned tree is a plugin (a `.claude-plugin/plugin.json` sits at the tree root) and an agent declares `hooks`/`mcpServers`/`permissionMode`/`initialPrompt`, which plugin agents silently ignore. The first three can move to plugin level; `initialPrompt` has no plugin-level equivalent, so the message says to remove it | Structural |
+| `AGENT-YAML-UNPARSED` | the frontmatter is not parseable YAML (tab indentation, a line that is not `key: value`, an unquoted value containing `: `, no closing `---`, or a list indented under a completed scalar). Claude Code skips a plain agent file entirely; a plugin agent still loads, named after the file, with every field ignored | Critical |
 
 ## Scope note
 
@@ -30,4 +33,5 @@ The filename is deliberately **not** checked against `name`: the sub-agents spec
 1. `AGENT-BYPASS-PERMS` → drop `permissionMode: bypassPermissions` unless the agent genuinely needs unattended execution; prefer `acceptEdits` or `dontAsk`.
 2. `AGENT-BAD-SCHEMA` (bad enum) → set a valid `model`/`color`/`permissionMode`, or drop the field to inherit.
 3. `AGENT-DUP-NAME` → rename one agent so each `name` is unique across the tree.
-4. `AGENT-PLUGIN-FORBIDDEN-FIELD` → move `hooks`/`mcpServers`/`permissionMode` to the plugin manifest / settings; they do nothing in a plugin agent file.
+4. `AGENT-PLUGIN-FORBIDDEN-FIELD` → move `hooks`/`mcpServers`/`permissionMode` to the plugin manifest / settings; they do nothing in a plugin agent file. Remove `initialPrompt` (no plugin-level equivalent).
+5. `AGENT-YAML-UNPARSED` → quote the offending value (`description: "Reviews code: fast"`), replace tabs with spaces, close the frontmatter with `---`. Until fixed the agent's fields are all ignored.

@@ -1,0 +1,29 @@
+{
+  "id": "160-skill-frontmatter-unparsed",
+  "command": "claude-markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/skill-frontmatter-unparsed",
+    "needs_home_override": false,
+    "scanners": [
+      "validate-skills"
+    ]
+  },
+  "grader": {
+    "method": "code"
+  },
+  "success_criteria": {
+    "must_detect": [
+      {
+        "tag": "BAD-FRONTMATTER-SCHEMA",
+        "path_substring": "unquoted value"
+      }
+    ],
+    "must_not_flag": [],
+    "expect_clean": false
+  },
+  "expected_behavior": [
+    "a skill whose description holds an unquoted ': ' fails to parse as YAML, so BAD-FRONTMATTER-SCHEMA is emitted with the unparsed reason",
+    "the orphaned-list check did not fire, so the broader unparsed-YAML reason is the one reported"
+  ]
+}

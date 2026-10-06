@@ -1,0 +1,28 @@
+{
+  "id": "162-plugin-skill-risk-ok",
+  "command": "claude-markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/plugin-skill-risk-ok",
+    "needs_home_override": true,
+    "scanners": [
+      "validate-skills"
+    ]
+  },
+  "grader": {
+    "method": "code"
+  },
+  "success_criteria": {
+    "must_detect": [],
+    "must_not_flag": [
+      "SKILL-NETWORK-SURFACE",
+      "SKILL-HIDDEN-BEHAVIOR",
+      "SKILL-MCP-REFERENCE"
+    ],
+    "expect_clean": true
+  },
+  "expected_behavior": [
+    "a curl mention only in a comment, a usage_fetch( helper name and a ../shared link that stays inside the plugin are not flagged",
+    "Note: foo, https://example.com/a_b and type:string are not MCP tool references (the tool segment must be snake_case)"
+  ]
+}
