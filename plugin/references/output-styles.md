@@ -14,7 +14,7 @@ Filter the findings array on `.phase == 26`.
   frontmatter `name:`, else its file name. In a plugin root, `plugin.json` `outputStyles`
   (files or directories) replaces the default `output-styles/` scan.
 - Styles also load from the user tree, every ancestor `.claude/output-styles/` up to the
-  repository root, and (user tree) each installed plugin; they all resolve a selection.
+  repository root, and each installed plugin (any scope); they all resolve a selection.
 - `settings.json` + `settings.local.json` → `.outputStyle` — the selected style name.
 - Built-in styles are exactly `Default`, `Proactive`, `Concise`, `Explanatory`, `Learning`
   (`Concise` needs Claude Code v2.1.237) and have no file. Matching is case-sensitive; the

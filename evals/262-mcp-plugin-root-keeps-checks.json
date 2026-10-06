@@ -1,0 +1,19 @@
+{
+  "id": "262-mcp-plugin-root-keeps-checks",
+  "command": "markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/mcp-plugin-root-keeps-checks",
+    "needs_home_override": false,
+    "scanners": ["scan-graph"]
+  },
+  "grader": { "method": "code" },
+  "success_criteria": {
+    "must_detect": [ { "tag": "MCP-DEPRECATED-TRANSPORT", "path_substring": ".mcp.json" }, { "tag": "MCP-BAD-DEF", "path_substring": ".mcp.json" } ],
+    "must_not_flag": [ "MCP-MISPLACED" ],
+    "expect_clean": false
+  },
+  "expected_behavior": [
+    "a plugin root .mcp.json is a real MCP location: sse and bad-definition checks still run and it is not MCP-MISPLACED"
+  ]
+}

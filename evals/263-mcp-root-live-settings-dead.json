@@ -1,0 +1,19 @@
+{
+  "id": "263-mcp-root-live-settings-dead",
+  "command": "markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/mcp-root-live-settings-dead",
+    "needs_home_override": false,
+    "scanners": ["scan-graph"]
+  },
+  "grader": { "method": "code" },
+  "success_criteria": {
+    "must_detect": [ { "tag": "MCP-DEPRECATED-TRANSPORT", "path_substring": ".mcp.json" }, { "tag": "MCP-MISPLACED", "path_substring": "settings.json" } ],
+    "must_not_flag": [  ],
+    "expect_clean": false
+  },
+  "expected_behavior": [
+    "repo-root .mcp.json keeps the sse check while the dead settings.json entry only gets MCP-MISPLACED (one finding per defect)"
+  ]
+}

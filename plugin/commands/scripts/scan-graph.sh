@@ -617,12 +617,12 @@ _output_style_files() {
 
 # Every root whose styles Claude Code would load for this tree: the scanned one, the user's,
 # each ancestor project's up to the repository root (docs: "every .claude/output-styles/
-# between the working directory and the repository root"), and, in the user tree, every
-# installed plugin.
+# between the working directory and the repository root"), and every plugin installed under the
+# user tree (user-scope plugin styles load in all projects; no per-file checks run on them).
 _output_style_roots() {
     local d
     printf '%s\n' "$CLAUDE_DIR" "$USER_TREE"
-    if [ "$IS_USER_TREE" = 1 ] && [ -f "$USER_TREE/plugins/installed_plugins.json" ]; then
+    if [ -f "$USER_TREE/plugins/installed_plugins.json" ]; then
         jq -r '.plugins // {} | to_entries[] | .value[]? | .installPath // empty' \
             "$USER_TREE/plugins/installed_plugins.json" 2>/dev/null
     fi
@@ -717,9 +717,13 @@ MCP_SECRET_RE='\b(sk-[A-Za-z0-9_-]{20,}|AKIA[0-9A-Z]{16}|gh[pousr]_[A-Za-z0-9]{2
 MCP_PLACEHOLDER_RE='(example|placeholder|your[-_]?(key|token|secret|api)|<your|xxxx|0000|redacted|replace[-_]?me|\$\{?[A-Z][A-Z0-9_]*\}?)'
 
 scan_mcp() {
-    local f rel srv val snippet
-    for f in "$CLAUDE_DIR/.mcp.json" "$CLAUDE_DIR/../.mcp.json" "$CLAUDE_DIR/../.claude.json" \
-             "$CLAUDE_DIR/settings.json" "$CLAUDE_DIR/settings.local.json"; do
+    local f rel srv val snippet files
+    # Only locations Claude Code loads: the repo-root .mcp.json, ~/.claude.json, and a plugin
+    # root's own .mcp.json. settings*.json and a project .claude/.mcp.json are never read —
+    # scan_mcp_placement reports them (MCP-MISPLACED), so their entries get no content checks.
+    files=("$CLAUDE_DIR/../.mcp.json" "$CLAUDE_DIR/../.claude.json")
+    [ -f "$CLAUDE_DIR/.claude-plugin/plugin.json" ] && files+=("$CLAUDE_DIR/.mcp.json")
+    for f in "${files[@]}"; do
         [ -f "$f" ] || continue
         rel="${f#$CLAUDE_DIR/}"
         case "$f" in "$CLAUDE_DIR/../"*) rel="${f##*/}" ;; esac
@@ -954,12 +958,16 @@ scan_plugin_self() {
     # Declared component paths must be relative and start with ./. The one documented
     # exception is `skills: "."` (the plugin root itself). Inline object values for
     # hooks/mcpServers/lspServers are configuration, not paths — the jq drops them.
+    local abs_root
+    abs_root=$(cd -P "$CLAUDE_DIR" 2>/dev/null && pwd -P)
     while IFS=$'\t' read -r fld p; do
         [ -z "$p" ] && continue
         case "$p" in
             ./*) continue ;;
             .) [ "$fld" = "skills" ] && continue ;;
         esac
+        # A path that leaves the plugin root is already PLUGIN-PATH-ESCAPE (Critical): one defect, one finding.
+        _plugin_path_norm "$p" "$abs_root" >/dev/null || continue
         emit_finding 2 "PLUGIN-ABS-PATH" ".claude-plugin/plugin.json" "$fld path '$p' must be relative and start with ./"
     done < <(jq -r '
         ( to_entries[]

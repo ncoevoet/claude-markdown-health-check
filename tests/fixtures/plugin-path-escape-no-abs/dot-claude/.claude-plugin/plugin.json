@@ -1,0 +1,6 @@
+{
+  "name": "escape-only",
+  "version": "1.0.0",
+  "agents": ["../outside/a.md"],
+  "skills": "/etc"
+}

@@ -1,0 +1,7 @@
+{
+  "mcpServers": {
+    "legacy": { "type": "sse", "url": "https://example.com/sse" },
+    "broken": { "type": "http" },
+    "leaky": { "command": "node", "env": { "TOKEN": "ghp_abcdefghijklmnopqrstuvwxyz0123456789" } }
+  }
+}

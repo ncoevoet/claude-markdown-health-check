@@ -1,0 +1,19 @@
+{
+  "id": "264-plugin-path-escape-single-finding",
+  "command": "markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/plugin-path-escape-no-abs",
+    "needs_home_override": false,
+    "scanners": ["scan-graph"]
+  },
+  "grader": { "method": "code" },
+  "success_criteria": {
+    "must_detect": [ { "tag": "PLUGIN-PATH-ESCAPE", "path_substring": "../outside/a.md" }, { "tag": "PLUGIN-PATH-ESCAPE", "path_substring": "/etc" } ],
+    "must_not_flag": [ "PLUGIN-ABS-PATH" ],
+    "expect_clean": false
+  },
+  "expected_behavior": [
+    "a path that escapes the plugin root is reported once as PLUGIN-PATH-ESCAPE, not also as PLUGIN-ABS-PATH"
+  ]
+}
