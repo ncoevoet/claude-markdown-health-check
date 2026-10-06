@@ -1,0 +1,19 @@
+{
+  "id": "191-eval-no-skill-grader",
+  "command": "claude-markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/eval-no-skill-grader",
+    "needs_home_override": false,
+    "scanners": ["scan-graph"]
+  },
+  "grader": { "method": "code" },
+  "success_criteria": {
+    "must_detect": [ { "tag": "EVAL-NO-SKILL-GRADER", "path_substring": "skills/triage" } ],
+    "must_not_flag": ["EVAL-CASE-NO-GRADER","PLUGIN-NO-EVALS"],
+    "expect_clean": false
+  },
+  "expected_behavior": [
+    "scan-graph.sh emits [EVAL-NO-SKILL-GRADER]: the only grader is type llm, so nothing checks that Claude chooses the triage skill"
+  ]
+}
