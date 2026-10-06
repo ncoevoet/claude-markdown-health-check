@@ -1,0 +1,19 @@
+{
+  "id": "183-plugin-name-format",
+  "command": "claude-markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/plugin-name-format",
+    "needs_home_override": false,
+    "scanners": ["scan-graph"]
+  },
+  "grader": { "method": "code" },
+  "success_criteria": {
+    "must_detect": [ { "tag": "PLUGIN-NAME-FORMAT", "path_substring": "plugin.json" } ],
+    "must_not_flag": ["PLUGIN-RESERVED-NAME"],
+    "expect_clean": false
+  },
+  "expected_behavior": [
+    "scan-graph.sh emits [PLUGIN-NAME-FORMAT] for a name containing a space and @"
+  ]
+}

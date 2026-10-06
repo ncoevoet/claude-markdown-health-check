@@ -1,0 +1,19 @@
+{
+  "id": "240-plugin-name-control-bidi",
+  "command": "claude-markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/plugin-name-control-bidi",
+    "needs_home_override": false,
+    "scanners": ["scan-graph"]
+  },
+  "grader": { "method": "code" },
+  "success_criteria": {
+    "must_detect": [ { "tag": "PLUGIN-NAME-FORMAT", "path_substring": "plugin.json" }, { "tag": "PLUGIN-NAME-FORMAT", "path_substring": "marketplace.json" }, { "tag": "MARKETPLACE-NAME-FORMAT", "path_substring": "marketplace.json" } ],
+    "must_not_flag": ["MARKETPLACE-NAME-RESERVED","PLUGIN-RESERVED-NAME"],
+    "expect_clean": false
+  },
+  "expected_behavior": [
+    "scan-graph.sh emits [PLUGIN-NAME-FORMAT] for a plugin name with a bidirectional-formatting character (U+202E) and for a marketplace entry name with a control character (BEL), and [MARKETPLACE-NAME-FORMAT] for a bidi marketplace name (checked before the non-ASCII impersonation rule)"
+  ]
+}
