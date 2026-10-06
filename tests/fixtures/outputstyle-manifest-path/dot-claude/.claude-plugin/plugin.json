@@ -1,0 +1,1 @@
+{ "name": "style-demo", "version": "1.0.0", "description": "Plugin with a custom output-styles path.", "outputStyles": "./styles/" }

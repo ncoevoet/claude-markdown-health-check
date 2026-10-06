@@ -1,0 +1,19 @@
+{
+  "id": "179-outputstyle-default-lowercase",
+  "command": "claude-markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/outputstyle-default-lower",
+    "needs_home_override": true,
+    "scanners": ["scan-graph"]
+  },
+  "grader": { "method": "code" },
+  "success_criteria": {
+    "must_detect": [],
+    "must_not_flag": ["OUTPUTSTYLE-MISSING", "OUTPUTSTYLE-CASE"],
+    "expect_clean": true
+  },
+  "expected_behavior": [
+    "scan-graph.sh tolerates lowercase 'default': output-styles.md lists it among the /output-style entries, and the fallback it triggers is the Default style itself"
+  ]
+}
