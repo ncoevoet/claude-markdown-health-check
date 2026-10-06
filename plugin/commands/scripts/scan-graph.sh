@@ -222,6 +222,173 @@ _ref_base() {
     esac
 }
 
+# Lexically normalise a manifest component path against the plugin root. Pure string work
+# (no realpath/readlink -m, which macOS lacks; nothing touches the filesystem, so a missing
+# path still normalises and symlinks are not followed). $2 is the physical plugin root.
+# Prints the root-relative form ("" = the root itself, no leading ./ or trailing /) and
+# returns 1 when the path leaves the root: a `..` that climbs above it, or an absolute
+# path outside it. A `..` that stays inside the root is fine here.
+_plugin_path_norm() {
+    local p="$1" root="$2" rest seg s=""
+    rest="$p/"
+    while [ -n "$rest" ]; do
+        seg="${rest%%/*}"
+        rest="${rest#*/}"
+        case "$seg" in
+            ""|.) ;;
+            ..)
+                if [ -n "$s" ]; then s="${s%/*}"
+                else case "$p" in /*) ;; *) return 1 ;; esac
+                fi ;;
+            *) s="$s/$seg" ;;
+        esac
+    done
+    case "$p" in
+        /*)
+            if [ "$s" = "$root" ]; then s=""
+            else case "$s" in "$root"/*) s="${s#"$root"/}" ;; *) return 1 ;; esac
+            fi
+            printf '%s' "$s" ;;
+        *) printf '%s' "${s#/}" ;;
+    esac
+}
+
+# Did-you-mean for an unknown key: succeeds, printing the documented key, when the key
+# equals a known one after lower-casing and dropping `_` and `-` (descriptionURL, Home_Page).
+_manifest_key_suggest() {
+    local key="$1" known="$2" want cand k
+    want=$(printf '%s' "$key" | tr 'A-Z' 'a-z' | tr -d '_-')
+    for k in $known; do
+        cand=$(printf '%s' "$k" | tr 'A-Z' 'a-z' | tr -d '_-')
+        [ "$cand" = "$want" ] && { printf '%s' "$k"; return 0; }
+    done
+    return 1
+}
+
+# Plugin manifest key checks (phase 2). Runs when CLAUDE_DIR holds a .claude-plugin/plugin.json
+# and/or marketplace.json, any scope, like scan_plugin_self. Key sets below were read from
+# https://code.claude.com/docs/en/plugins/manifest-reference (plugins-reference) and
+# .../plugins/marketplace-reference on 2026-10-06; refresh them from the `Fields`, `User
+# configuration`, `Channels`, `lspServers`, `monitors`, `Top-level fields` and `Plugin entries`
+# tables when the docs move (recipe in plugin/references/plugin-integrity.md).
+scan_plugin_manifest_keys() {
+    local pdir="$CLAUDE_DIR/.claude-plugin" pj mp root
+    pj="$pdir/plugin.json"; mp="$pdir/marketplace.json"
+    [ -f "$pj" ] || [ -f "$mp" ] || return 0
+    local sep=$'\x1f' loc key sug dir fld ek p n entries hit
+
+    # manifest-reference `Fields` table: "The table lists the top-level keys in `plugin.json`."
+    # `themes` and `monitors` are kept: "A top-level `themes` key still loads, with a
+    # `claude plugin validate` warning" (same for `monitors`), so they are deprecated, not unknown.
+    local PJ_KEYS='$schema name displayName version description author homepage repository license keywords metadata icon documentationUrl supportUrl privacyPolicyUrl termsOfServiceUrl defaultEnabled dependencies settings userConfig types channels skills commands agents hooks mcpServers lspServers outputStyles workflows experimental themes monitors'
+    # "## User configuration": "Each value is a strict object with these fields. An unknown key fails validation."
+    # (`min` / `max` share one table row.)
+    local UC_KEYS='type title description required default options multiple sensitive min max'
+    # "## Channels": "Each entry is a strict object bound to one of the plugin's MCP servers, with these fields:"
+    local CH_KEYS='server displayName userConfig'
+    # "### `lspServers`": "Each server config is a strict object with these fields. An unknown key fails validation."
+    local LSP_KEYS='command extensionToLanguage args transport env initializationOptions settings workspaceFolder startupTimeout shutdownTimeout requestTimeout restartOnCrash maxRestarts diagnostics'
+    # "### `monitors`": "Each entry is a strict object with these fields."
+    local MON_KEYS='name command description when'
+    # marketplace-reference "Top-level fields": "The table lists every key Claude Code reads from `marketplace.json`."
+    local MP_KEYS='name owner plugins $schema description version metadata forceRemoveDeletedPlugins allowCrossMarketplaceDependenciesOn renames'
+    # "Plugin entries": an entry "also accepts every `plugin.json` field" apart from the directory
+    # listing fields (icon, documentationUrl, supportUrl, privacyPolicyUrl, termsOfServiceUrl: "In a
+    # marketplace entry, `claude plugin validate` reports each one as an unknown field"), plus its own.
+    local ENTRY_KEYS='name source description version category tags strict relevance dependencies defaultEnabled displayName metadata headers headersHelper $schema author homepage repository license keywords settings userConfig types channels skills commands agents hooks mcpServers lspServers outputStyles workflows experimental themes monitors'
+
+    if [ -f "$pj" ]; then
+        # Unrecognised top-level keys. manifest-reference "Unrecognized fields": "the field is
+        # stripped and the plugin loads. `claude plugin validate` reports each unrecognized
+        # top-level field as a warning".
+        while IFS= read -r key; do
+            [ -z "$key" ] && continue
+            sug=$(_manifest_key_suggest "$key" "$PJ_KEYS") && sug=" — did you mean '$sug'?"
+            emit_finding 2 "PLUGIN-UNKNOWN-KEY" ".claude-plugin/plugin.json" "unrecognized top-level key '$key' is stripped at load${sug:-}"
+            sug=""
+        done < <(jq -r --arg known "$PJ_KEYS" 'objects | keys_unsorted[] | select(. as $k | ($known | split(" ") | index($k)) == null)' "$pj" 2>/dev/null || true)
+
+        # Strict objects. manifest-reference: "`userConfig` options, `channels` entries, `lspServers`
+        # configs, and `monitors` entries are strict. An unknown key inside one is an error, and the
+        # plugin doesn't load". Only inline definitions are visible here (a .json file named by
+        # `lspServers` is not read).
+        while IFS="$sep" read -r loc key; do
+            [ -z "$key" ] && continue
+            emit_finding 2 "PLUGIN-STRICT-OBJECT-UNKNOWN-KEY" ".claude-plugin/plugin.json" "$loc has unknown key '$key' — strict object, an unknown key is an error and the plugin doesn't load"
+        done < <(jq -r --arg uc "$UC_KEYS" --arg ch "$CH_KEYS" --arg lsp "$LSP_KEYS" --arg mon "$MON_KEYS" '
+            def unknown($loc; $known):
+                objects | keys_unsorted[] | select(. as $k | ($known | split(" ") | index($k)) == null) | "\($loc)\u001f\(.)";
+            def options($loc):
+                objects | to_entries[] | select(.value | type == "object") | .key as $o | .value | unknown("\($loc).\($o)"; $uc);
+            def monitors: arrays | to_entries[] | select(.value | type == "object") | .key as $i | .value | unknown("monitors[\($i)]"; $mon);
+            objects
+            | ( (.userConfig | options("userConfig")),
+                ( .channels | arrays | to_entries[] | select(.value | type == "object") | .key as $i | .value
+                  | unknown("channels[\($i)]"; $ch), (.userConfig | options("channels[\($i)].userConfig")) ),
+                ( .lspServers | (if type == "object" then [.] elif type == "array" then [.[] | objects] else [] end)[]
+                  | to_entries[] | select(.value | type == "object") | .key as $n | .value | unknown("lspServers.\($n)"; $lsp) ),
+                ( (.experimental | objects | .monitors | monitors), (.monitors | monitors) ) )' "$pj" 2>/dev/null || true)
+
+        # Component paths. manifest-reference "Containment and existence": "a path that resolves
+        # outside the plugin root doesn't load, and the `/plugin` Errors tab shows `<component> path
+        # escapes plugin directory: <path>`. A path containing `..` is the usual case". A `..` that
+        # stays inside the root loads (validate-only error) and is not flagged. Each line is
+        # `key<US>path`; a path-less line marks a key that is set (its value may be inline config).
+        root=$(cd -P "$CLAUDE_DIR" 2>/dev/null && pwd -P)
+        entries=$(jq -r '
+            def paths($k):
+                if type == "string" then .
+                elif type == "array" then .[] | if type == "string" then . elif type == "object" and $k == "commands" then (.source? | strings) else empty end
+                elif type == "object" and $k == "commands" then .[]? | objects | (.source? | strings)
+                else empty end;
+            objects | . as $r
+            | ( ("skills","commands","agents","outputStyles","workflows","hooks","mcpServers","lspServers") as $k | select(has($k)) | [$k, .[$k]] ),
+              ( .experimental | objects | to_entries[] | ["experimental." + .key, .value] )
+            | .[0] as $k | "\($k)\u001f", (.[1] | paths($k) | select(startswith("http://") or startswith("https://") | not) | "\($k)\u001f\(.)")' "$pj" 2>/dev/null || true)
+        while IFS="$sep" read -r key p; do
+            [ -z "$p" ] && continue
+            _plugin_path_norm "$p" "$root" >/dev/null \
+                || emit_finding 2 "PLUGIN-PATH-ESCAPE" ".claude-plugin/plugin.json" "$key path '$p' resolves outside the plugin root — it doesn't load (path escapes plugin directory)"
+        done <<<"$entries"
+
+        # Default folders a key replaces. manifest-reference "How each key combines with its
+        # default location": "**Replaces the default**: `commands`, `agents`, `outputStyles`,
+        # `workflows`, `experimental.themes`, `experimental.monitors`. When you set `commands`, the
+        # default `commands/` directory isn't scanned." and "To avoid the warning, set the key to a
+        # path inside that folder". `skills` ("Adds to the default") and `hooks`/`mcpServers`/
+        # `lspServers` ("Merges") are never flagged.
+        for fld in commands:commands agents:agents outputStyles:output-styles workflows:workflows experimental.themes:themes experimental.monitors:monitors; do
+            key="${fld%%:*}"; dir="${fld#*:}"
+            [ -d "$CLAUDE_DIR/$dir" ] || continue
+            printf '%s\n' "$entries" | grep -qxF "$key$sep" || continue
+            hit=0
+            while IFS="$sep" read -r ek p; do
+                [ "$ek" = "$key" ] && [ -n "$p" ] || continue
+                n=$(_plugin_path_norm "$p" "$root") || continue
+                case "$n" in ""|"$dir"|"$dir"/*) hit=1 ;; esac
+            done <<<"$entries"
+            [ "$hit" = 1 ] \
+                || emit_finding 2 "PLUGIN-DEFAULT-DIR-SHADOWED" ".claude-plugin/plugin.json" "Default $dir/ folder is ignored because the manifest sets \"$key\" — list \"./$dir/\" in it to keep the folder"
+        done
+    fi
+
+    if [ -f "$mp" ]; then
+        # marketplace-reference: "Claude Code ignores an unknown top-level key or plugin-entry key
+        # rather than rejecting it, so a typo loads silently. `claude plugin validate` reports each
+        # unknown key as a warning." `metadata` and an entry's `relevance` are free objects.
+        while IFS="$sep" read -r loc key; do
+            [ -z "$key" ] && continue
+            if [ "$loc" = "top-level" ]; then sug=$(_manifest_key_suggest "$key" "$MP_KEYS")
+            else sug=$(_manifest_key_suggest "$key" "$ENTRY_KEYS"); fi && sug=" — did you mean '$sug'?"
+            emit_finding 2 "MARKETPLACE-UNKNOWN-KEY" ".claude-plugin/marketplace.json" "unknown $loc key '$key' is ignored at load time${sug:-}"
+            sug=""
+        done < <(jq -r --arg top "$MP_KEYS" --arg ent "$ENTRY_KEYS" '
+            objects
+            | ( keys_unsorted[] | select(. as $k | ($top | split(" ") | index($k)) == null) | "top-level\u001f\(.)" ),
+              ( .plugins | arrays | .[] | objects | keys_unsorted[] | select(. as $k | ($ent | split(" ") | index($k)) == null) | "plugin-entry\u001f\(.)" )' "$mp" 2>/dev/null || true)
+    fi
+}
+
 scan_ref_graph() {
     local skills_dir="$CLAUDE_DIR/skills" cmds_dir="$CLAUDE_DIR/commands"
     [ -d "$skills_dir" ] || [ -d "$cmds_dir" ] || return 0
@@ -846,6 +1013,7 @@ scan_plugin_names
 scan_plugin_self
 scan_ref_graph
 scan_memory
+scan_plugin_manifest_keys
 scan_output_styles
 scan_mcp
 scan_mcp_placement

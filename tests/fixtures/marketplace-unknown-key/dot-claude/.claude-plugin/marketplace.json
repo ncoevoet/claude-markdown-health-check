@@ -1,0 +1,8 @@
+{
+  "name": "typo-mp",
+  "ownr": { "name": "Example" },
+  "owner": { "name": "Example" },
+  "plugins": [
+    { "name": "typo-demo", "sorce": "./", "source": "./" }
+  ]
+}

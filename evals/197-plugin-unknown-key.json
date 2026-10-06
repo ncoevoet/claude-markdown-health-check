@@ -1,0 +1,24 @@
+{
+  "id": "197-plugin-unknown-key",
+  "command": "claude-markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/plugin-unknown-key",
+    "needs_home_override": false,
+    "scanners": ["scan-graph"]
+  },
+  "grader": { "method": "code" },
+  "success_criteria": {
+    "must_detect": [
+      { "tag": "PLUGIN-UNKNOWN-KEY", "path_substring": "descripton" },
+      { "tag": "PLUGIN-UNKNOWN-KEY", "path_substring": "did you mean 'version'" },
+      { "tag": "PLUGIN-STRICT-OBJECT-UNKNOWN-KEY", "path_substring": "bogus" }
+    ],
+    "must_not_flag": [],
+    "expect_clean": false
+  },
+  "expected_behavior": [
+    "scan-graph.sh emits [PLUGIN-UNKNOWN-KEY] for the misspelt top-level `descripton`, and for `Version` with a did-you-mean",
+    "scan-graph.sh emits [PLUGIN-STRICT-OBJECT-UNKNOWN-KEY] for `bogus` inside the userConfig option"
+  ]
+}
