@@ -1,0 +1,23 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      { "matcher": "Bash", "hooks": [ { "type": "command", "command": "echo 1" } ] },
+      { "matcher": "Edit|Write", "hooks": [ { "type": "command", "command": "echo 2" } ] },
+      { "matcher": "Edit, Write", "hooks": [ { "type": "command", "command": "echo 3" } ] },
+      { "matcher": "mcp__memory__.*", "hooks": [ { "type": "command", "command": "echo 4" } ] },
+      { "matcher": "mcp__memory__create_entities", "hooks": [ { "type": "command", "command": "echo 5" } ] },
+      { "matcher": "^Notebook", "hooks": [ { "type": "command", "command": "echo 6" } ] },
+      { "matcher": "*", "hooks": [ { "type": "command", "command": "echo 7" } ] },
+      { "hooks": [ { "type": "command", "command": "echo 8" } ] }
+    ],
+    "SessionStart": [
+      { "matcher": "startup", "hooks": [ { "type": "command", "command": "echo 9" } ] }
+    ],
+    "SubagentStart": [
+      { "matcher": "code-reviewer", "hooks": [ { "type": "command", "command": "echo 10" } ] }
+    ],
+    "Notification": [
+      { "matcher": "idle_prompt", "hooks": [ { "type": "command", "command": "echo 11" } ] }
+    ]
+  }
+}

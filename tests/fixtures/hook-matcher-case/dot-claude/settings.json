@@ -1,0 +1,8 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      { "matcher": "bash", "hooks": [ { "type": "command", "command": "echo a" } ] },
+      { "matcher": "Edit|write", "hooks": [ { "type": "command", "command": "echo b" } ] }
+    ]
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "id": "136-hook-timeout-malformed",
+  "command": "claude-markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/hook-timeout-malformed",
+    "needs_home_override": false,
+    "scanners": [
+      "validate-skills"
+    ]
+  },
+  "grader": {
+    "method": "code"
+  },
+  "success_criteria": {
+    "must_detect": [
+      {
+        "tag": "SUSPICIOUS-TIMEOUT",
+        "path_substring": "Notification"
+      },
+      {
+        "tag": "SUSPICIOUS-TIMEOUT",
+        "path_substring": "PreModelSwitch"
+      }
+    ],
+    "must_not_flag": [],
+    "expect_clean": false
+  },
+  "expected_behavior": [
+    "a malformed hook event or entry does not stop the timeout scan: later valid events are still checked"
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      { "matcher": "mcp__memory", "hooks": [ { "type": "command", "command": "echo a" } ] },
+      { "matcher": "Bash|mcp__brave-search", "hooks": [ { "type": "command", "command": "echo b" } ] }
+    ]
+  }
+}
