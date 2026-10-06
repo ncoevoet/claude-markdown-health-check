@@ -1,0 +1,19 @@
+{
+  "id": "254-claudemd-excludes-rules-dead",
+  "command": "markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/claudemd-excludes-rules-dead",
+    "needs_home_override": false,
+    "scanners": ["validate-skills"]
+  },
+  "grader": { "method": "code" },
+  "success_criteria": {
+    "must_detect": [{ "tag": "CLAUDEMD-EXCLUDE-DEAD", "path_substring": "other instruction file on disk" }],
+    "must_not_flag": [],
+    "expect_clean": false
+  },
+  "expected_behavior": [
+    "a rules-dir glob that other instruction file on disk is still reported, worded to cover instruction files other than CLAUDE.md"
+  ]
+}

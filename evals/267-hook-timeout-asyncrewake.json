@@ -1,0 +1,17 @@
+{
+  "id": "267-hook-timeout-asyncrewake",
+  "command": "markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/hook-timeout-async-enforced",
+    "needs_home_override": false,
+    "scanners": ["validate-skills"]
+  },
+  "grader": { "method": "code" },
+  "success_criteria": {
+    "must_detect": [{ "tag": "SUSPICIOUS-TIMEOUT", "path_substring": "settings.json" }]
+  },
+  "expected_behavior": [
+    "an async command hook that also sets asyncRewake keeps its timeout enforced, so a large timeout is still flagged"
+  ]
+}

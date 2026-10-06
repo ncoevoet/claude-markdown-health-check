@@ -1,0 +1,19 @@
+{
+  "id": "256-mcp-bare-server-prefix-only",
+  "command": "markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/mcp-bare-server-prefix-only",
+    "needs_home_override": false,
+    "scanners": ["validate-skills"]
+  },
+  "grader": { "method": "code" },
+  "success_criteria": {
+    "must_detect": [{ "tag": "MISSING-PRE-APPROVED", "path_substring": "srv2" }],
+    "must_not_flag": [],
+    "expect_clean": false
+  },
+  "expected_behavior": [
+    "mcp__srv approves srv only: the similarly named srv2 stays unapproved"
+  ]
+}

@@ -1118,6 +1118,7 @@ check_mcp_preapproved_live() {
     while IFS= read -r srv; do
         [ -z "$srv" ] && continue
         if printf '%s\n' "$keys" | grep -qxF -- "$srv"; then continue; fi
+        if printf '%s\n' "$strs" | grep -qxF -- "mcp__${srv}"; then continue; fi
         case "$strs" in *"mcp__${srv}__"*) continue ;; esac
         error "[MISSING-PRE-APPROVED] $display: MCP server \"$srv\" not in preApprovedTools or permissions.allow"
     done < <(jq -r '(.mcpServers // {}) | if type == "object" then keys[] else empty end' "$mcp_file" 2>/dev/null || true)
@@ -1325,7 +1326,7 @@ check_hook_timeouts() {
         if [ "$t" -gt $((def * 2)) ]; then
             warning "[SUSPICIOUS-TIMEOUT] $display: a $typ hook ($ev) has timeout ${t}s (>2x the ${def}s default)"
         fi
-    done < <(jq -r '.hooks // {} | to_entries[] | select(.value|type=="array") | .key as $ev | .value[] | select(type=="object") | (.hooks // [])[]? | select(type=="object" and has("type") and ((.timeout|type)=="number")) | "\($ev)\t\(.type)\t\(.timeout)"' "$json_file" 2>/dev/null || true)
+    done < <(jq -r '.hooks // {} | to_entries[] | select(.value|type=="array") | .key as $ev | .value[] | select(type=="object") | (.hooks // [])[]? | select(type=="object" and has("type") and ((.timeout|type)=="number") and ((.type=="command" and .async==true and .asyncRewake!=true)|not)) | "\($ev)\t\(.type)\t\(.timeout)"' "$json_file" 2>/dev/null || true)
     return 0
 }
 
@@ -1381,7 +1382,7 @@ check_settings_security() {
     local json_file="$1" display="$2" mode broad
     [ -f "$json_file" ] || return 0
     command -v jq >/dev/null 2>&1 || return 0
-    mode=$(jq -r '(.permissions.defaultMode // .defaultMode) // empty' "$json_file" 2>/dev/null)
+    mode=$(jq -r '(if type == "object" then ((.permissions | if type == "object" then .defaultMode else null end) // .defaultMode) else null end) | strings' "$json_file" 2>/dev/null || true)
     if [ "$mode" = "bypassPermissions" ]; then
         # Since v2.1.257 only user or managed settings can switch it on.
         if [ "$(_settings_file_scope "$json_file")" = "user" ]; then
@@ -1553,14 +1554,21 @@ check_claudemd_excludes() {
                     [ -n "$root" ] || root=$(dirname "$CLAUDE_DIR")
                     while IFS= read -r cand; do
                         [ -n "$cand" ] && cands+=("$cand")
-                    done < <(find "$root" -maxdepth 8 \( -name node_modules -o -name .git \) -prune -o -name CLAUDE.md -type f -print 2>/dev/null || true)
+                    done < <(find "$root" -maxdepth 8 \( -name node_modules -o -name .git \) -prune -o \( -name CLAUDE.md -o -name CLAUDE.local.md -o -name AGENTS.md -o \( -path '*/.claude/rules/*' -name '*.md' \) \) -type f -print 2>/dev/null || true)
                     d=$(cd "$root" 2>/dev/null && pwd -P || true)
                     while [ -n "$d" ] && [ "$d" != "/" ]; do
-                        [ -f "$d/CLAUDE.md" ] && cands+=("$d/CLAUDE.md")
+                        for cand in "$d/CLAUDE.md" "$d/CLAUDE.local.md" "$d/AGENTS.md" "$d/.claude/CLAUDE.md" "$d/.claude/AGENTS.md"; do
+                            [ -f "$cand" ] && cands+=("$cand")
+                        done
                         d=$(dirname "$d")
                     done
                     [ -f "/CLAUDE.md" ] && cands+=("/CLAUDE.md")
-                    [ -f "$HOME/.claude/CLAUDE.md" ] && cands+=("$HOME/.claude/CLAUDE.md")
+                    for cand in "$HOME/.claude/CLAUDE.md" "$HOME/.claude/AGENTS.md"; do
+                        [ -f "$cand" ] && cands+=("$cand")
+                    done
+                    while IFS= read -r cand; do
+                        [ -n "$cand" ] && cands+=("$cand")
+                    done < <(find "$HOME/.claude/rules" -type f -name '*.md' 2>/dev/null || true)
                 fi
                 # bash `==` lets `*` cross `/`: deliberately more permissive than the real glob,
                 # so a warning means no file could match
@@ -1569,7 +1577,7 @@ check_claudemd_excludes() {
                     # the longest-prefix strip leaves nothing only when the whole path matches the glob
                     if [ -z "${cand##$pat}" ]; then hit=1; break; fi
                 done
-                [ "$hit" -eq 1 ] || warning "[CLAUDEMD-EXCLUDE-DEAD] $display: claudeMdExcludes pattern '$pat' matches no CLAUDE.md on disk"
+                [ "$hit" -eq 1 ] || warning "[CLAUDEMD-EXCLUDE-DEAD] $display: claudeMdExcludes pattern '$pat' matches no CLAUDE.md or other instruction file on disk (CLAUDE.local.md, AGENTS.md, .claude/rules/**/*.md)"
                 ;;
             *)
                 [ -e "$pat" ] || warning "[CLAUDEMD-EXCLUDE-DEAD] $display: claudeMdExcludes path '$pat' does not exist on disk"
@@ -2176,7 +2184,7 @@ compute_listing_cost() {
 if [ "$LISTING_COST_ONLY" = 1 ]; then
     # settings.json maxSkillDescriptionChars overrides the per-entry cap.
     if [ -f "$CLAUDE_DIR/settings.json" ] && command -v jq >/dev/null 2>&1; then
-        msdc=$(jq -r '.maxSkillDescriptionChars // empty' "$CLAUDE_DIR/settings.json" 2>/dev/null)
+        msdc=$(jq -r 'if type == "object" then .maxSkillDescriptionChars else null end | scalars // empty' "$CLAUDE_DIR/settings.json" 2>/dev/null || true)
         case "$msdc" in ''|*[!0-9]*) ;; *) DESC_SOFT_MAX=$msdc ;; esac
     fi
     read -r LIST_TOTAL LIST_COUNT < <(compute_listing_cost)
@@ -2187,7 +2195,7 @@ if [ "$LISTING_COST_ONLY" = 1 ]; then
         FRACTION="$LISTING_BUDGET_FRACTION_DEFAULT"
         SETTINGS_JSON="$CLAUDE_DIR/settings.json"
         if [ -f "$SETTINGS_JSON" ] && command -v jq >/dev/null 2>&1; then
-            v=$(jq -r '.skillListingBudgetFraction // empty' "$SETTINGS_JSON" 2>/dev/null)
+            v=$(jq -r 'if type == "object" then .skillListingBudgetFraction else null end | scalars // empty' "$SETTINGS_JSON" 2>/dev/null || true)
             [ -n "$v" ] && FRACTION="$v"
         fi
         EFFECTIVE_BUDGET=$(awk -v f="$FRACTION" -v c="$CONTEXT_TOKENS" -v floor="$LISTING_BUDGET_FLOOR" \
@@ -2417,6 +2425,7 @@ check_global_config_removed
 # hooks/hooks.json holds hook definitions but no allowlist of its own, so it is
 # checked against the allowlist merged from the settings files above.
 check_http_hook_allowlist "$CLAUDE_DIR/hooks/hooks.json" "hooks/hooks.json"
+check_hook_timeouts "$CLAUDE_DIR/hooks/hooks.json" "hooks/hooks.json"
 check_hook_matchers "$CLAUDE_DIR/hooks/hooks.json" "hooks/hooks.json"
 check_mcp_preapproved_live
 if [ "$settings_checked" -eq 0 ]; then
