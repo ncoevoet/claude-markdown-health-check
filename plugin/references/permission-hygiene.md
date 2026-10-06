@@ -56,3 +56,15 @@ Allow: N entries · Dead: X · Overbroad: Y · Total denials: Z
 5. `PERM-OVERBROAD` → tighten the matcher pattern (e.g., `Bash(cat:*)` → `Bash(cat ~/.claude/*)`).
 6. `PERM-DEAD-ENTRY` → delete entries whose tool was never invoked in 30 days.
 7. Review the raw `Total denials` count via the user's session log if it seems high — may indicate a missing allowlist entry.
+
+## Inert rules
+
+`validate-skills.sh` flags rules Claude Code accepts but never applies (`PERM-INERT-RULE`, Structural, in `allow`, `ask` and `deny`):
+
+| Category | Example | Replacement |
+|---|---|---|
+| Path rule on a tool that is not consulted | `Write(src/**)`, `NotebookEdit(...)`, `MultiEdit(...)`, `Glob(secrets/**)` | `Edit(src/**)` covers every built-in editing tool; `Read(secrets/**)` covers Grep and Glob. Bare `Write` and `Write(*)` stay valid. |
+| `mcp__` rule with parentheses | `mcp__srv__tool(arg)` | `mcp__srv__tool` or `mcp__srv__*` (skipped when the settings file loads) |
+| `Tool(param:value)` | `Bash(command:rm *)`, `WebFetch(url:x)` | `Bash(rm *)`, `Read(./path)`, `WebFetch(domain:host)` |
+
+`CLAUDEIGNORE-NO-EFFECT` (Hygiene, project tree only): permissions.md says "If your project has a `.claudeignore` file, it has no effect, so move its entries into `Read` deny rules." Replace each line with a `permissions.deny` `Read(...)` rule.

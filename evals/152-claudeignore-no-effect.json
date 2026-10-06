@@ -1,0 +1,19 @@
+{
+  "id": "152-claudeignore-no-effect",
+  "command": "claude-markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/claudeignore-no-effect",
+    "needs_home_override": false,
+    "scanners": ["validate-skills"]
+  },
+  "grader": { "method": "code" },
+  "success_criteria": {
+    "must_detect": [{ "tag": "CLAUDEIGNORE-NO-EFFECT", "path_substring": ".claudeignore" }],
+    "must_not_flag": [],
+    "expect_clean": false
+  },
+  "expected_behavior": [
+    "a .claudeignore beside the audited project .claude/ raises [CLAUDEIGNORE-NO-EFFECT] (permissions.md: it has no effect, move its entries into Read deny rules)"
+  ]
+}

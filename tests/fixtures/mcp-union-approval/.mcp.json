@@ -1,0 +1,5 @@
+{
+  "mcpServers": {
+    "srv": { "command": "node", "args": ["server.js"] }
+  }
+}

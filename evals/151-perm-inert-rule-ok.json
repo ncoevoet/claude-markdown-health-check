@@ -1,0 +1,19 @@
+{
+  "id": "151-perm-inert-rule-ok",
+  "command": "claude-markdown-health-check",
+  "fixture": {
+    "kind": "claude-tree",
+    "dir": "tests/fixtures/perm-inert-rule-ok",
+    "needs_home_override": false,
+    "scanners": ["validate-skills"]
+  },
+  "grader": { "method": "code" },
+  "success_criteria": {
+    "must_detect": [],
+    "must_not_flag": ["PERM-INERT-RULE"],
+    "expect_clean": true
+  },
+  "expected_behavior": [
+    "bare Write, Write(*), Edit(path), Bash(rm *), mcp__srv__*, WebFetch(domain:x) and Read deny rules are valid and raise no PERM-INERT-RULE"
+  ]
+}

@@ -1,0 +1,6 @@
+{
+  "permissions": {
+    "allow": ["Write", "Write(*)", "Edit(src/**)", "Bash(rm *)", "mcp__srv__*", "WebFetch(domain:example.com)"],
+    "deny": ["Read(./secrets/**)"]
+  }
+}
